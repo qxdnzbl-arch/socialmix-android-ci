@@ -47,6 +47,7 @@ jobs:
           script: |
             adb uninstall com.socialmix.experiment.b || true
             gradle --no-daemon :app:connectedDebugAndroidTest
+            adb install -r app/build/outputs/apk/debug/app-debug.apk
             adb shell am force-stop com.socialmix.experiment.b || true
             adb shell monkey -p com.socialmix.experiment.b -c android.intent.category.LAUNCHER 1
             sleep 4
