@@ -17,6 +17,19 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Apply Phase 1 signup fix
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('app/src/main/java/com/suisuinian/app/SupabaseApi.kt')
+          s = p.read_text()
+          old = '''            val json = callAuth("/auth/v1/signup", payload)\n            val user = json.optJSONObject("user")\n                ?: return@withContext AuthResult(false, message = errorText(json, "注册失败"))\n            val token = json.optString("access_token")'''
+          new = '''            val json = callAuth("/auth/v1/signup", payload)\n            // A successful signup can legitimately return no session while email confirmation is required.\n            val token = json.optString("access_token")'''
+          if old not in s:
+              raise SystemExit('signup patch target not found')
+          p.write_text(s.replace(old, new))
+          PY
+
       - name: Set up Java 17
         uses: actions/setup-java@v4
         with:
