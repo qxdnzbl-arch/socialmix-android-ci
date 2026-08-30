@@ -17,6 +17,15 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Ensure Phase 1 auth fixtures
+        run: |
+          curl --fail-with-body -sS -X POST \
+            'https://nvwdtfnhsyfdopaxdylx.supabase.co/functions/v1/ensure-phase1-test-fixtures' \
+            -H 'Content-Type: application/json' \
+            -H 'apikey: sb_publishable_S4IE-ziO7WQ_JAK9tuQGgQ_cszwKBWB' \
+            -H 'Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im52d2R0Zm5oc3lmZG9wYXhkeWx4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODgwMTExNTcsImV4cCI6MjEwMzU4NzE1N30.wXmcZ6KIQOt-eet6ONUgl9HI1eJhJAofdf2_JPD_0Ek' \
+            -d '{}'
+
       - name: Apply Phase 1 signup fix
         run: |
           python3 - <<'PY'
