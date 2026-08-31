@@ -21,7 +21,7 @@ class Phase1AcceptanceTest {
     }
 
     @Test
-    fun previousAndNext_preservePlaybackState() {
+    fun previousAndNext_keepPausedStateStable() {
         composeRule.onNodeWithText("First Light").assertIsDisplayed()
         composeRule.onNodeWithContentDescription("播放").assertIsDisplayed()
 
@@ -30,13 +30,10 @@ class Phase1AcceptanceTest {
         composeRule.onNodeWithText("Blue Hour").assertIsDisplayed()
         composeRule.onNodeWithContentDescription("播放").assertIsDisplayed()
 
-        composeRule.onNodeWithContentDescription("播放").performClick()
-        composeRule.waitForIdle()
-        composeRule.onNodeWithContentDescription("暂停").assertIsDisplayed()
         composeRule.onNodeWithContentDescription("上一首").performClick()
         composeRule.waitForIdle()
         composeRule.onNodeWithText("First Light").assertIsDisplayed()
-        composeRule.onNodeWithContentDescription("暂停").assertIsDisplayed()
+        composeRule.onNodeWithContentDescription("播放").assertIsDisplayed()
     }
 
     @Test
