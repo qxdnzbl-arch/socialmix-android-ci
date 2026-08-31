@@ -1,10 +1,13 @@
 package com.immersive.music
 
+import android.Manifest
+import android.os.Build
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.test.platform.app.InstrumentationRegistry
 import org.junit.Rule
 import org.junit.Test
 
@@ -12,40 +15,67 @@ class Phase1AcceptanceTest {
     @get:Rule
     val composeRule = createAndroidComposeRule<MainActivity>()
 
+    private fun grantAudioPermission() {
+        val permission =
+            if (Build.VERSION.SDK_INT >= 33) Manifest.permission.READ_MEDIA_AUDIO
+            else Manifest.permission.READ_EXTERNAL_STORAGE
+        val pkg = composeRule.activity.packageName
+        InstrumentationRegistry.getInstrumentation().uiAutomation
+            .executeShellCommand("pm grant $pkg $permission")
+            .close()
+    }
+
     @Test
     fun home_isImmersiveAndMinimal() {
         composeRule.onNodeWithText("心动").assertIsDisplayed()
         composeRule.onNodeWithText("极高音质").assertIsDisplayed()
         composeRule.onNodeWithText("首页").assertIsDisplayed()
         composeRule.onNodeWithText("音乐库").assertIsDisplayed()
+        composeRule.onNodeWithContentDescription("唱针:唱片外").assertIsDisplayed()
     }
 
     @Test
-    fun previousAndNext_keepPausedStateStable() {
+    fun playbackControls_andToneArm_followRealState() {
         composeRule.onNodeWithText("First Light").assertIsDisplayed()
         composeRule.onNodeWithContentDescription("播放").assertIsDisplayed()
+        composeRule.onNodeWithContentDescription("唱针:唱片外").assertIsDisplayed()
+
+        composeRule.onNodeWithContentDescription("播放").performClick()
+        composeRule.waitForIdle()
+        composeRule.onNodeWithContentDescription("暂停").assertIsDisplayed()
+        composeRule.onNodeWithContentDescription("唱针:唱片上").assertIsDisplayed()
 
         composeRule.onNodeWithContentDescription("下一首").performClick()
-        composeRule.waitForIdle()
-        composeRule.onNodeWithText("Blue Hour").assertIsDisplayed()
-        composeRule.onNodeWithContentDescription("播放").assertIsDisplayed()
+        composeRule.waitUntil(timeoutMillis = 5_000) {
+            runCatching {
+                composeRule.onNodeWithText("Blue Hour").assertIsDisplayed()
+                composeRule.onNodeWithContentDescription("暂停").assertIsDisplayed()
+                composeRule.onNodeWithContentDescription("唱针:唱片上").assertIsDisplayed()
+                true
+            }.getOrDefault(false)
+        }
 
         composeRule.onNodeWithContentDescription("上一首").performClick()
+        composeRule.waitUntil(timeoutMillis = 5_000) {
+            runCatching {
+                composeRule.onNodeWithText("First Light").assertIsDisplayed()
+                composeRule.onNodeWithContentDescription("暂停").assertIsDisplayed()
+                true
+            }.getOrDefault(false)
+        }
+
+        composeRule.onNodeWithContentDescription("暂停").performClick()
         composeRule.waitForIdle()
-        composeRule.onNodeWithText("First Light").assertIsDisplayed()
         composeRule.onNodeWithContentDescription("播放").assertIsDisplayed()
+        composeRule.onNodeWithContentDescription("唱针:唱片外").assertIsDisplayed()
     }
 
     @Test
-    fun search_isOnlyAUtility() {
-        composeRule.onNodeWithContentDescription("搜索").performClick()
+    fun favorite_andLibraryActions_areUsable() {
+        composeRule.onNodeWithContentDescription("收藏").assertIsDisplayed().performClick()
         composeRule.waitForIdle()
-        composeRule.onNodeWithContentDescription("搜索输入框").assertIsDisplayed()
-        composeRule.onNodeWithText("只搜索你的歌曲").assertIsDisplayed()
-    }
+        composeRule.onNodeWithContentDescription("取消收藏").assertIsDisplayed()
 
-    @Test
-    fun library_favoritesAndMoreAreUsable() {
         composeRule.onNodeWithText("音乐库").performClick()
         composeRule.waitForIdle()
         composeRule.onNodeWithContentDescription("打开我喜欢的音乐").assertIsDisplayed().performClick()
@@ -57,14 +87,29 @@ class Phase1AcceptanceTest {
         composeRule.onNodeWithContentDescription("更多:First Light").performClick()
         composeRule.waitForIdle()
         composeRule.onNodeWithText("歌曲选项").assertIsDisplayed()
-        composeRule.onNodeWithText("收藏").assertIsDisplayed()
+        composeRule.onNodeWithText("取消收藏").assertIsDisplayed()
     }
 
     @Test
-    fun library_hasLocalImport() {
+    fun localImport_opensInsideAppInsteadOfSystemFolders() {
+        grantAudioPermission()
         composeRule.onNodeWithText("音乐库").performClick()
         composeRule.waitForIdle()
-        composeRule.onNodeWithText("本地音乐").assertIsDisplayed()
-        composeRule.onNodeWithContentDescription("导入本地音乐").assertIsDisplayed()
+        composeRule.onNodeWithContentDescription("导入本地音乐").assertIsDisplayed().performClick()
+        composeRule.waitUntil(timeoutMillis = 5_000) {
+            runCatching {
+                composeRule.onNodeWithContentDescription("手机音乐选择面板").assertIsDisplayed()
+                composeRule.onNodeWithText("选择手机音乐").assertIsDisplayed()
+                true
+            }.getOrDefault(false)
+        }
+    }
+
+    @Test
+    fun search_isOnlyAUtility() {
+        composeRule.onNodeWithContentDescription("搜索").performClick()
+        composeRule.waitForIdle()
+        composeRule.onNodeWithContentDescription("搜索输入框").assertIsDisplayed()
+        composeRule.onNodeWithText("只搜索你的歌曲").assertIsDisplayed()
     }
 }
