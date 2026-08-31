@@ -29,15 +29,30 @@ class Phase1AcceptanceTest {
     }
 
     private fun assertToneArm(state: String) {
-        composeRule.onAllNodesWithContentDescription(state).assertCountEquals(1)
+        composeRule.waitUntil(timeoutMillis = 4_000) {
+            runCatching {
+                composeRule.onAllNodesWithContentDescription(state).assertCountEquals(1)
+                true
+            }.getOrDefault(false)
+        }
     }
 
-    private fun assertTextExists(text: String) {
-        composeRule.onAllNodesWithText(text).assertCountEquals(1)
+    private fun waitForText(text: String) {
+        composeRule.waitUntil(timeoutMillis = 4_000) {
+            runCatching {
+                composeRule.onAllNodesWithText(text).assertCountEquals(1)
+                true
+            }.getOrDefault(false)
+        }
     }
 
-    private fun assertControlExists(description: String) {
-        composeRule.onAllNodesWithContentDescription(description).assertCountEquals(1)
+    private fun waitForControl(description: String) {
+        composeRule.waitUntil(timeoutMillis = 4_000) {
+            runCatching {
+                composeRule.onNodeWithContentDescription(description).assertIsDisplayed()
+                true
+            }.getOrDefault(false)
+        }
     }
 
     @Test
@@ -46,32 +61,32 @@ class Phase1AcceptanceTest {
         composeRule.onNodeWithText("极高音质").assertIsDisplayed()
         composeRule.onNodeWithText("首页").assertIsDisplayed()
         composeRule.onNodeWithText("音乐库").assertIsDisplayed()
-        composeRule.onNodeWithContentDescription("播放").assertIsDisplayed()
-        composeRule.onNodeWithContentDescription("上一首").assertIsDisplayed()
-        composeRule.onNodeWithContentDescription("下一首").assertIsDisplayed()
+        waitForControl("播放")
+        waitForControl("上一首")
+        waitForControl("下一首")
         assertToneArm("唱针:唱片外")
     }
 
     @Test
     fun playback_controls_switchTracksAndTogglePlayback() {
-        assertTextExists("First Light")
+        waitForText("First Light")
 
         composeRule.onNodeWithContentDescription("下一首").performClick()
-        assertTextExists("Blue Hour")
-        assertControlExists("播放")
+        waitForText("Blue Hour")
+        waitForControl("播放")
         assertToneArm("唱针:唱片外")
 
         composeRule.onNodeWithContentDescription("上一首").performClick()
-        assertTextExists("First Light")
-        assertControlExists("播放")
+        waitForText("First Light")
+        waitForControl("播放")
         assertToneArm("唱针:唱片外")
 
         composeRule.onNodeWithContentDescription("播放").performClick()
-        assertControlExists("暂停")
+        waitForControl("暂停")
         assertToneArm("唱针:唱片上")
 
         composeRule.onNodeWithContentDescription("暂停").performClick()
-        assertControlExists("播放")
+        waitForControl("播放")
         assertToneArm("唱针:唱片外")
     }
 
