@@ -45,6 +45,26 @@ jobs:
           disable-animations: false
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -no-boot-anim -camera-back none
           script: |
+            set -e
+
+            dump_ui() {
+              remote="$1"
+              local_file="$2"
+              for attempt in 1 2 3 4 5 6 7 8; do
+                rm -f "$local_file"
+                adb shell rm -f "$remote" || true
+                if adb shell uiautomator dump "$remote" >/tmp/uia_dump.log 2>&1; then
+                  if adb pull "$remote" "$local_file" >/tmp/uia_pull.log 2>&1 && [ -s "$local_file" ]; then
+                    return 0
+                  fi
+                fi
+                sleep 1
+              done
+              cat /tmp/uia_dump.log || true
+              cat /tmp/uia_pull.log || true
+              return 1
+            }
+
             adb install -r app/build/outputs/apk/debug/app-debug.apk
             adb shell pm grant com.immersive.music android.permission.READ_MEDIA_AUDIO || true
 
@@ -62,8 +82,7 @@ jobs:
             adb shell dumpsys activity activities | grep -E 'mResumedActivity|topResumedActivity' | grep 'com.immersive.music'
             mkdir -p deliverable
 
-            adb shell uiautomator dump /sdcard/home-paused.xml
-            adb pull /sdcard/home-paused.xml home-paused.xml
+            dump_ui /sdcard/home-paused.xml home-paused.xml
             grep '心动' home-paused.xml
             grep 'First Light' home-paused.xml
             grep '唱针:唱片外' home-paused.xml
@@ -71,40 +90,35 @@ jobs:
             adb exec-out screencap -p > deliverable/home-paused.png
 
             adb shell input tap 540 2020
-            sleep 1
-            adb shell uiautomator dump /sdcard/home-playing.xml
-            adb pull /sdcard/home-playing.xml home-playing.xml
+            sleep 2
+            dump_ui /sdcard/home-playing.xml home-playing.xml
             grep '唱针:唱片上' home-playing.xml
             grep '暂停' home-playing.xml
             adb exec-out screencap -p > deliverable/home-playing.png
 
             adb shell input tap 850 2020
-            sleep 1
-            adb shell uiautomator dump /sdcard/home-next.xml
-            adb pull /sdcard/home-next.xml home-next.xml
+            sleep 2
+            dump_ui /sdcard/home-next.xml home-next.xml
             grep 'Blue Hour' home-next.xml
             grep '唱针:唱片上' home-next.xml
             grep '暂停' home-next.xml
 
             adb shell input tap 230 2020
-            sleep 1
-            adb shell uiautomator dump /sdcard/home-previous.xml
-            adb pull /sdcard/home-previous.xml home-previous.xml
+            sleep 2
+            dump_ui /sdcard/home-previous.xml home-previous.xml
             grep 'First Light' home-previous.xml
             grep '唱针:唱片上' home-previous.xml
             grep '暂停' home-previous.xml
 
             adb shell input tap 540 2020
-            sleep 1
-            adb shell uiautomator dump /sdcard/home-paused-again.xml
-            adb pull /sdcard/home-paused-again.xml home-paused-again.xml
+            sleep 2
+            dump_ui /sdcard/home-paused-again.xml home-paused-again.xml
             grep '唱针:唱片外' home-paused-again.xml
             grep '播放' home-paused-again.xml
 
             adb shell input tap 850 2260
             sleep 2
-            adb shell uiautomator dump /sdcard/library-window.xml
-            adb pull /sdcard/library-window.xml library-window.xml
+            dump_ui /sdcard/library-window.xml library-window.xml
             grep '音乐库' library-window.xml
             grep '我喜欢的音乐' library-window.xml
             grep '本地音乐' library-window.xml
@@ -113,8 +127,7 @@ jobs:
 
             adb shell input tap 975 175
             sleep 2
-            adb shell uiautomator dump /sdcard/local-picker.xml
-            adb pull /sdcard/local-picker.xml local-picker.xml
+            dump_ui /sdcard/local-picker.xml local-picker.xml
             grep '选择手机音乐' local-picker.xml
             adb exec-out screencap -p > deliverable/local-picker-screen.png
             adb shell input keyevent KEYCODE_BACK
@@ -124,8 +137,7 @@ jobs:
             sleep 1
             adb shell input tap 965 165
             sleep 2
-            adb shell uiautomator dump /sdcard/search-window.xml
-            adb pull /sdcard/search-window.xml search-window.xml
+            dump_ui /sdcard/search-window.xml search-window.xml
             grep '搜索歌曲或歌手' search-window.xml
             grep '只搜索你的歌曲' search-window.xml
             adb exec-out screencap -p > deliverable/search-screen.png
