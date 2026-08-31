@@ -17,17 +17,26 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Apply verified turntable geometry fix
+      - name: Apply verified playback visuals fixes
         run: |
           python - <<'PY'
           from pathlib import Path
-          p = Path('app/src/main/java/com/immersive/music/MusicUi.kt')
-          s = p.read_text()
+
+          ui = Path('app/src/main/java/com/immersive/music/MusicUi.kt')
+          s = ui.read_text()
           old = 'targetValue = if (onDisc) 0f else -17f'
           new = 'targetValue = if (onDisc) 62f else -17f'
           if old not in s:
               raise SystemExit('Tone-arm target not found')
-          p.write_text(s.replace(old, new, 1))
+          ui.write_text(s.replace(old, new, 1))
+
+          main = Path('app/src/main/java/com/immersive/music/MainActivity.kt')
+          s = main.read_text()
+          old = 'needleOnDisc = needleOnDisc,'
+          new = 'needleOnDisc = playIntent,'
+          if old not in s:
+              raise SystemExit('Home tone-arm binding not found')
+          main.write_text(s.replace(old, new, 1))
           PY
 
       - name: Set up Java 17
