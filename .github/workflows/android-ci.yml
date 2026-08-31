@@ -1,46 +1,21 @@
-name: SocialMix Android CI
+name: Immersive Music Phase 1 CI
 
 on:
   push:
-    branches: [main]
+    branches: [music-immersive-phase1]
   workflow_dispatch:
 
 permissions:
   contents: read
 
 jobs:
-  build-and-smoke-test:
+  build-test-package:
     runs-on: ubuntu-latest
     timeout-minutes: 35
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
-      - name: Ensure Phase 1 auth fixtures
-        run: |
-          curl --fail-with-body -sS -X POST \
-            'https://nvwdtfnhsyfdopaxdylx.supabase.co/functions/v1/ensure-phase1-test-fixtures' \
-            -H 'Content-Type: application/json' \
-            -H 'apikey: sb_publishable_S4IE-ziO7WQ_JAK9tuQGgQ_cszwKBWB' \
-            -H 'Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im52d2R0Zm5oc3lmZG9wYXhkeWx4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODgwMTExNTcsImV4cCI6MjEwMzU4NzE1N30.wXmcZ6KIQOt-eet6ONUgl9HI1eJhJAofdf2_JPD_0Ek' \
-            -d '{}'
-
-      - name: Apply Phase 1 signup fix
-        run: |
-          python3 - <<'PY'
-          from pathlib import Path
-          p = Path('app/src/main/java/com/suisuinian/app/SupabaseApi.kt')
-          s = p.read_text()
-          old = '''            val json = callAuth("/auth/v1/signup", payload)\n            val user = json.optJSONObject("user")\n                ?: return@withContext AuthResult(false, message = errorText(json, "注册失败"))\n            val token = json.optString("access_token")'''
-          new = '''            val json = callAuth("/auth/v1/signup", payload)\n            // A successful signup can legitimately return no session while email confirmation is required.\n            val token = json.optString("access_token")'''
-          if old not in s:
-              raise SystemExit('signup patch target not found')
-          p.write_text(s.replace(old, new))
-          PY
-
-      - name: Apply realtime readiness fix
-        run: python3 ci/realtime_patch.py
 
       - name: Set up Java 17
         uses: actions/setup-java@v4
@@ -53,14 +28,14 @@ jobs:
         with:
           gradle-version: '8.11.1'
 
-      - name: Build debug APK and test APK
+      - name: Build APK and test APK
         run: gradle --no-daemon :app:assembleDebug :app:assembleDebugAndroidTest
 
       - name: Enable KVM
         run: |
           if [ -e /dev/kvm ]; then sudo chmod 666 /dev/kvm; fi
 
-      - name: Android emulator smoke test
+      - name: Emulator acceptance tests
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 35
@@ -70,26 +45,28 @@ jobs:
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none
           script: |
-            adb uninstall com.socialmix.experiment.b || true
-            gradle --no-daemon :app:connectedDebugAndroidTest
+            gradle --no-daemon :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.immersive.music.Phase1AcceptanceTest
             adb install -r app/build/outputs/apk/debug/app-debug.apk
-            adb shell am force-stop com.socialmix.experiment.b || true
-            adb shell monkey -p com.socialmix.experiment.b -c android.intent.category.LAUNCHER 1
+            adb shell am force-stop com.immersive.music || true
+            adb shell monkey -p com.immersive.music -c android.intent.category.LAUNCHER 1
             sleep 4
-            adb shell pidof com.socialmix.experiment.b
+            adb shell pidof com.immersive.music
+            mkdir -p deliverable
+            adb exec-out screencap -p > deliverable/home-screen.png
 
-      - name: Prepare deliverable APK
+      - name: Prepare deliverable
         if: success()
         run: |
           mkdir -p deliverable
-          cp app/build/outputs/apk/debug/app-debug.apk deliverable/SocialMix-B-Phase1.apk
-          sha256sum deliverable/SocialMix-B-Phase1.apk | tee deliverable/SHA256.txt
+          cp app/build/outputs/apk/debug/app-debug.apk deliverable/Immersive-Music-Phase1.apk
+          cp SPEC-music-phase1.md deliverable/SPEC-music-phase1.md
+          sha256sum deliverable/Immersive-Music-Phase1.apk | tee deliverable/SHA256.txt
 
-      - name: Upload verified APK
+      - name: Upload verified deliverable
         if: success()
         uses: actions/upload-artifact@v4
         with:
-          name: SocialMix-B-Phase1-Verified
+          name: Immersive-Music-Phase1-Verified
           path: deliverable/
           if-no-files-found: error
           retention-days: 14
