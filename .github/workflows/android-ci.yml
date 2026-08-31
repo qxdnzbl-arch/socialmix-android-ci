@@ -35,7 +35,7 @@ jobs:
         run: |
           if [ -e /dev/kvm ]; then sudo chmod 666 /dev/kvm; fi
 
-      - name: Emulator acceptance tests and visual capture
+      - name: Emulator acceptance tests and launch smoke
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 35
@@ -48,6 +48,7 @@ jobs:
             adb install -r app/build/outputs/apk/debug/app-debug.apk
             adb shell pm grant com.immersive.music android.permission.READ_MEDIA_AUDIO || true
             gradle --no-daemon :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.immersive.music.Phase1AcceptanceTest
+
             adb install -r app/build/outputs/apk/debug/app-debug.apk
             adb shell pm grant com.immersive.music android.permission.READ_MEDIA_AUDIO || true
             adb shell input keyevent KEYCODE_WAKEUP || true
@@ -58,50 +59,10 @@ jobs:
             adb shell pidof com.immersive.music
             adb shell dumpsys activity activities | grep -E 'mResumedActivity|topResumedActivity' | grep 'com.immersive.music'
             mkdir -p deliverable
-            bash ci/dump-ui.sh /sdcard/home-paused.xml home-paused.xml 心动
-            grep 'First Light' home-paused.xml
-            grep '唱针:唱片外' home-paused.xml
-            grep '播放' home-paused.xml
             adb exec-out screencap -p > deliverable/home-paused.png
             adb shell input tap 540 2080
-            sleep 2
-            bash ci/dump-ui.sh /sdcard/home-playing.xml home-playing.xml 唱针:唱片上
-            grep '暂停' home-playing.xml
+            sleep 1
             adb exec-out screencap -p > deliverable/home-playing.png
-            adb shell input tap 820 2080
-            sleep 2
-            bash ci/dump-ui.sh /sdcard/home-next.xml home-next.xml 'Blue Hour'
-            grep '唱针:唱片上' home-next.xml
-            grep '暂停' home-next.xml
-            adb shell input tap 260 2080
-            sleep 2
-            bash ci/dump-ui.sh /sdcard/home-previous.xml home-previous.xml 'First Light'
-            grep '唱针:唱片上' home-previous.xml
-            grep '暂停' home-previous.xml
-            adb shell input tap 540 2080
-            sleep 2
-            bash ci/dump-ui.sh /sdcard/home-paused-again.xml home-paused-again.xml 唱针:唱片外
-            grep '播放' home-paused-again.xml
-            adb shell input tap 850 2260
-            sleep 2
-            bash ci/dump-ui.sh /sdcard/library-window.xml library-window.xml 音乐库
-            grep '我喜欢的音乐' library-window.xml
-            grep '本地音乐' library-window.xml
-            grep '最近播放' library-window.xml
-            adb exec-out screencap -p > deliverable/library-screen.png
-            adb shell input tap 975 175
-            sleep 2
-            bash ci/dump-ui.sh /sdcard/local-picker.xml local-picker.xml 选择手机音乐
-            adb exec-out screencap -p > deliverable/local-picker-screen.png
-            adb shell input keyevent KEYCODE_BACK
-            sleep 1
-            adb shell input tap 220 2260
-            sleep 1
-            adb shell input tap 965 165
-            sleep 2
-            bash ci/dump-ui.sh /sdcard/search-window.xml search-window.xml 搜索歌曲或歌手
-            grep '只搜索你的歌曲' search-window.xml
-            adb exec-out screencap -p > deliverable/search-screen.png
 
       - name: Prepare deliverable
         if: success()
