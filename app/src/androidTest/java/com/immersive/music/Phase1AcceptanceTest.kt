@@ -2,8 +2,10 @@ package com.immersive.music
 
 import android.Manifest
 import android.os.Build
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -25,42 +27,46 @@ class Phase1AcceptanceTest {
             .close()
     }
 
+    private fun assertToneArm(state: String) {
+        composeRule.onAllNodesWithContentDescription(state).assertCountEquals(1)
+    }
+
     @Test
     fun home_isImmersiveAndMinimal() {
         composeRule.onNodeWithText("心动").assertIsDisplayed()
         composeRule.onNodeWithText("极高音质").assertIsDisplayed()
         composeRule.onNodeWithText("首页").assertIsDisplayed()
         composeRule.onNodeWithText("音乐库").assertIsDisplayed()
-        composeRule.onNodeWithContentDescription("唱针:唱片外").assertIsDisplayed()
+        assertToneArm("唱针:唱片外")
     }
 
     @Test
     fun playbackControls_andToneArm_followUserPlaybackState() {
         composeRule.onNodeWithText("First Light").assertIsDisplayed()
         composeRule.onNodeWithContentDescription("播放").assertIsDisplayed()
-        composeRule.onNodeWithContentDescription("唱针:唱片外").assertIsDisplayed()
+        assertToneArm("唱针:唱片外")
 
         composeRule.onNodeWithContentDescription("播放").performClick()
         composeRule.waitForIdle()
         composeRule.onNodeWithContentDescription("暂停").assertIsDisplayed()
-        composeRule.onNodeWithContentDescription("唱针:唱片上").assertIsDisplayed()
+        assertToneArm("唱针:唱片上")
 
         composeRule.onNodeWithContentDescription("下一首").performClick()
         composeRule.waitForIdle()
         composeRule.onNodeWithText("Blue Hour").assertIsDisplayed()
         composeRule.onNodeWithContentDescription("暂停").assertIsDisplayed()
-        composeRule.onNodeWithContentDescription("唱针:唱片上").assertIsDisplayed()
+        assertToneArm("唱针:唱片上")
 
         composeRule.onNodeWithContentDescription("上一首").performClick()
         composeRule.waitForIdle()
         composeRule.onNodeWithText("First Light").assertIsDisplayed()
         composeRule.onNodeWithContentDescription("暂停").assertIsDisplayed()
-        composeRule.onNodeWithContentDescription("唱针:唱片上").assertIsDisplayed()
+        assertToneArm("唱针:唱片上")
 
         composeRule.onNodeWithContentDescription("暂停").performClick()
         composeRule.waitForIdle()
         composeRule.onNodeWithContentDescription("播放").assertIsDisplayed()
-        composeRule.onNodeWithContentDescription("唱针:唱片外").assertIsDisplayed()
+        assertToneArm("唱针:唱片外")
     }
 
     @Test
