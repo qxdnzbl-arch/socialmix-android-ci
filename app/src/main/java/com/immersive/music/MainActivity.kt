@@ -126,7 +126,6 @@ fun MusicApp() {
     var durationMs by remember { mutableLongStateOf(tracks.first().durationMs) }
     var positionMs by remember { mutableLongStateOf(0L) }
     var mediaPlayer by remember { mutableStateOf<MediaPlayer?>(null) }
-    var playerPrepared by remember { mutableStateOf(false) }
     var showQueue by remember { mutableStateOf(false) }
     var menuTrack by remember { mutableStateOf<Track?>(null) }
     var showLocalMusic by remember { mutableStateOf(false) }
@@ -166,7 +165,6 @@ fun MusicApp() {
         val track = tracks[safeIndex]
 
         needleOnDisc = false
-        playerPrepared = false
         mediaPlayer?.runCatching { stop() }
         mediaPlayer?.release()
         mediaPlayer = null
@@ -182,8 +180,6 @@ fun MusicApp() {
         runCatching {
             player.setDataSource(context, Uri.parse(track.uri))
             player.setOnPreparedListener {
-                if (mediaPlayer !== it) return@setOnPreparedListener
-                playerPrepared = true
                 durationMs = max(1, it.duration).toLong()
                 if (playIntent) {
                     runCatching { it.start() }
@@ -197,22 +193,17 @@ fun MusicApp() {
                 }
             }
             player.setOnCompletionListener {
-                if (mediaPlayer !== it) return@setOnCompletionListener
                 playIntent = false
                 needleOnDisc = false
                 positionMs = durationMs
             }
-            player.setOnErrorListener { mp, _, _ ->
-                if (mediaPlayer === mp) {
-                    playerPrepared = false
-                    playIntent = false
-                    needleOnDisc = false
-                }
+            player.setOnErrorListener { _, _, _ ->
+                playIntent = false
+                needleOnDisc = false
                 true
             }
             player.prepareAsync()
         }.onFailure {
-            playerPrepared = false
             playIntent = false
             needleOnDisc = false
             player.release()
@@ -226,11 +217,6 @@ fun MusicApp() {
             playTrack(currentIndex, true)
             return
         }
-        if (!playerPrepared) {
-            playIntent = !playIntent
-            needleOnDisc = false
-            return
-        }
         if (playIntent) {
             needleOnDisc = false
             runCatching { player.pause() }
@@ -241,8 +227,9 @@ fun MusicApp() {
                 player.start()
                 needleOnDisc = true
             }.onFailure {
+                // MediaPlayer may still be preparing. Keep the user's play intent;
+                // the prepared listener will start playback and lower the tonearm.
                 needleOnDisc = false
-                playIntent = false
             }
         }
     }
@@ -306,7 +293,7 @@ fun MusicApp() {
 
     LaunchedEffect(playIntent, mediaPlayer) {
         while (isActive) {
-            if (playIntent && playerPrepared) {
+            if (playIntent) {
                 mediaPlayer?.let { player ->
                     runCatching { positionMs = player.currentPosition.toLong() }
                 }
@@ -317,7 +304,6 @@ fun MusicApp() {
 
     DisposableEffect(Unit) {
         onDispose {
-            playerPrepared = false
             mediaPlayer?.release()
             mediaPlayer = null
         }
@@ -352,7 +338,7 @@ fun MusicApp() {
             onNext = { playTrack(currentIndex + 1, playIntent) },
             onSeek = { target ->
                 positionMs = target
-                if (playerPrepared) mediaPlayer?.runCatching { seekTo(target.toInt()) }
+                mediaPlayer?.runCatching { seekTo(target.toInt()) }
             },
             onSearch = { page = AppPage.SEARCH },
             onQueue = { showQueue = true },
