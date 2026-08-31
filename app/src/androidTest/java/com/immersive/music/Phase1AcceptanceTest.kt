@@ -6,6 +6,7 @@ import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithContentDescription
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -27,8 +28,12 @@ class Phase1AcceptanceTest {
             .close()
     }
 
-    private fun assertToneArm(state: String) {
-        composeRule.onAllNodesWithContentDescription(state).assertCountEquals(1)
+    private fun assertContentDescriptionExists(value: String) {
+        composeRule.onAllNodesWithContentDescription(value).assertCountEquals(1)
+    }
+
+    private fun assertTextExists(value: String) {
+        composeRule.onAllNodesWithText(value).assertCountEquals(1)
     }
 
     @Test
@@ -37,36 +42,36 @@ class Phase1AcceptanceTest {
         composeRule.onNodeWithText("极高音质").assertIsDisplayed()
         composeRule.onNodeWithText("首页").assertIsDisplayed()
         composeRule.onNodeWithText("音乐库").assertIsDisplayed()
-        assertToneArm("唱针:唱片外")
+        assertContentDescriptionExists("唱针:唱片外")
     }
 
     @Test
     fun playbackControls_andToneArm_followUserPlaybackState() {
         composeRule.onNodeWithText("First Light").assertIsDisplayed()
         composeRule.onNodeWithContentDescription("播放").assertIsDisplayed()
-        assertToneArm("唱针:唱片外")
+        assertContentDescriptionExists("唱针:唱片外")
 
         composeRule.onNodeWithContentDescription("播放").performClick()
         composeRule.waitForIdle()
-        composeRule.onNodeWithContentDescription("暂停").assertIsDisplayed()
-        assertToneArm("唱针:唱片上")
+        assertContentDescriptionExists("暂停")
+        assertContentDescriptionExists("唱针:唱片上")
 
         composeRule.onNodeWithContentDescription("下一首").performClick()
         composeRule.waitForIdle()
-        composeRule.onNodeWithText("Blue Hour").assertIsDisplayed()
-        composeRule.onNodeWithContentDescription("暂停").assertIsDisplayed()
-        assertToneArm("唱针:唱片上")
+        assertTextExists("Blue Hour")
+        assertContentDescriptionExists("暂停")
+        assertContentDescriptionExists("唱针:唱片上")
 
         composeRule.onNodeWithContentDescription("上一首").performClick()
         composeRule.waitForIdle()
-        composeRule.onNodeWithText("First Light").assertIsDisplayed()
-        composeRule.onNodeWithContentDescription("暂停").assertIsDisplayed()
-        assertToneArm("唱针:唱片上")
+        assertTextExists("First Light")
+        assertContentDescriptionExists("暂停")
+        assertContentDescriptionExists("唱针:唱片上")
 
         composeRule.onNodeWithContentDescription("暂停").performClick()
         composeRule.waitForIdle()
-        composeRule.onNodeWithContentDescription("播放").assertIsDisplayed()
-        assertToneArm("唱针:唱片外")
+        assertContentDescriptionExists("播放")
+        assertContentDescriptionExists("唱针:唱片外")
     }
 
     @Test
