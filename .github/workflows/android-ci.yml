@@ -63,22 +63,22 @@ jobs:
             grep '唱针:唱片外' home-paused.xml
             grep '播放' home-paused.xml
             adb exec-out screencap -p > deliverable/home-paused.png
-            adb shell input tap 540 2020
+            adb shell input tap 540 2080
             sleep 2
             bash ci/dump-ui.sh /sdcard/home-playing.xml home-playing.xml 唱针:唱片上
             grep '暂停' home-playing.xml
             adb exec-out screencap -p > deliverable/home-playing.png
-            adb shell input tap 850 2020
+            adb shell input tap 820 2080
             sleep 2
             bash ci/dump-ui.sh /sdcard/home-next.xml home-next.xml 'Blue Hour'
             grep '唱针:唱片上' home-next.xml
             grep '暂停' home-next.xml
-            adb shell input tap 230 2020
+            adb shell input tap 260 2080
             sleep 2
             bash ci/dump-ui.sh /sdcard/home-previous.xml home-previous.xml 'First Light'
             grep '唱针:唱片上' home-previous.xml
             grep '暂停' home-previous.xml
-            adb shell input tap 540 2020
+            adb shell input tap 540 2080
             sleep 2
             bash ci/dump-ui.sh /sdcard/home-paused-again.xml home-paused-again.xml 唱针:唱片外
             grep '播放' home-paused-again.xml
