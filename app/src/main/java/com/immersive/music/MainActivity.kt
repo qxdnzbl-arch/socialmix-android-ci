@@ -164,7 +164,6 @@ fun MusicApp() {
         val safeIndex = (index % tracks.size + tracks.size) % tracks.size
         val track = tracks[safeIndex]
 
-        needleOnDisc = false
         mediaPlayer?.runCatching { stop() }
         mediaPlayer?.release()
         mediaPlayer = null
@@ -173,6 +172,7 @@ fun MusicApp() {
         positionMs = 0L
         durationMs = max(1L, track.durationMs)
         playIntent = requestedPlaying
+        needleOnDisc = requestedPlaying
         if (recordRecent) markRecent(track.id)
 
         val player = MediaPlayer()
@@ -182,12 +182,8 @@ fun MusicApp() {
             player.setOnPreparedListener {
                 durationMs = max(1, it.duration).toLong()
                 if (playIntent) {
+                    needleOnDisc = true
                     runCatching { it.start() }
-                        .onSuccess { needleOnDisc = true }
-                        .onFailure {
-                            playIntent = false
-                            needleOnDisc = false
-                        }
                 } else {
                     needleOnDisc = false
                 }
@@ -223,14 +219,10 @@ fun MusicApp() {
             playIntent = false
         } else {
             playIntent = true
-            runCatching {
-                player.start()
-                needleOnDisc = true
-            }.onFailure {
-                // MediaPlayer may still be preparing. Keep the user's play intent;
-                // the prepared listener will start playback and lower the tonearm.
-                needleOnDisc = false
-            }
+            needleOnDisc = true
+            runCatching { player.start() }
+            // If the player is still preparing, onPrepared will honor playIntent
+            // and start playback without flickering the UI back to paused.
         }
     }
 
