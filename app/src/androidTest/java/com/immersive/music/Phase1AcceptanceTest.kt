@@ -3,10 +3,10 @@ package com.immersive.music
 import android.Manifest
 import android.os.Build
 import androidx.compose.ui.test.assertCountEquals
-import androidx.compose.ui.test.assertExists
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithContentDescription
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -32,6 +32,14 @@ class Phase1AcceptanceTest {
         composeRule.onAllNodesWithContentDescription(state).assertCountEquals(1)
     }
 
+    private fun assertTextExists(text: String) {
+        composeRule.onAllNodesWithText(text).assertCountEquals(1)
+    }
+
+    private fun assertControlExists(description: String) {
+        composeRule.onAllNodesWithContentDescription(description).assertCountEquals(1)
+    }
+
     @Test
     fun home_isImmersiveAndMinimal() {
         composeRule.onNodeWithText("心动").assertIsDisplayed()
@@ -46,24 +54,24 @@ class Phase1AcceptanceTest {
 
     @Test
     fun playback_controls_switchTracksAndTogglePlayback() {
-        composeRule.onNodeWithText("First Light").assertExists()
+        assertTextExists("First Light")
 
         composeRule.onNodeWithContentDescription("下一首").performClick()
-        composeRule.onNodeWithText("Blue Hour").assertExists()
-        composeRule.onNodeWithContentDescription("播放").assertExists()
+        assertTextExists("Blue Hour")
+        assertControlExists("播放")
         assertToneArm("唱针:唱片外")
 
         composeRule.onNodeWithContentDescription("上一首").performClick()
-        composeRule.onNodeWithText("First Light").assertExists()
-        composeRule.onNodeWithContentDescription("播放").assertExists()
+        assertTextExists("First Light")
+        assertControlExists("播放")
         assertToneArm("唱针:唱片外")
 
         composeRule.onNodeWithContentDescription("播放").performClick()
-        composeRule.onNodeWithContentDescription("暂停").assertExists()
+        assertControlExists("暂停")
         assertToneArm("唱针:唱片上")
 
         composeRule.onNodeWithContentDescription("暂停").performClick()
-        composeRule.onNodeWithContentDescription("播放").assertExists()
+        assertControlExists("播放")
         assertToneArm("唱针:唱片外")
     }
 
