@@ -42,23 +42,38 @@ jobs:
           arch: x86_64
           target: google_apis
           profile: pixel_6
-          disable-animations: true
+          disable-animations: false
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none
           script: |
-            gradle --no-daemon :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.immersive.music.Phase1AcceptanceTest
             adb install -r app/build/outputs/apk/debug/app-debug.apk
+            adb shell pm grant com.immersive.music android.permission.READ_MEDIA_AUDIO || true
+
+            gradle --no-daemon :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.immersive.music.Phase1AcceptanceTest
+
+            adb install -r app/build/outputs/apk/debug/app-debug.apk
+            adb shell pm grant com.immersive.music android.permission.READ_MEDIA_AUDIO || true
             adb shell input keyevent KEYCODE_WAKEUP || true
             adb shell wm dismiss-keyguard || true
             adb shell am force-stop com.immersive.music || true
             adb shell am start -W -a android.intent.action.MAIN -c android.intent.category.LAUNCHER -n com.immersive.music/com.immersive.music.MainActivity
             sleep 5
+
             adb shell pidof com.immersive.music
             adb shell dumpsys activity activities | grep -E 'mResumedActivity|topResumedActivity' | grep 'com.immersive.music'
-            adb shell uiautomator dump /sdcard/immersive-window.xml
-            adb pull /sdcard/immersive-window.xml deliverable-window.xml
-            grep '心动' deliverable-window.xml
             mkdir -p deliverable
-            adb exec-out screencap -p > deliverable/home-screen.png
+
+            adb shell uiautomator dump /sdcard/home-paused.xml
+            adb pull /sdcard/home-paused.xml home-paused.xml
+            grep '心动' home-paused.xml
+            grep '唱针:唱片外' home-paused.xml
+            adb exec-out screencap -p > deliverable/home-paused.png
+
+            adb shell input tap 540 2020
+            sleep 2
+            adb shell uiautomator dump /sdcard/home-playing.xml
+            adb pull /sdcard/home-playing.xml home-playing.xml
+            grep '唱针:唱片上' home-playing.xml
+            adb exec-out screencap -p > deliverable/home-playing.png
 
             adb shell input tap 850 2260
             sleep 2
@@ -67,9 +82,18 @@ jobs:
             grep '音乐库' library-window.xml
             adb exec-out screencap -p > deliverable/library-screen.png
 
+            adb shell input tap 975 175
+            sleep 2
+            adb shell uiautomator dump /sdcard/local-picker.xml
+            adb pull /sdcard/local-picker.xml local-picker.xml
+            grep '选择手机音乐' local-picker.xml
+            adb exec-out screencap -p > deliverable/local-picker-screen.png
+            adb shell input keyevent KEYCODE_BACK
+            sleep 1
+
             adb shell input tap 220 2260
             sleep 1
-            adb shell input tap 955 190
+            adb shell input tap 965 165
             sleep 2
             adb shell uiautomator dump /sdcard/search-window.xml
             adb pull /sdcard/search-window.xml search-window.xml
