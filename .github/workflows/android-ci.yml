@@ -35,7 +35,7 @@ jobs:
         run: |
           if [ -e /dev/kvm ]; then sudo chmod 666 /dev/kvm; fi
 
-      - name: Emulator acceptance tests
+      - name: Emulator acceptance tests and visual capture
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 35
@@ -47,10 +47,16 @@ jobs:
           script: |
             gradle --no-daemon :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.immersive.music.Phase1AcceptanceTest
             adb install -r app/build/outputs/apk/debug/app-debug.apk
+            adb shell input keyevent KEYCODE_WAKEUP || true
+            adb shell wm dismiss-keyguard || true
             adb shell am force-stop com.immersive.music || true
-            adb shell monkey -p com.immersive.music -c android.intent.category.LAUNCHER 1
-            sleep 4
+            adb shell am start -W -a android.intent.action.MAIN -c android.intent.category.LAUNCHER -n com.immersive.music/com.immersive.music.MainActivity
+            sleep 5
             adb shell pidof com.immersive.music
+            adb shell dumpsys activity activities | grep -E 'mResumedActivity|topResumedActivity' | grep 'com.immersive.music'
+            adb shell uiautomator dump /sdcard/immersive-window.xml
+            adb pull /sdcard/immersive-window.xml deliverable-window.xml
+            grep '心动' deliverable-window.xml
             mkdir -p deliverable
             adb exec-out screencap -p > deliverable/home-screen.png
 
