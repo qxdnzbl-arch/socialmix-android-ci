@@ -115,9 +115,7 @@ class MainActivity : ComponentActivity() {
         WindowCompat.setDecorFitsSystemWindows(window, false)
         window.statusBarColor = android.graphics.Color.TRANSPARENT
         window.navigationBarColor = android.graphics.Color.TRANSPARENT
-        setContent {
-            MaterialTheme { MusicApp() }
-        }
+        setContent { MaterialTheme { MusicApp() } }
     }
 }
 
@@ -131,7 +129,7 @@ data class Track(
     val coverBytes: ByteArray? = null,
 )
 
-enum class AppPage { HOME, LIBRARY, SEARCH }
+enum class AppPage { HOME, LIBRARY, SEARCH, FAVORITES }
 
 private data class DemoSpec(val title: String, val artist: String, val frequency: Double)
 
@@ -142,10 +140,14 @@ private val DemoTracks = listOf(
 )
 
 private val DemoColors = listOf(
-    Color(0xFF667B31),
-    Color(0xFF50657A),
-    Color(0xFF76514E),
+    Color(0xFF647A35),
+    Color(0xFF536A80),
+    Color(0xFF785052),
 )
+
+private val PageBackground = Color(0xFFF7F7F4)
+private val MainText = Color(0xFF161714)
+private val SubText = Color(0xFF92948E)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -176,11 +178,12 @@ fun MusicApp() {
 
     var page by remember { mutableStateOf(AppPage.HOME) }
     var currentIndex by remember { mutableIntStateOf(0) }
-    var isPlaying by remember { mutableStateOf(false) }
+    var playIntent by remember { mutableStateOf(false) }
     var durationMs by remember { mutableLongStateOf(tracks.first().durationMs) }
     var positionMs by remember { mutableLongStateOf(0L) }
     var mediaPlayer by remember { mutableStateOf<MediaPlayer?>(null) }
     var showQueue by remember { mutableStateOf(false) }
+    var menuTrack by remember { mutableStateOf<Track?>(null) }
 
     fun saveFavorites() {
         prefs.edit().putStringSet("favorites", favoriteIds.toSet()).apply()
@@ -199,18 +202,30 @@ fun MusicApp() {
         saveRecent()
     }
 
-    fun playTrack(index: Int, autoPlay: Boolean = true) {
+    fun removeRecent(id: String) {
+        recentIds.remove(id)
+        saveRecent()
+    }
+
+    fun toggleFavorite(id: String) {
+        if (favoriteIds.contains(id)) favoriteIds.remove(id) else favoriteIds.add(id)
+        saveFavorites()
+    }
+
+    fun playTrack(index: Int, requestedPlaying: Boolean, recordRecent: Boolean = true) {
         if (tracks.isEmpty()) return
         val safeIndex = (index % tracks.size + tracks.size) % tracks.size
         val track = tracks[safeIndex]
+
         mediaPlayer?.runCatching { stop() }
         mediaPlayer?.release()
         mediaPlayer = null
+
+        currentIndex = safeIndex
         positionMs = 0L
         durationMs = max(1L, track.durationMs)
-        currentIndex = safeIndex
-        isPlaying = false
-        markRecent(track.id)
+        playIntent = requestedPlaying
+        if (recordRecent) markRecent(track.id)
 
         val player = MediaPlayer()
         mediaPlayer = player
@@ -218,24 +233,36 @@ fun MusicApp() {
             player.setDataSource(context, Uri.parse(track.uri))
             player.setOnPreparedListener {
                 durationMs = max(1, it.duration).toLong()
-                if (autoPlay) {
-                    it.start()
-                    isPlaying = true
-                }
+                if (playIntent) runCatching { it.start() }
             }
             player.setOnCompletionListener {
-                isPlaying = false
+                playIntent = false
                 positionMs = durationMs
             }
             player.setOnErrorListener { _, _, _ ->
-                isPlaying = false
+                playIntent = false
                 true
             }
             player.prepareAsync()
         }.onFailure {
-            isPlaying = false
+            playIntent = false
             player.release()
             if (mediaPlayer === player) mediaPlayer = null
+        }
+    }
+
+    fun togglePlayback() {
+        val player = mediaPlayer
+        if (player == null) {
+            playTrack(currentIndex, true)
+            return
+        }
+        if (playIntent) {
+            runCatching { player.pause() }
+            playIntent = false
+        } else {
+            playIntent = true
+            runCatching { player.start() }
         }
     }
 
@@ -249,18 +276,18 @@ fun MusicApp() {
         }
         val savedUris = prefs.getStringSet("imported_uris", emptySet()).orEmpty().toList()
         val imported = withContext(Dispatchers.IO) {
-            savedUris.mapNotNull { uri -> extractTrack(context, Uri.parse(uri)) }
+            savedUris.mapNotNull { extractTrack(context, Uri.parse(it)) }
         }
         imported.forEach { if (tracks.none { t -> t.id == it.id }) tracks.add(it) }
-        playTrack(0, autoPlay = false)
+        playTrack(0, false)
     }
 
-    LaunchedEffect(isPlaying, mediaPlayer) {
+    LaunchedEffect(playIntent, mediaPlayer) {
         while (isActive) {
-            if (isPlaying) {
+            if (playIntent) {
                 mediaPlayer?.let { player -> runCatching { positionMs = player.currentPosition.toLong() } }
             }
-            delay(200)
+            delay(180)
         }
     }
 
@@ -273,7 +300,7 @@ fun MusicApp() {
 
     val importer = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
         if (uris.isEmpty()) return@rememberLauncherForActivityResult
-        val existingUris = prefs.getStringSet("imported_uris", emptySet()).orEmpty().toMutableSet()
+        val stored = prefs.getStringSet("imported_uris", emptySet()).orEmpty().toMutableSet()
         uris.forEach { uri ->
             runCatching {
                 context.contentResolver.takePersistableUriPermission(
@@ -281,9 +308,9 @@ fun MusicApp() {
                     android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION
                 )
             }
-            existingUris.add(uri.toString())
+            stored.add(uri.toString())
         }
-        prefs.edit().putStringSet("imported_uris", existingUris).apply()
+        prefs.edit().putStringSet("imported_uris", stored).apply()
         scope.launch {
             val imported = withContext(Dispatchers.IO) { uris.mapNotNull { extractTrack(context, it) } }
             imported.forEach { if (tracks.none { t -> t.id == it.id }) tracks.add(it) }
@@ -293,7 +320,7 @@ fun MusicApp() {
     val currentTrack = tracks.getOrElse(currentIndex) { tracks.first() }
     val animatedBackground by animateColorAsState(
         targetValue = currentTrack.theme,
-        animationSpec = tween(900),
+        animationSpec = tween(850),
         label = "trackBackground"
     )
 
@@ -304,66 +331,58 @@ fun MusicApp() {
         controller.isAppearanceLightNavigationBars = page != AppPage.HOME
     }
 
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(if (page == AppPage.HOME) animatedBackground else Color(0xFFF6F6F3))
-    ) {
+    Box(Modifier.fillMaxSize().background(if (page == AppPage.HOME) animatedBackground else PageBackground)) {
         when (page) {
             AppPage.HOME -> HomeScreen(
                 track = currentTrack,
                 background = animatedBackground,
-                isPlaying = isPlaying,
+                isPlaying = playIntent,
                 positionMs = positionMs,
                 durationMs = durationMs,
                 isFavorite = favoriteIds.contains(currentTrack.id),
-                onToggleFavorite = {
-                    if (favoriteIds.contains(currentTrack.id)) favoriteIds.remove(currentTrack.id)
-                    else favoriteIds.add(currentTrack.id)
-                    saveFavorites()
-                },
-                onPlayPause = {
-                    val player = mediaPlayer
-                    if (player == null) playTrack(currentIndex, true)
-                    else if (isPlaying) {
-                        runCatching { player.pause() }
-                        isPlaying = false
-                    } else {
-                        runCatching { player.start() }
-                        isPlaying = true
-                    }
-                },
-                onPrevious = { playTrack(currentIndex - 1, true) },
-                onNext = { playTrack(currentIndex + 1, true) },
+                onToggleFavorite = { toggleFavorite(currentTrack.id) },
+                onPlayPause = ::togglePlayback,
+                onPrevious = { playTrack(currentIndex - 1, playIntent) },
+                onNext = { playTrack(currentIndex + 1, playIntent) },
                 onSeek = { target ->
                     positionMs = target
                     mediaPlayer?.runCatching { seekTo(target.toInt()) }
                 },
                 onSearch = { page = AppPage.SEARCH },
                 onQueue = { showQueue = true },
-                onLibrary = { page = AppPage.LIBRARY }
+                onLibrary = { page = AppPage.LIBRARY },
             )
+
             AppPage.LIBRARY -> LibraryScreen(
                 tracks = tracks,
                 favoriteIds = favoriteIds,
                 recentIds = recentIds,
                 currentTrack = currentTrack,
-                isPlaying = isPlaying,
+                isPlaying = playIntent,
                 onImport = { importer.launch(arrayOf("audio/*")) },
                 onTrack = { playTrack(tracks.indexOf(it), true); page = AppPage.HOME },
-                onPlayPause = {
-                    val player = mediaPlayer
-                    if (player == null) playTrack(currentIndex, true)
-                    else if (isPlaying) { runCatching { player.pause() }; isPlaying = false }
-                    else { runCatching { player.start() }; isPlaying = true }
-                },
+                onPlayPause = ::togglePlayback,
                 onQueue = { showQueue = true },
-                onHome = { page = AppPage.HOME }
+                onHome = { page = AppPage.HOME },
+                onOpenFavorites = { page = AppPage.FAVORITES },
+                onMore = { menuTrack = it },
             )
+
+            AppPage.FAVORITES -> FavoritesScreen(
+                tracks = tracks.filter { favoriteIds.contains(it.id) },
+                currentTrack = currentTrack,
+                isPlaying = playIntent,
+                onBack = { page = AppPage.LIBRARY },
+                onTrack = { playTrack(tracks.indexOf(it), true); page = AppPage.HOME },
+                onMore = { menuTrack = it },
+                onPlayPause = ::togglePlayback,
+                onQueue = { showQueue = true },
+            )
+
             AppPage.SEARCH -> SearchScreen(
                 tracks = tracks,
                 onBack = { page = AppPage.HOME },
-                onTrack = { playTrack(tracks.indexOf(it), true); page = AppPage.HOME }
+                onTrack = { playTrack(tracks.indexOf(it), true); page = AppPage.HOME },
             )
         }
     }
@@ -371,22 +390,39 @@ fun MusicApp() {
     if (showQueue) {
         ModalBottomSheet(
             onDismissRequest = { showQueue = false },
-            containerColor = Color(0xFFF8F8F5),
-            shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)
+            containerColor = Color(0xFFF9F9F6),
+            shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
         ) {
-            Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp)) {
-                Text("播放列表", fontWeight = FontWeight.Bold, fontSize = 21.sp, color = Color(0xFF151613))
-                Spacer(Modifier.height(12.dp))
+            Column(Modifier.fillMaxWidth().padding(horizontal = 18.dp)) {
+                Text("播放列表", color = MainText, fontSize = 18.sp, fontWeight = FontWeight.Medium)
+                Spacer(Modifier.height(10.dp))
                 tracks.forEachIndexed { index, track ->
                     TrackRow(
                         track = track,
                         active = index == currentIndex,
-                        onClick = { playTrack(index, true); showQueue = false }
+                        onClick = { playTrack(index, true); showQueue = false },
                     )
                 }
-                Spacer(Modifier.height(WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() + 14.dp))
+                Spacer(Modifier.height(WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() + 12.dp))
             }
         }
+    }
+
+    menuTrack?.let { selected ->
+        TrackActionSheet(
+            track = selected,
+            favorite = favoriteIds.contains(selected.id),
+            inRecent = recentIds.contains(selected.id),
+            onDismiss = { menuTrack = null },
+            onToggleFavorite = {
+                toggleFavorite(selected.id)
+                menuTrack = null
+            },
+            onRemoveRecent = {
+                removeRecent(selected.id)
+                menuTrack = null
+            },
+        )
     }
 }
 
@@ -407,8 +443,8 @@ private fun HomeScreen(
     onQueue: () -> Unit,
     onLibrary: () -> Unit,
 ) {
-    val statusPadding = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
-    val navPadding = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+    val status = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+    val nav = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
     val rotation = remember { Animatable(0f) }
 
     LaunchedEffect(isPlaying) {
@@ -422,237 +458,227 @@ private fun HomeScreen(
     }
 
     BoxWithConstraints(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(
-                Brush.verticalGradient(
-                    listOf(
-                        background.mix(Color.Black, .16f),
-                        background,
-                        background.mix(Color.Black, .28f)
-                    )
+        Modifier.fillMaxSize().background(
+            Brush.verticalGradient(
+                listOf(
+                    background.mix(Color.White, .035f),
+                    background,
+                    background.mix(Color.Black, .20f),
                 )
             )
+        )
     ) {
-        val discSize = (maxWidth * .80f).coerceAtMost(272.dp)
         val compact = maxHeight < 690.dp
-        val topBarHeight = if (compact) 52.dp else 60.dp
-        val controlsSize = if (compact) 50.dp else 56.dp
+        val discSize = (maxWidth * .79f).coerceAtMost(if (compact) 258.dp else 286.dp)
 
         Column(
-            modifier = Modifier
+            Modifier
                 .fillMaxSize()
-                .padding(top = statusPadding)
-                .padding(bottom = navPadding + 58.dp)
-                .padding(horizontal = 22.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
+                .padding(top = status)
+                .padding(bottom = nav + 62.dp)
+                .padding(horizontal = 24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            Box(Modifier.fillMaxWidth().height(topBarHeight)) {
-                Text(
-                    "心动",
-                    color = Color.White,
-                    fontSize = if (compact) 22.sp else 24.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    modifier = Modifier.align(Alignment.Center)
-                )
+            Box(Modifier.fillMaxWidth().height(if (compact) 50.dp else 58.dp)) {
+                Column(Modifier.align(Alignment.Center), horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(
+                        "心动",
+                        color = Color.White.copy(alpha = .97f),
+                        fontSize = 19.sp,
+                        fontWeight = FontWeight.Medium,
+                    )
+                    Spacer(Modifier.height(7.dp))
+                    Box(Modifier.width(28.dp).height(1.5.dp).background(Color.White.copy(alpha = .88f), CircleShape))
+                }
                 IconButton(
                     onClick = onSearch,
-                    modifier = Modifier.align(Alignment.CenterEnd).semantics { contentDescription = "搜索" }
+                    modifier = Modifier.align(Alignment.CenterEnd).semantics { contentDescription = "搜索" },
                 ) {
-                    Icon(Icons.Rounded.Search, null, tint = Color.White, modifier = Modifier.size(28.dp))
+                    Icon(Icons.Rounded.Search, null, tint = Color.White.copy(alpha = .96f), modifier = Modifier.size(27.dp))
                 }
             }
 
             Box(
-                modifier = Modifier.weight(1f).fillMaxWidth(),
-                contentAlignment = Alignment.Center
+                Modifier.weight(1f).fillMaxWidth(),
+                contentAlignment = Alignment.Center,
             ) {
                 Box(
-                    modifier = Modifier
-                        .size(discSize + 26.dp)
+                    Modifier
+                        .size(discSize + 20.dp)
                         .background(
                             Brush.radialGradient(
-                                listOf(Color.White.copy(alpha = .10f), Color.Transparent),
-                                radius = 520f
+                                listOf(Color.White.copy(alpha = .075f), Color.Transparent),
+                                radius = 500f,
                             ),
-                            CircleShape
+                            CircleShape,
                         )
                 )
                 VinylDisc(track, rotation.value, Modifier.size(discSize))
                 ToneArm(
-                    modifier = Modifier
-                        .size(width = discSize * .56f, height = discSize * .44f)
+                    Modifier
+                        .size(width = discSize * .58f, height = discSize * .45f)
                         .align(Alignment.TopEnd)
-                        .padding(top = 2.dp, end = 4.dp)
+                        .padding(top = 1.dp, end = 2.dp)
                 )
             }
 
             Row(
-                modifier = Modifier.fillMaxWidth().padding(top = if (compact) 8.dp else 12.dp),
-                verticalAlignment = Alignment.CenterVertically
+                Modifier.fillMaxWidth().padding(top = if (compact) 5.dp else 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
             ) {
                 Column(Modifier.weight(1f)) {
                     Text(
                         track.title,
-                        color = Color.White,
-                        fontWeight = FontWeight.SemiBold,
-                        fontSize = if (compact) 23.sp else 25.sp,
+                        color = Color.White.copy(alpha = .95f),
+                        fontSize = 19.sp,
+                        fontWeight = FontWeight.Medium,
                         maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
+                        overflow = TextOverflow.Ellipsis,
                     )
                     Spacer(Modifier.height(2.dp))
                     Text(
                         track.artist,
-                        color = Color.White.copy(alpha = .66f),
-                        fontSize = if (compact) 15.sp else 16.sp,
+                        color = Color.White.copy(alpha = .61f),
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Normal,
                         maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
+                        overflow = TextOverflow.Ellipsis,
                     )
                 }
                 IconButton(onClick = onToggleFavorite, modifier = Modifier.semantics { contentDescription = "收藏" }) {
                     Icon(
                         if (isFavorite) Icons.Rounded.Favorite else Icons.Rounded.FavoriteBorder,
                         null,
-                        tint = Color.White.copy(alpha = .94f),
-                        modifier = Modifier.size(29.dp)
+                        tint = Color.White.copy(alpha = .87f),
+                        modifier = Modifier.size(27.dp),
                     )
                 }
+                Spacer(Modifier.width(2.dp))
                 IconButton(onClick = onQueue, modifier = Modifier.semantics { contentDescription = "播放列表" }) {
-                    Icon(Icons.AutoMirrored.Rounded.QueueMusic, null, tint = Color.White.copy(alpha = .94f), modifier = Modifier.size(29.dp))
+                    Icon(Icons.AutoMirrored.Rounded.QueueMusic, null, tint = Color.White.copy(alpha = .87f), modifier = Modifier.size(27.dp))
                 }
             }
 
-            Spacer(Modifier.height(if (compact) 7.dp else 10.dp))
-            SeekBar(
-                positionMs = positionMs,
-                durationMs = durationMs,
-                color = Color.White,
-                onSeek = onSeek
-            )
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Text(formatTime(positionMs), color = Color.White.copy(alpha = .48f), fontSize = 11.sp)
-                Text(formatTime(durationMs), color = Color.White.copy(alpha = .48f), fontSize = 11.sp)
+            Spacer(Modifier.height(if (compact) 4.dp else 8.dp))
+            ThinSeekBar(positionMs, durationMs, Color.White, onSeek)
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Text(formatTime(positionMs), color = Color.White.copy(alpha = .39f), fontSize = 11.sp)
+                Text(
+                    "极高音质",
+                    color = Color.White.copy(alpha = .46f),
+                    fontSize = 11.sp,
+                    modifier = Modifier.weight(1f),
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                )
+                Text(formatTime(durationMs), color = Color.White.copy(alpha = .39f), fontSize = 11.sp)
             }
 
             Row(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = if (compact) 52.dp else 62.dp, vertical = if (compact) 4.dp else 8.dp),
+                Modifier.fillMaxWidth().padding(horizontal = 56.dp, vertical = if (compact) 3.dp else 7.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+                verticalAlignment = Alignment.CenterVertically,
             ) {
-                IconButton(onClick = onPrevious, modifier = Modifier.size(controlsSize).semantics { contentDescription = "上一首" }) {
-                    Icon(Icons.Rounded.SkipPrevious, null, tint = Color.White, modifier = Modifier.size(35.dp))
+                IconButton(onClick = onPrevious, modifier = Modifier.size(48.dp).semantics { contentDescription = "上一首" }) {
+                    Icon(Icons.Rounded.SkipPrevious, null, tint = Color.White.copy(alpha = .90f), modifier = Modifier.size(32.dp))
                 }
-                IconButton(onClick = onPlayPause, modifier = Modifier.size(controlsSize + 6.dp).semantics { contentDescription = if (isPlaying) "暂停" else "播放" }) {
-                    Icon(if (isPlaying) Icons.Rounded.Pause else Icons.Rounded.PlayArrow, null, tint = Color.White, modifier = Modifier.size(45.dp))
+                IconButton(
+                    onClick = onPlayPause,
+                    modifier = Modifier.size(54.dp).semantics { contentDescription = if (isPlaying) "暂停" else "播放" },
+                ) {
+                    Icon(
+                        if (isPlaying) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
+                        null,
+                        tint = Color.White.copy(alpha = .90f),
+                        modifier = Modifier.size(41.dp),
+                    )
                 }
-                IconButton(onClick = onNext, modifier = Modifier.size(controlsSize).semantics { contentDescription = "下一首" }) {
-                    Icon(Icons.Rounded.SkipNext, null, tint = Color.White, modifier = Modifier.size(35.dp))
+                IconButton(onClick = onNext, modifier = Modifier.size(48.dp).semantics { contentDescription = "下一首" }) {
+                    Icon(Icons.Rounded.SkipNext, null, tint = Color.White.copy(alpha = .90f), modifier = Modifier.size(32.dp))
                 }
             }
         }
 
-        HomeBottomNav(
-            onLibrary = onLibrary,
-            modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = navPadding)
-        )
+        HomeBottomNav(onLibrary, Modifier.align(Alignment.BottomCenter).padding(bottom = nav))
     }
 }
 
 @Composable
-private fun SeekBar(
-    positionMs: Long,
-    durationMs: Long,
-    color: Color,
-    onSeek: (Long) -> Unit,
-) {
+private fun ThinSeekBar(positionMs: Long, durationMs: Long, color: Color, onSeek: (Long) -> Unit) {
     val progress = if (durationMs <= 0) 0f else (positionMs.toFloat() / durationMs.toFloat()).coerceIn(0f, 1f)
     Canvas(
-        Modifier
-            .fillMaxWidth()
-            .height(20.dp)
-            .pointerInput(durationMs) {
-                detectTapGestures { offset ->
-                    if (durationMs > 0) onSeek((durationMs * (offset.x / size.width).coerceIn(0f, 1f)).toLong())
-                }
+        Modifier.fillMaxWidth().height(18.dp).pointerInput(durationMs) {
+            detectTapGestures { offset ->
+                if (durationMs > 0) onSeek((durationMs * (offset.x / size.width).coerceIn(0f, 1f)).toLong())
             }
+        }
     ) {
         val y = size.height / 2f
         val x = size.width * progress
-        drawLine(color.copy(alpha = .22f), Offset(0f, y), Offset(size.width, y), 3f, StrokeCap.Round)
-        drawLine(color.copy(alpha = .95f), Offset(0f, y), Offset(x, y), 3f, StrokeCap.Round)
-        drawCircle(color, radius = 6f, center = Offset(x, y))
+        drawLine(color.copy(alpha = .18f), Offset(0f, y), Offset(size.width, y), 2f, StrokeCap.Round)
+        drawLine(color.copy(alpha = .72f), Offset(0f, y), Offset(x, y), 2f, StrokeCap.Round)
+        drawCircle(color.copy(alpha = .92f), radius = 4.5f, center = Offset(x, y))
     }
 }
 
 @Composable
 private fun VinylDisc(track: Track, rotation: Float, modifier: Modifier = Modifier) {
-    val coverBitmap = remember(track.id, track.coverBytes) {
+    val bitmap = remember(track.id, track.coverBytes) {
         track.coverBytes?.let { bytes ->
             runCatching { android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size)?.asImageBitmap() }.getOrNull()
         }
     }
-    Box(
-        modifier = modifier
+    BoxWithConstraints(
+        modifier
             .graphicsLayer { rotationZ = rotation }
-            .shadow(14.dp, CircleShape, ambientColor = Color.Black.copy(alpha = .30f), spotColor = Color.Black.copy(alpha = .30f))
+            .shadow(10.dp, CircleShape, ambientColor = Color.Black.copy(alpha = .22f), spotColor = Color.Black.copy(alpha = .22f))
             .clip(CircleShape)
-            .background(Color(0xFF10110F)),
-        contentAlignment = Alignment.Center
+            .background(Color(0xFF111210)),
+        contentAlignment = Alignment.Center,
     ) {
         Canvas(Modifier.fillMaxSize()) {
-            val radius = size.minDimension / 2f
-            repeat(24) { i ->
-                val r = radius * (.55f + i * .018f)
+            val r = size.minDimension / 2f
+            repeat(30) { i ->
+                val rr = r * (.54f + i * .014f)
                 drawCircle(
-                    if (i % 2 == 0) Color.White.copy(alpha = .022f) else Color.Black.copy(alpha = .16f),
-                    r,
-                    style = Stroke(width = 1.1f)
+                    if (i % 2 == 0) Color.White.copy(alpha = .018f) else Color.Black.copy(alpha = .20f),
+                    rr,
+                    style = Stroke(width = 1f),
                 )
             }
-            drawCircle(Color.White.copy(alpha = .045f), radius * .97f, style = Stroke(width = 2f))
+            drawCircle(Color.White.copy(alpha = .04f), r * .965f, style = Stroke(width = 1.5f))
         }
-        Box(
-            modifier = Modifier
-                .size(trackArtworkDiameter(track))
-                .clip(CircleShape),
-            contentAlignment = Alignment.Center
-        ) {
-            if (coverBitmap != null) {
-                Image(coverBitmap, null, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
-            } else {
-                DemoArtwork(track, circular = true)
-            }
+        Box(Modifier.size(maxWidth * .58f).clip(CircleShape), contentAlignment = Alignment.Center) {
+            if (bitmap != null) Image(bitmap, null, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
+            else DemoArtwork(track)
         }
-        Box(Modifier.size(17.dp).clip(CircleShape).background(Color(0xFFF0F0EA)))
-        Box(Modifier.size(6.dp).clip(CircleShape).background(Color(0xFF7C7E77)))
+        Box(Modifier.size(15.dp).clip(CircleShape).background(Color(0xFFF0F0EA)))
+        Box(Modifier.size(5.dp).clip(CircleShape).background(Color(0xFF787A74)))
     }
 }
-
-private fun trackArtworkDiameter(track: Track): Dp = if (track.id.startsWith("demo:")) 132.dp else 136.dp
 
 @Composable
 private fun ToneArm(modifier: Modifier = Modifier) {
     Canvas(modifier) {
-        val pivot = Offset(size.width * .45f, size.height * .10f)
-        val bend = Offset(size.width * .55f, size.height * .55f)
-        val tip = Offset(size.width * .87f, size.height * .87f)
-        drawCircle(Color.White.copy(alpha = .24f), 15f, pivot)
-        drawCircle(Color.White.copy(alpha = .96f), 7f, pivot)
-        drawLine(Color.White.copy(alpha = .94f), pivot, bend, 7f, StrokeCap.Round)
-        drawLine(Color.White.copy(alpha = .94f), bend, tip, 7f, StrokeCap.Round)
-        drawLine(Color(0xFFECEDE8), tip, Offset(size.width * .94f, size.height * .94f), 12f, StrokeCap.Round)
+        val pivot = Offset(size.width * .46f, size.height * .10f)
+        val bend = Offset(size.width * .56f, size.height * .54f)
+        val tip = Offset(size.width * .87f, size.height * .86f)
+        drawCircle(Color.White.copy(alpha = .20f), 13f, pivot)
+        drawCircle(Color.White.copy(alpha = .93f), 6f, pivot)
+        drawLine(Color.White.copy(alpha = .91f), pivot, bend, 6f, StrokeCap.Round)
+        drawLine(Color.White.copy(alpha = .91f), bend, tip, 6f, StrokeCap.Round)
+        drawLine(Color.White.copy(alpha = .88f), tip, Offset(size.width * .94f, size.height * .93f), 10f, StrokeCap.Round)
     }
 }
 
 @Composable
-private fun DemoArtwork(track: Track, circular: Boolean = false) {
+private fun DemoArtwork(track: Track) {
     val index = track.id.substringAfter("demo:", "0").toIntOrNull() ?: 0
     Box(
         Modifier.fillMaxSize().background(
             when (index % 3) {
-                0 -> Brush.verticalGradient(listOf(Color(0xFFE8E1C8), Color(0xFF89995E), Color(0xFF4E6629)))
-                1 -> Brush.verticalGradient(listOf(Color(0xFFC7D8E8), Color(0xFF7894AE), Color(0xFF3E536B)))
-                else -> Brush.verticalGradient(listOf(Color(0xFFE6D4D5), Color(0xFF9D7376), Color(0xFF614249)))
+                0 -> Brush.verticalGradient(listOf(Color(0xFFE7E1C7), Color(0xFF8E9E61), Color(0xFF516B2A)))
+                1 -> Brush.verticalGradient(listOf(Color(0xFFC7D8E7), Color(0xFF7894AD), Color(0xFF40556C)))
+                else -> Brush.verticalGradient(listOf(Color(0xFFE4D2D4), Color(0xFF9A7075), Color(0xFF624147)))
             }
         )
     ) {
@@ -660,15 +686,15 @@ private fun DemoArtwork(track: Track, circular: Boolean = false) {
             when (index % 3) {
                 0 -> {
                     drawCircle(Color(0xFFF7F0D9).copy(alpha = .85f), size.minDimension * .20f, Offset(size.width * .64f, size.height * .30f))
-                    drawCircle(Color(0xFF5A7134).copy(alpha = .78f), size.minDimension * .40f, Offset(size.width * .20f, size.height * .92f))
-                    drawCircle(Color(0xFF78924B).copy(alpha = .70f), size.minDimension * .34f, Offset(size.width * .82f, size.height * .94f))
-                    drawLine(Color.White.copy(alpha = .35f), Offset(size.width * .16f, size.height * .70f), Offset(size.width * .82f, size.height * .48f), 2f)
+                    drawCircle(Color(0xFF5A7134).copy(alpha = .74f), size.minDimension * .42f, Offset(size.width * .18f, size.height * .94f))
+                    drawCircle(Color(0xFF78924B).copy(alpha = .64f), size.minDimension * .34f, Offset(size.width * .82f, size.height * .94f))
+                    drawLine(Color.White.copy(alpha = .28f), Offset(size.width * .16f, size.height * .70f), Offset(size.width * .82f, size.height * .48f), 2f)
                 }
                 1 -> {
-                    drawCircle(Color(0xFFF0F3F5).copy(alpha = .84f), size.minDimension * .16f, Offset(size.width * .70f, size.height * .28f))
+                    drawCircle(Color.White.copy(alpha = .75f), size.minDimension * .16f, Offset(size.width * .68f, size.height * .28f))
                     repeat(4) { i ->
-                        val y = size.height * (.62f + i * .07f)
-                        drawLine(Color.White.copy(alpha = .18f + i * .04f), Offset(size.width * .12f, y), Offset(size.width * .88f, y), 2f)
+                        val y = size.height * (.60f + i * .08f)
+                        drawLine(Color.White.copy(alpha = .14f + i * .03f), Offset(size.width * .12f, y), Offset(size.width * .88f, y), 2f)
                     }
                 }
                 else -> {
@@ -677,9 +703,9 @@ private fun DemoArtwork(track: Track, circular: Boolean = false) {
                         val angle = i * PI / 3.0
                         val dx = (size.minDimension * .20f * kotlin.math.cos(angle)).toFloat()
                         val dy = (size.minDimension * .20f * kotlin.math.sin(angle)).toFloat()
-                        drawCircle(Color(0xFFF0D7D8).copy(alpha = .32f), size.minDimension * .15f, Offset(center.x + dx, center.y + dy))
+                        drawCircle(Color(0xFFF0D7D8).copy(alpha = .30f), size.minDimension * .15f, Offset(center.x + dx, center.y + dy))
                     }
-                    drawCircle(Color(0xFFF3E3D8).copy(alpha = .80f), size.minDimension * .09f, center)
+                    drawCircle(Color(0xFFF3E3D8).copy(alpha = .78f), size.minDimension * .09f, center)
                 }
             }
         }
@@ -693,7 +719,7 @@ private fun ArtworkSquare(track: Track, size: Dp) {
             runCatching { android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size)?.asImageBitmap() }.getOrNull()
         }
     }
-    Box(Modifier.size(size).clip(RoundedCornerShape(12.dp))) {
+    Box(Modifier.size(size).clip(RoundedCornerShape(9.dp))) {
         if (bitmap != null) Image(bitmap, null, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
         else DemoArtwork(track)
     }
@@ -702,21 +728,17 @@ private fun ArtworkSquare(track: Track, size: Dp) {
 @Composable
 private fun HomeBottomNav(onLibrary: () -> Unit, modifier: Modifier = Modifier) {
     Row(
-        modifier
-            .fillMaxWidth()
-            .height(58.dp)
-            .background(Color.Black.copy(alpha = .08f))
-            .padding(horizontal = 54.dp),
+        modifier.fillMaxWidth().height(62.dp).background(Color.Black.copy(alpha = .055f)).padding(horizontal = 64.dp),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween
+        horizontalArrangement = Arrangement.SpaceBetween,
     ) {
-        Text("首页", color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+        Text("首页", color = Color.White.copy(alpha = .95f), fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
         Text(
             "音乐库",
-            color = Color.White.copy(alpha = .55f),
-            fontSize = 16.sp,
+            color = Color.White.copy(alpha = .52f),
+            fontSize = 15.sp,
             fontWeight = FontWeight.Medium,
-            modifier = Modifier.clickable(onClick = onLibrary).padding(10.dp)
+            modifier = Modifier.clickable(onClick = onLibrary).padding(10.dp),
         )
     }
 }
@@ -724,22 +746,18 @@ private fun HomeBottomNav(onLibrary: () -> Unit, modifier: Modifier = Modifier) 
 @Composable
 private fun LibraryBottomNav(onHome: () -> Unit, modifier: Modifier = Modifier) {
     Row(
-        modifier
-            .fillMaxWidth()
-            .height(58.dp)
-            .background(Color(0xFFF6F6F3))
-            .padding(horizontal = 54.dp),
+        modifier.fillMaxWidth().height(62.dp).background(PageBackground.copy(alpha = .96f)).padding(horizontal = 64.dp),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween
+        horizontalArrangement = Arrangement.SpaceBetween,
     ) {
         Text(
             "首页",
-            color = Color(0xFF94958F),
-            fontSize = 16.sp,
+            color = Color(0xFF989A94),
+            fontSize = 15.sp,
             fontWeight = FontWeight.Medium,
-            modifier = Modifier.clickable(onClick = onHome).padding(10.dp)
+            modifier = Modifier.clickable(onClick = onHome).padding(10.dp),
         )
-        Text("音乐库", color = Color(0xFF151613), fontSize = 16.sp, fontWeight = FontWeight.Bold)
+        Text("音乐库", color = MainText, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
     }
 }
 
@@ -755,6 +773,8 @@ private fun LibraryScreen(
     onPlayPause: () -> Unit,
     onQueue: () -> Unit,
     onHome: () -> Unit,
+    onOpenFavorites: () -> Unit,
+    onMore: (Track) -> Unit,
 ) {
     val top = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     val nav = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
@@ -762,102 +782,147 @@ private fun LibraryScreen(
     val recent = recentIds.mapNotNull { id -> tracks.find { it.id == id } }.distinctBy { it.id }
     val local = tracks.filterNot { it.id.startsWith("demo:") }
 
-    Box(Modifier.fillMaxSize().background(Color(0xFFF6F6F3))) {
-        Column(
-            Modifier
-                .fillMaxSize()
-                .padding(top = top)
-                .padding(bottom = nav + 58.dp)
-        ) {
+    Box(Modifier.fillMaxSize().background(PageBackground)) {
+        Column(Modifier.fillMaxSize().padding(top = top).padding(bottom = nav + 62.dp)) {
             Row(
-                Modifier.fillMaxWidth().padding(start = 22.dp, end = 12.dp, top = 12.dp, bottom = 12.dp),
-                verticalAlignment = Alignment.CenterVertically
+                Modifier.fillMaxWidth().padding(start = 22.dp, end = 12.dp, top = 10.dp, bottom = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text("音乐库", fontSize = 25.sp, fontWeight = FontWeight.Bold, color = Color(0xFF151613), modifier = Modifier.weight(1f))
+                Text("音乐库", color = MainText, fontSize = 23.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
                 IconButton(onClick = onImport, modifier = Modifier.semantics { contentDescription = "导入本地音乐" }) {
-                    Icon(Icons.Rounded.UploadFile, null, tint = Color(0xFF151613), modifier = Modifier.size(24.dp))
+                    Icon(Icons.Rounded.UploadFile, null, tint = MainText, modifier = Modifier.size(22.dp))
                 }
             }
 
             LazyColumn(
                 Modifier.weight(1f).fillMaxWidth(),
-                contentPadding = PaddingValues(start = 18.dp, end = 18.dp, bottom = 94.dp)
+                contentPadding = PaddingValues(start = 18.dp, end = 18.dp, bottom = 94.dp),
             ) {
                 item {
-                    LibraryQuickCard(
-                        title = "我喜欢的音乐",
-                        count = favorites.size,
-                        accent = Color(0xFFB85F68)
-                    )
+                    FavoriteCard(favorites.size, onOpenFavorites)
                 }
                 item { SectionTitle("最近播放", recent.size) }
-                if (recent.isEmpty()) {
-                    item { SubtleEmpty("播放过的歌会出现在这里") }
-                } else {
-                    items(recent.take(8), key = { "recent-${it.id}" }) {
-                        TrackRow(it, active = it.id == currentTrack.id, onClick = { onTrack(it) })
-                    }
+                if (recent.isEmpty()) item { SubtleEmpty("播放过的歌会出现在这里") }
+                else items(recent.take(8), key = { "recent-${it.id}" }) {
+                    TrackRow(
+                        track = it,
+                        active = it.id == currentTrack.id,
+                        onClick = { onTrack(it) },
+                        onMore = { onMore(it) },
+                    )
                 }
 
                 item { SectionTitle("本地音乐", local.size) }
-                if (local.isEmpty()) {
-                    item {
-                        SubtleEmpty("点右上角导入手机里的音频")
-                    }
-                } else {
-                    items(local, key = { it.id }) {
-                        TrackRow(it, active = it.id == currentTrack.id, onClick = { onTrack(it) })
-                    }
+                if (local.isEmpty()) item { SubtleEmpty("点右上角导入手机里的音频") }
+                else items(local, key = { it.id }) {
+                    TrackRow(
+                        track = it,
+                        active = it.id == currentTrack.id,
+                        onClick = { onTrack(it) },
+                        onMore = { onMore(it) },
+                    )
                 }
             }
         }
 
         MiniPlayer(
-            currentTrack,
-            isPlaying,
-            onPlayPause,
-            onQueue,
-            modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = nav + 62.dp)
+            track = currentTrack,
+            isPlaying = isPlaying,
+            onPlayPause = onPlayPause,
+            onQueue = onQueue,
+            modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = nav + 65.dp),
         )
         LibraryBottomNav(onHome, Modifier.align(Alignment.BottomCenter).padding(bottom = nav))
     }
 }
 
 @Composable
-private fun LibraryQuickCard(title: String, count: Int, accent: Color) {
+private fun FavoriteCard(count: Int, onClick: () -> Unit) {
     Row(
         Modifier
             .fillMaxWidth()
-            .padding(top = 6.dp, bottom = 6.dp)
-            .clip(RoundedCornerShape(20.dp))
-            .background(Color.White)
-            .padding(horizontal = 16.dp, vertical = 15.dp),
-        verticalAlignment = Alignment.CenterVertically
+            .padding(top = 5.dp, bottom = 5.dp)
+            .clip(RoundedCornerShape(18.dp))
+            .background(Color.White.copy(alpha = .88f))
+            .clickable(onClick = onClick)
+            .semantics { contentDescription = "打开我喜欢的音乐" }
+            .padding(horizontal = 15.dp, vertical = 13.dp),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
-        Box(Modifier.size(44.dp).clip(CircleShape).background(accent.copy(alpha = .13f)), contentAlignment = Alignment.Center) {
-            Icon(Icons.Rounded.Favorite, null, tint = accent, modifier = Modifier.size(23.dp))
+        Box(Modifier.size(40.dp).clip(CircleShape).background(Color(0xFFCA6570).copy(alpha = .12f)), contentAlignment = Alignment.Center) {
+            Icon(Icons.Rounded.Favorite, null, tint = Color(0xFFC15E69), modifier = Modifier.size(21.dp))
         }
-        Spacer(Modifier.width(13.dp))
-        Text(title, color = Color(0xFF171816), fontSize = 17.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
-        Text(count.toString(), color = Color(0xFF959690), fontSize = 14.sp)
+        Spacer(Modifier.width(12.dp))
+        Text("我喜欢的音乐", color = MainText, fontSize = 16.sp, fontWeight = FontWeight.Medium, modifier = Modifier.weight(1f))
+        Text(count.toString(), color = Color(0xFF999B95), fontSize = 13.sp, fontWeight = FontWeight.Normal)
     }
 }
 
 @Composable
 private fun SectionTitle(title: String, count: Int) {
     Row(
-        Modifier.fillMaxWidth().padding(start = 4.dp, end = 4.dp, top = 18.dp, bottom = 7.dp),
-        verticalAlignment = Alignment.Bottom
+        Modifier.fillMaxWidth().padding(start = 4.dp, end = 4.dp, top = 17.dp, bottom = 6.dp),
+        verticalAlignment = Alignment.Bottom,
     ) {
-        Text(title, fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Color(0xFF171816))
+        Text(title, color = MainText, fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
         Spacer(Modifier.width(7.dp))
-        Text(count.toString(), color = Color(0xFF9A9B95), fontSize = 12.sp)
+        Text(count.toString(), color = Color(0xFF9C9E98), fontSize = 12.sp, fontWeight = FontWeight.Normal)
     }
 }
 
 @Composable
 private fun SubtleEmpty(text: String) {
-    Text(text, color = Color(0xFF9A9B96), fontSize = 13.sp, modifier = Modifier.padding(horizontal = 5.dp, vertical = 10.dp))
+    Text(text, color = Color(0xFF9C9E98), fontSize = 12.5.sp, modifier = Modifier.padding(horizontal = 5.dp, vertical = 9.dp))
+}
+
+@Composable
+private fun FavoritesScreen(
+    tracks: List<Track>,
+    currentTrack: Track,
+    isPlaying: Boolean,
+    onBack: () -> Unit,
+    onTrack: (Track) -> Unit,
+    onMore: (Track) -> Unit,
+    onPlayPause: () -> Unit,
+    onQueue: () -> Unit,
+) {
+    val top = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+    val nav = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+
+    Box(Modifier.fillMaxSize().background(PageBackground)) {
+        Column(Modifier.fillMaxSize().padding(top = top).padding(bottom = nav + 76.dp)) {
+            Row(
+                Modifier.fillMaxWidth().height(58.dp).padding(horizontal = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                IconButton(onClick = onBack, modifier = Modifier.semantics { contentDescription = "返回音乐库" }) {
+                    Icon(Icons.AutoMirrored.Rounded.ArrowBack, null, tint = MainText, modifier = Modifier.size(25.dp))
+                }
+                Text("我喜欢的音乐", color = MainText, fontSize = 19.sp, fontWeight = FontWeight.Medium)
+            }
+            if (tracks.isEmpty()) {
+                Text("还没有收藏歌曲", color = SubText, fontSize = 13.sp, modifier = Modifier.padding(start = 22.dp, top = 22.dp))
+            } else {
+                LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(horizontal = 18.dp, vertical = 8.dp)) {
+                    items(tracks, key = { it.id }) {
+                        TrackRow(
+                            track = it,
+                            active = it.id == currentTrack.id,
+                            onClick = { onTrack(it) },
+                            onMore = { onMore(it) },
+                        )
+                    }
+                }
+            }
+        }
+        MiniPlayer(
+            currentTrack,
+            isPlaying,
+            onPlayPause,
+            onQueue,
+            Modifier.align(Alignment.BottomCenter).padding(bottom = nav + 10.dp),
+        )
+    }
 }
 
 @Composable
@@ -872,23 +937,24 @@ private fun MiniPlayer(
         modifier
             .padding(horizontal = 16.dp)
             .fillMaxWidth()
-            .shadow(12.dp, RoundedCornerShape(24.dp), ambientColor = Color.Black.copy(alpha = .10f), spotColor = Color.Black.copy(alpha = .10f))
-            .clip(RoundedCornerShape(24.dp))
-            .background(Color.White.copy(alpha = .97f))
-            .padding(horizontal = 10.dp, vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically
+            .shadow(6.dp, RoundedCornerShape(27.dp), ambientColor = Color.Black.copy(alpha = .07f), spotColor = Color.Black.copy(alpha = .07f))
+            .clip(RoundedCornerShape(27.dp))
+            .background(Color.White.copy(alpha = .90f))
+            .padding(horizontal = 10.dp, vertical = 7.dp),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
-        ArtworkSquare(track, 42.dp)
+        ArtworkSquare(track, 41.dp)
         Spacer(Modifier.width(10.dp))
         Column(Modifier.weight(1f)) {
-            Text(track.title, color = Color(0xFF171816), fontWeight = FontWeight.SemiBold, fontSize = 15.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text(track.artist, color = Color(0xFF94958F), fontSize = 12.sp, maxLines = 1)
+            Text(track.title, color = MainText, fontSize = 14.5.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Spacer(Modifier.height(1.dp))
+            Text(track.artist, color = SubText, fontSize = 12.sp, fontWeight = FontWeight.Normal, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
-        IconButton(onClick = onPlayPause) {
-            Icon(if (isPlaying) Icons.Rounded.Pause else Icons.Rounded.PlayArrow, null, tint = Color(0xFF171816), modifier = Modifier.size(25.dp))
+        IconButton(onClick = onPlayPause, modifier = Modifier.semantics { contentDescription = if (isPlaying) "迷你播放器暂停" else "迷你播放器播放" }) {
+            Icon(if (isPlaying) Icons.Rounded.Pause else Icons.Rounded.PlayArrow, null, tint = MainText, modifier = Modifier.size(24.dp))
         }
         IconButton(onClick = onQueue) {
-            Icon(Icons.AutoMirrored.Rounded.QueueMusic, null, tint = Color(0xFF171816), modifier = Modifier.size(24.dp))
+            Icon(Icons.AutoMirrored.Rounded.QueueMusic, null, tint = MainText, modifier = Modifier.size(23.dp))
         }
     }
 }
@@ -898,77 +964,129 @@ private fun SearchScreen(tracks: List<Track>, onBack: () -> Unit, onTrack: (Trac
     val top = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     var query by remember { mutableStateOf("") }
     val results = remember(query, tracks.size) {
-        if (query.isBlank()) emptyList() else tracks.filter {
+        if (query.isBlank()) emptyList()
+        else tracks.filter {
             it.title.contains(query, ignoreCase = true) || it.artist.contains(query, ignoreCase = true)
         }
     }
 
-    Column(Modifier.fillMaxSize().background(Color(0xFFF6F6F3)).padding(top = top)) {
-        Row(Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+    Column(Modifier.fillMaxSize().background(PageBackground).padding(top = top)) {
+        Row(
+            Modifier.fillMaxWidth().padding(start = 9.dp, end = 15.dp, top = 10.dp, bottom = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
             IconButton(onClick = onBack, modifier = Modifier.semantics { contentDescription = "返回" }) {
-                Icon(Icons.AutoMirrored.Rounded.ArrowBack, null, tint = Color(0xFF171816))
+                Icon(Icons.AutoMirrored.Rounded.ArrowBack, null, tint = MainText, modifier = Modifier.size(25.dp))
             }
             TextField(
                 value = query,
                 onValueChange = { query = it },
-                placeholder = { Text("搜索歌曲或歌手", color = Color(0xFF999A95)) },
+                placeholder = { Text("搜索歌曲或歌手", color = Color(0xFF999B96), fontSize = 15.5.sp, fontWeight = FontWeight.Normal) },
                 singleLine = true,
-                modifier = Modifier.weight(1f).clip(RoundedCornerShape(22.dp)).semantics { contentDescription = "搜索输入框" },
-                leadingIcon = { Icon(Icons.Rounded.Search, null, tint = Color(0xFF7E807A)) },
+                modifier = Modifier.weight(1f).clip(RoundedCornerShape(28.dp)).semantics { contentDescription = "搜索输入框" },
+                leadingIcon = { Icon(Icons.Rounded.Search, null, tint = Color(0xFF777A74), modifier = Modifier.size(23.dp)) },
                 colors = TextFieldDefaults.colors(
-                    focusedContainerColor = Color.White,
-                    unfocusedContainerColor = Color.White,
+                    focusedContainerColor = Color.White.copy(alpha = .92f),
+                    unfocusedContainerColor = Color.White.copy(alpha = .92f),
                     focusedIndicatorColor = Color.Transparent,
                     unfocusedIndicatorColor = Color.Transparent,
-                    cursorColor = Color(0xFF171816)
-                )
+                    cursorColor = MainText,
+                ),
             )
-            Spacer(Modifier.width(6.dp))
         }
 
         if (query.isBlank()) {
             Text(
-                "找你想听的",
-                modifier = Modifier.padding(start = 22.dp, top = 20.dp),
-                color = Color(0xFF171816),
-                fontSize = 20.sp,
-                fontWeight = FontWeight.Bold
+                "只搜索你的歌曲",
+                color = Color(0xFF9A9C96),
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Normal,
+                modifier = Modifier.padding(start = 22.dp, top = 13.dp),
             )
         } else if (results.isEmpty()) {
             SubtleEmpty("没有匹配的歌曲")
         } else {
-            LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(horizontal = 4.dp, vertical = 8.dp)) {
-                items(results, key = { it.id }) { TrackRow(it, false, onClick = { onTrack(it) }) }
+            LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(horizontal = 18.dp, vertical = 8.dp)) {
+                items(results, key = { it.id }) {
+                    TrackRow(track = it, active = false, onClick = { onTrack(it) })
+                }
             }
         }
     }
 }
 
 @Composable
-private fun TrackRow(track: Track, active: Boolean, onClick: () -> Unit) {
+private fun TrackRow(
+    track: Track,
+    active: Boolean,
+    onClick: () -> Unit,
+    onMore: (() -> Unit)? = null,
+) {
     Row(
-        Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick)
-            .padding(horizontal = 5.dp, vertical = 7.dp),
-        verticalAlignment = Alignment.CenterVertically
+        Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 4.dp, vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
-        ArtworkSquare(track, 48.dp)
-        Spacer(Modifier.width(12.dp))
+        ArtworkSquare(track, 44.dp)
+        Spacer(Modifier.width(11.dp))
         Column(Modifier.weight(1f)) {
             Text(
                 track.title,
-                color = if (active) track.theme.mix(Color.Black, .12f) else Color(0xFF171816),
-                fontWeight = FontWeight.SemiBold,
-                fontSize = 15.sp,
+                color = if (active) track.theme.mix(Color.Black, .12f) else MainText,
+                fontSize = 14.5.sp,
+                fontWeight = FontWeight.Medium,
                 maxLines = 1,
-                overflow = TextOverflow.Ellipsis
+                overflow = TextOverflow.Ellipsis,
             )
             Spacer(Modifier.height(2.dp))
-            Text(track.artist, color = Color(0xFF92938E), fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(track.artist, color = SubText, fontSize = 12.sp, fontWeight = FontWeight.Normal, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
-        Icon(Icons.Rounded.MoreHoriz, null, tint = Color(0xFF9C9D98), modifier = Modifier.size(22.dp))
+        if (onMore != null) {
+            IconButton(
+                onClick = onMore,
+                modifier = Modifier.size(42.dp).semantics { contentDescription = "更多:${track.title}" },
+            ) {
+                Icon(Icons.Rounded.MoreHoriz, null, tint = Color(0xFF9B9D97), modifier = Modifier.size(21.dp))
+            }
+        }
     }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun TrackActionSheet(
+    track: Track,
+    favorite: Boolean,
+    inRecent: Boolean,
+    onDismiss: () -> Unit,
+    onToggleFavorite: () -> Unit,
+    onRemoveRecent: () -> Unit,
+) {
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        containerColor = Color(0xFFF9F9F6),
+        shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
+    ) {
+        Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp)) {
+            Text("歌曲选项", color = MainText, fontSize = 17.sp, fontWeight = FontWeight.Medium)
+            Spacer(Modifier.height(3.dp))
+            Text(track.title, color = SubText, fontSize = 12.5.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Spacer(Modifier.height(12.dp))
+            ActionRow(if (favorite) "取消收藏" else "收藏", onToggleFavorite)
+            if (inRecent) ActionRow("从最近播放移除", onRemoveRecent)
+            Spacer(Modifier.height(WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() + 12.dp))
+        }
+    }
+}
+
+@Composable
+private fun ActionRow(text: String, onClick: () -> Unit) {
+    Text(
+        text,
+        color = MainText,
+        fontSize = 15.sp,
+        fontWeight = FontWeight.Normal,
+        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick).padding(vertical = 15.dp),
+    )
 }
 
 private fun Color.mix(other: Color, amount: Float): Color {
@@ -977,7 +1095,7 @@ private fun Color.mix(other: Color, amount: Float): Color {
         red = red * (1f - a) + other.red * a,
         green = green * (1f - a) + other.green * a,
         blue = blue * (1f - a) + other.blue * a,
-        alpha = 1f
+        alpha = 1f,
     )
 }
 
@@ -1047,9 +1165,9 @@ private fun themeFromArtwork(bytes: ByteArray?, seed: String): Color {
                 small.recycle()
                 if (small !== bmp) bmp.recycle()
                 if (count > 0) {
-                    val rr = ((r / count) * .62).toInt().coerceIn(45, 150)
-                    val gg = ((g / count) * .62).toInt().coerceIn(45, 150)
-                    val bb = ((b / count) * .62).toInt().coerceIn(45, 150)
+                    val rr = ((r / count) * .62).toInt().coerceIn(44, 150)
+                    val gg = ((g / count) * .62).toInt().coerceIn(44, 150)
+                    val bb = ((b / count) * .62).toInt().coerceIn(44, 150)
                     return Color(android.graphics.Color.rgb(rr, gg, bb))
                 }
             }
