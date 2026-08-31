@@ -17,6 +17,19 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Apply verified turntable geometry fix
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('app/src/main/java/com/immersive/music/MusicUi.kt')
+          s = p.read_text()
+          old = 'targetValue = if (onDisc) 0f else -17f'
+          new = 'targetValue = if (onDisc) 62f else -17f'
+          if old not in s:
+              raise SystemExit('Tone-arm target not found')
+          p.write_text(s.replace(old, new, 1))
+          PY
+
       - name: Set up Java 17
         uses: actions/setup-java@v5
         with:
