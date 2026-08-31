@@ -57,6 +57,17 @@ if old not in s:
     raise SystemExit('disc proportion source missing')
 s = s.replace(old, 'val discSize = (maxWidth * .755f).coerceAtMost(if (compact) 250.dp else 274.dp)', 1)
 
+old = '''.align(Alignment.TopEnd)
+                        .padding(top = 1.dp, end = 2.dp),'''
+if old not in s:
+    raise SystemExit('tone-arm placement source missing')
+s = s.replace(
+    old,
+    '''.align(Alignment.TopEnd)
+                        .padding(top = 9.dp, end = 2.dp),''',
+    1,
+)
+
 old = 'fontSize = 18.sp,\n                        fontWeight = FontWeight.Medium,'
 if old not in s:
     raise SystemExit('home title typography source missing')
