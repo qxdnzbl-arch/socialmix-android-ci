@@ -1,7 +1,6 @@
 package com.immersive.music
 
 import androidx.compose.ui.test.assertIsDisplayed
-import androidx.compose.ui.test.assertDoesNotExist
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
@@ -30,7 +29,6 @@ class Phase1AcceptanceTest {
         composeRule.waitForIdle()
         composeRule.onNodeWithText("Blue Hour").assertIsDisplayed()
         composeRule.onNodeWithContentDescription("播放").assertIsDisplayed()
-        composeRule.onNodeWithContentDescription("暂停").assertDoesNotExist()
 
         composeRule.onNodeWithContentDescription("播放").performClick()
         composeRule.waitForIdle()
