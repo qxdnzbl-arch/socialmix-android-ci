@@ -18,7 +18,9 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Apply confirmed NetEase-reference UI corrections
-        run: python ci/refine_netease_ui.py
+        run: |
+          python ci/refine_netease_ui.py
+          python ci/final_tonearm.py
 
       - name: Set up Java 17
         uses: actions/setup-java@v5
@@ -57,7 +59,7 @@ jobs:
             adb shell input keyevent KEYCODE_WAKEUP || true
             adb shell wm dismiss-keyguard || true
             adb shell am force-stop com.immersive.music || true
-            adb shell am start -W -a android.intent.action.MAIN -c android.intent.category.LAUNCHER -n com.immersive.music/com.immersive.music.MainActivity
+            adb shell am start -W -a android.intent.action.MAIN -c android.content.category.LAUNCHER -n com.immersive.music/com.immersive.music.MainActivity
             sleep 5
             adb shell pidof com.immersive.music
             adb shell dumpsys activity activities | grep -E 'mResumedActivity|topResumedActivity' | grep 'com.immersive.music'
