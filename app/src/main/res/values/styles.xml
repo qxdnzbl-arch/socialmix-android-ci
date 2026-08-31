@@ -1,10 +1,9 @@
 <resources>
-    <style name="AppTheme" parent="android:style/Theme.Material.Light.NoActionBar">
+    <style name="Theme.ImmersiveMusic" parent="android:style/Theme.Material.Light.NoActionBar">
         <item name="android:fontFamily">sans</item>
-        <item name="android:windowLightStatusBar">true</item>
-        <item name="android:statusBarColor">#F7F7F5</item>
-        <item name="android:navigationBarColor">#F7F7F5</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">#11120F</item>
         <item name="android:windowActionModeOverlay">true</item>
-        <item name="android:windowNoTitle">true</item>
     </style>
 </resources>
