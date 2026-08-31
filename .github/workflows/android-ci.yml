@@ -60,6 +60,22 @@ jobs:
             mkdir -p deliverable
             adb exec-out screencap -p > deliverable/home-screen.png
 
+            adb shell input tap 850 2260
+            sleep 2
+            adb shell uiautomator dump /sdcard/library-window.xml
+            adb pull /sdcard/library-window.xml library-window.xml
+            grep '音乐库' library-window.xml
+            adb exec-out screencap -p > deliverable/library-screen.png
+
+            adb shell input tap 220 2260
+            sleep 1
+            adb shell input tap 955 190
+            sleep 2
+            adb shell uiautomator dump /sdcard/search-window.xml
+            adb pull /sdcard/search-window.xml search-window.xml
+            grep '搜索歌曲或歌手' search-window.xml
+            adb exec-out screencap -p > deliverable/search-screen.png
+
       - name: Prepare deliverable
         if: success()
         run: |
