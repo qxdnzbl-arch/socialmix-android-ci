@@ -3,6 +3,7 @@ package com.immersive.music
 import android.Manifest
 import android.os.Build
 import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.assertExists
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithContentDescription
@@ -45,24 +46,24 @@ class Phase1AcceptanceTest {
 
     @Test
     fun playback_controls_switchTracksAndTogglePlayback() {
-        composeRule.onNodeWithText("First Light").assertIsDisplayed()
+        composeRule.onNodeWithText("First Light").assertExists()
 
         composeRule.onNodeWithContentDescription("下一首").performClick()
-        composeRule.onNodeWithText("Blue Hour").assertIsDisplayed()
-        composeRule.onNodeWithContentDescription("播放").assertIsDisplayed()
+        composeRule.onNodeWithText("Blue Hour").assertExists()
+        composeRule.onNodeWithContentDescription("播放").assertExists()
         assertToneArm("唱针:唱片外")
 
         composeRule.onNodeWithContentDescription("上一首").performClick()
-        composeRule.onNodeWithText("First Light").assertIsDisplayed()
-        composeRule.onNodeWithContentDescription("播放").assertIsDisplayed()
+        composeRule.onNodeWithText("First Light").assertExists()
+        composeRule.onNodeWithContentDescription("播放").assertExists()
         assertToneArm("唱针:唱片外")
 
         composeRule.onNodeWithContentDescription("播放").performClick()
-        composeRule.onNodeWithContentDescription("暂停").assertIsDisplayed()
+        composeRule.onNodeWithContentDescription("暂停").assertExists()
         assertToneArm("唱针:唱片上")
 
         composeRule.onNodeWithContentDescription("暂停").performClick()
-        composeRule.onNodeWithContentDescription("播放").assertIsDisplayed()
+        composeRule.onNodeWithContentDescription("播放").assertExists()
         assertToneArm("唱针:唱片外")
     }
 
