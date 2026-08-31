@@ -41,9 +41,13 @@ class Phase1AcceptanceTest {
         composeRule.onNodeWithContentDescription("唱针:唱片外").assertIsDisplayed()
 
         composeRule.onNodeWithContentDescription("播放").performClick()
-        composeRule.waitForIdle()
-        composeRule.onNodeWithContentDescription("暂停").assertIsDisplayed()
-        composeRule.onNodeWithContentDescription("唱针:唱片上").assertIsDisplayed()
+        composeRule.waitUntil(timeoutMillis = 5_000) {
+            runCatching {
+                composeRule.onNodeWithContentDescription("暂停").assertIsDisplayed()
+                composeRule.onNodeWithContentDescription("唱针:唱片上").assertIsDisplayed()
+                true
+            }.getOrDefault(false)
+        }
 
         composeRule.onNodeWithContentDescription("下一首").performClick()
         composeRule.waitUntil(timeoutMillis = 5_000) {
@@ -60,6 +64,7 @@ class Phase1AcceptanceTest {
             runCatching {
                 composeRule.onNodeWithText("First Light").assertIsDisplayed()
                 composeRule.onNodeWithContentDescription("暂停").assertIsDisplayed()
+                composeRule.onNodeWithContentDescription("唱针:唱片上").assertIsDisplayed()
                 true
             }.getOrDefault(false)
         }
