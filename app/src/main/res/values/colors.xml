@@ -1,5 +1,3 @@
 <resources>
-    <color name="app_bg">#F7F7F5</color>
-    <color name="text_primary">#1F1F1F</color>
-    <color name="launcher_bg">#F8FAF9</color>
+    <color name="launcher_bg">#161714</color>
 </resources>
