@@ -21,498 +21,252 @@ jobs:
         run: |
           python - <<'PY'
           from pathlib import Path
+          import re
 
           ui = Path('app/src/main/java/com/immersive/music/MusicUi.kt')
           s = ui.read_text()
 
-          def replace_exact(old, new, name, count=1):
+          def sub(pattern, repl, name, count=1):
               global s
-              found = s.count(old)
-              if found < count:
-                  raise SystemExit(f'{name}: expected at least {count}, found {found}')
-              s = s.replace(old, new, count)
+              s2, n = re.subn(pattern, repl, s, count=count, flags=re.S)
+              if n != count:
+                  raise SystemExit(f'{name}: expected {count}, replaced {n}')
+              s = s2
 
-          replace_exact(
-          '''@Composable
-          private fun PlayerBackdrop(track: Track, background: Color) {
-              val cover = rememberCoverBitmap(track)
-              Box(Modifier.fillMaxSize().background(background)) {
-                  if (cover != null) {
-                      Image(
-                          bitmap = cover,
-                          contentDescription = null,
-                          contentScale = ContentScale.Crop,
-                          modifier = Modifier
-                              .fillMaxSize()
-                              .graphicsLayer {
-                                  scaleX = 1.35f
-                                  scaleY = 1.35f
-                              }
-                              .blur(52.dp)
-                              .alpha(.72f),
-                      )
-                  } else {
-                      Box(
-                          Modifier.fillMaxSize().background(
-                              Brush.verticalGradient(
-                                  listOf(
-                                      background.mix(Color.White, .08f),
-                                      background,
-                                      background.mix(Color.Black, .18f),
-                                  )
-                              )
-                          )
-                      )
-                  }
-                  Box(
-                      Modifier.fillMaxSize().background(
-                          Brush.verticalGradient(
-                              listOf(
-                                  Color.Black.copy(alpha = .14f),
-                                  Color.Black.copy(alpha = .20f),
-                                  Color.Black.copy(alpha = .34f),
-                                  Color.Black.copy(alpha = .46f),
-                              )
-                          )
-                      )
-                  )
-              }
-          }
-          ''',
-          '''@Composable
-          private fun PlayerBackdrop(track: Track, background: Color) {
-              Box(Modifier.fillMaxSize().background(background))
-          }
-          ''',
-          'pure player background')
+          sub(
+              r'@Composable\nprivate fun PlayerBackdrop\(track: Track, background: Color\) \{.*?\n\}\n\n(?=@Composable\nprivate fun LightBackdrop)',
+              '''@Composable
+private fun PlayerBackdrop(track: Track, background: Color) {
+    Box(Modifier.fillMaxSize().background(background))
+}
 
-          replace_exact(
-          '''@Composable
-          private fun LightBackdrop(track: Track) {
-              val cover = rememberCoverBitmap(track)
-              val tint by animateColorAsState(
-                  targetValue = track.theme.mix(Color.White, .88f),
-                  animationSpec = tween(700),
-                  label = "libraryTint",
-              )
-              Box(Modifier.fillMaxSize().background(tint)) {
-                  if (cover != null) {
-                      Image(
-                          bitmap = cover,
-                          contentDescription = null,
-                          contentScale = ContentScale.Crop,
-                          modifier = Modifier
-                              .fillMaxSize()
-                              .graphicsLayer {
-                                  scaleX = 1.45f
-                                  scaleY = 1.45f
-                              }
-                              .blur(68.dp)
-                              .alpha(.14f),
-                      )
-                  }
-                  Box(
-                      Modifier.fillMaxSize().background(
-                          Brush.verticalGradient(
-                              listOf(
-                                  Color.White.copy(alpha = .92f),
-                                  Color.White.copy(alpha = .86f),
-                                  Color.White.copy(alpha = .90f),
-                              )
-                          )
-                      )
-                  )
-              }
-          }
-          ''',
-          '''@Composable
-          private fun LightBackdrop(track: Track) {
-              val tint by animateColorAsState(
-                  targetValue = track.theme.mix(Color.White, .935f),
-                  animationSpec = tween(700),
-                  label = "libraryTint",
-              )
-              Box(Modifier.fillMaxSize().background(tint))
-          }
-          ''',
-          'light library background')
+''',
+              'pure player background')
 
-          replace_exact(
-          '''                Column(
-                      Modifier.align(Alignment.Center),
-                      horizontalAlignment = Alignment.CenterHorizontally,
-                  ) {
-                      Text(
-                          "心动",
-                          color = Color.White.copy(alpha = .94f),
-                          fontSize = 17.sp,
-                          fontWeight = FontWeight.Medium,
-                      )
-                      Spacer(Modifier.height(7.dp))
-                      Box(
-                          Modifier
-                              .width(31.dp)
-                              .height(1.4.dp)
-                              .background(Color.White.copy(alpha = .88f), CircleShape)
-                      )
-                  }
-          ''',
-          '''                Text(
-                      "心动",
-                      color = Color.White.copy(alpha = .92f),
-                      fontSize = 15.5.sp,
-                      fontWeight = FontWeight.Normal,
-                      modifier = Modifier.align(Alignment.Center),
-                  )
-          ''',
-          'remove heart-mode underline')
+          sub(
+              r'@Composable\nprivate fun LightBackdrop\(track: Track\) \{.*?\n\}\n\n(?=@Composable\nfun HomeScreen)',
+              '''@Composable
+private fun LightBackdrop(track: Track) {
+    val tint by animateColorAsState(
+        targetValue = track.theme.mix(Color.White, .935f),
+        animationSpec = tween(700),
+        label = "libraryTint",
+    )
+    Box(Modifier.fillMaxSize().background(tint))
+}
 
-          replace_exact(
+''',
+              'light library background')
+
+          sub(
+              r'''\s{16}Column\(\n\s{20}Modifier\.align\(Alignment\.Center\),\n\s{20}horizontalAlignment = Alignment\.CenterHorizontally,\n\s{16}\) \{\n\s{20}Text\(\n\s{24}"心动",\n\s{24}color = Color\.White\.copy\(alpha = \.94f\),\n\s{24}fontSize = 17\.sp,\n\s{24}fontWeight = FontWeight\.Medium,\n\s{20}\)\n\s{20}Spacer\(Modifier\.height\(7\.dp\)\)\n\s{20}Box\(\n\s{24}Modifier\n\s{28}\.width\(31\.dp\)\n\s{28}\.height\(1\.4\.dp\)\n\s{28}\.background\(Color\.White\.copy\(alpha = \.88f\), CircleShape\)\n\s{20}\)\n\s{16}\}''',
+              '''                Text(
+                    "心动",
+                    color = Color.White.copy(alpha = .92f),
+                    fontSize = 15.5.sp,
+                    fontWeight = FontWeight.Normal,
+                    modifier = Modifier.align(Alignment.Center),
+                )''',
+              'remove heart-mode underline')
+
+          s = s.replace(
               'val discSize = (maxWidth * .745f).coerceAtMost(if (compact) 248.dp else 270.dp)',
               'val discSize = (maxWidth * .755f).coerceAtMost(if (compact) 250.dp else 274.dp)',
-              'disc proportion')
+              1,
+          )
+          s = s.replace('fontSize = 18.sp,\n                        fontWeight = FontWeight.Medium,',
+                        'fontSize = 16.5.sp,\n                        fontWeight = FontWeight.Medium,', 1)
+          s = s.replace('color = Color.White.copy(alpha = .60f),\n                        fontSize = 13.5.sp,',
+                        'color = Color.White.copy(alpha = .56f),\n                        fontSize = 12.2.sp,', 1)
 
-          replace_exact(
-          '''                    Text(
-                          track.title,
-                          color = Color.White.copy(alpha = .93f),
-                          fontSize = 18.sp,
-                          fontWeight = FontWeight.Medium,
-          ''',
-          '''                    Text(
-                          track.title,
-                          color = Color.White.copy(alpha = .92f),
-                          fontSize = 16.5.sp,
-                          fontWeight = FontWeight.Medium,
-          ''',
-          'home title typography')
+          sub(
+              r'''Icon\(\n\s*Icons\.Rounded\.SkipPrevious,\n\s*contentDescription = null,\n\s*tint = Color\.White\.copy\(alpha = \.88f\),\n\s*modifier = Modifier\.size\(31\.dp\),\n\s*\)''',
+              'TrackSkipGlyph(previous = true, modifier = Modifier.size(30.dp))',
+              'custom previous glyph')
 
-          replace_exact(
-          '''                    Text(
-                          track.artist,
-                          color = Color.White.copy(alpha = .60f),
-                          fontSize = 13.5.sp,
-                          fontWeight = FontWeight.Normal,
-          ''',
-          '''                    Text(
-                          track.artist,
-                          color = Color.White.copy(alpha = .56f),
-                          fontSize = 12.2.sp,
-                          fontWeight = FontWeight.Normal,
-          ''',
-          'home artist typography')
+          sub(
+              r'''Icon\(\n\s*if \(isPlaying\) Icons\.Rounded\.Pause else Icons\.Rounded\.PlayArrow,\n\s*contentDescription = null,\n\s*tint = Color\.White\.copy\(alpha = \.92f\),\n\s*modifier = Modifier\.size\(if \(isPlaying\) 48\.dp else 51\.dp\),\n\s*\)''',
+              'CenterPlaybackGlyph(isPlaying = isPlaying, modifier = Modifier.size(54.dp))',
+              'custom center playback glyph')
 
-          replace_exact('modifier = Modifier.size(27.dp),\n                    )\n                }\n                Spacer(Modifier.width(2.dp))',
-                        'modifier = Modifier.size(25.dp),\n                    )\n                }\n                Spacer(Modifier.width(4.dp))',
-                        'favorite icon scale')
-
-          replace_exact(
-          '''                    Icon(
-                          Icons.Rounded.SkipPrevious,
-                          contentDescription = null,
-                          tint = Color.White.copy(alpha = .88f),
-                          modifier = Modifier.size(31.dp),
-                      )
-          ''',
-          '''                    TrackSkipGlyph(previous = true, modifier = Modifier.size(30.dp))
-          ''',
-          'custom previous glyph')
-
-          replace_exact(
-          '''                    Icon(
-                          if (isPlaying) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
-                          contentDescription = null,
-                          tint = Color.White.copy(alpha = .92f),
-                          modifier = Modifier.size(if (isPlaying) 48.dp else 51.dp),
-                      )
-          ''',
-          '''                    CenterPlaybackGlyph(isPlaying = isPlaying, modifier = Modifier.size(54.dp))
-          ''',
-          'custom center playback glyph')
-
-          replace_exact(
-          '''                    Icon(
-                          Icons.Rounded.SkipNext,
-                          contentDescription = null,
-                          tint = Color.White.copy(alpha = .88f),
-                          modifier = Modifier.size(31.dp),
-                      )
-          ''',
-          '''                    TrackSkipGlyph(previous = false, modifier = Modifier.size(30.dp))
-          ''',
-          'custom next glyph')
+          sub(
+              r'''Icon\(\n\s*Icons\.Rounded\.SkipNext,\n\s*contentDescription = null,\n\s*tint = Color\.White\.copy\(alpha = \.88f\),\n\s*modifier = Modifier\.size\(31\.dp\),\n\s*\)''',
+              'TrackSkipGlyph(previous = false, modifier = Modifier.size(30.dp))',
+              'custom next glyph')
 
           marker = '@Composable\nprivate fun VinylDisc(track: Track, rotation: Float, modifier: Modifier = Modifier) {'
           if marker not in s:
               raise SystemExit('glyph insertion marker missing')
           helpers = '''@Composable
-          private fun TrackSkipGlyph(previous: Boolean, modifier: Modifier = Modifier) {
-              Canvas(modifier) {
-                  val c = Color.White.copy(alpha = .86f)
-                  val barX = if (previous) size.width * .25f else size.width * .75f
-                  drawLine(
-                      color = c,
-                      start = Offset(barX, size.height * .27f),
-                      end = Offset(barX, size.height * .73f),
-                      strokeWidth = 3.1.dp.toPx(),
-                      cap = StrokeCap.Round,
-                  )
-                  val p = androidx.compose.ui.graphics.Path()
-                  if (previous) {
-                      p.moveTo(size.width * .70f, size.height * .25f)
-                      p.lineTo(size.width * .34f, size.height * .50f)
-                      p.lineTo(size.width * .70f, size.height * .75f)
-                  } else {
-                      p.moveTo(size.width * .30f, size.height * .25f)
-                      p.lineTo(size.width * .66f, size.height * .50f)
-                      p.lineTo(size.width * .30f, size.height * .75f)
-                  }
-                  p.close()
-                  drawPath(p, c)
-              }
-          }
+private fun TrackSkipGlyph(previous: Boolean, modifier: Modifier = Modifier) {
+    Canvas(modifier) {
+        val c = Color.White.copy(alpha = .86f)
+        val barX = if (previous) size.width * .25f else size.width * .75f
+        drawLine(
+            color = c,
+            start = Offset(barX, size.height * .27f),
+            end = Offset(barX, size.height * .73f),
+            strokeWidth = 3.1.dp.toPx(),
+            cap = StrokeCap.Round,
+        )
+        val p = androidx.compose.ui.graphics.Path()
+        if (previous) {
+            p.moveTo(size.width * .70f, size.height * .25f)
+            p.lineTo(size.width * .34f, size.height * .50f)
+            p.lineTo(size.width * .70f, size.height * .75f)
+        } else {
+            p.moveTo(size.width * .30f, size.height * .25f)
+            p.lineTo(size.width * .66f, size.height * .50f)
+            p.lineTo(size.width * .30f, size.height * .75f)
+        }
+        p.close()
+        drawPath(p, c)
+    }
+}
 
-          @Composable
-          private fun CenterPlaybackGlyph(isPlaying: Boolean, modifier: Modifier = Modifier) {
-              Canvas(modifier) {
-                  val c = Color.White.copy(alpha = .90f)
-                  if (isPlaying) {
-                      val stroke = 5.2.dp.toPx()
-                      drawLine(
-                          color = c,
-                          start = Offset(size.width * .39f, size.height * .28f),
-                          end = Offset(size.width * .39f, size.height * .72f),
-                          strokeWidth = stroke,
-                          cap = StrokeCap.Round,
-                      )
-                      drawLine(
-                          color = c,
-                          start = Offset(size.width * .61f, size.height * .28f),
-                          end = Offset(size.width * .61f, size.height * .72f),
-                          strokeWidth = stroke,
-                          cap = StrokeCap.Round,
-                      )
-                  } else {
-                      val p = androidx.compose.ui.graphics.Path()
-                      p.moveTo(size.width * .35f, size.height * .23f)
-                      p.lineTo(size.width * .73f, size.height * .50f)
-                      p.lineTo(size.width * .35f, size.height * .77f)
-                      p.close()
-                      drawPath(p, c)
-                  }
-              }
-          }
+@Composable
+private fun CenterPlaybackGlyph(isPlaying: Boolean, modifier: Modifier = Modifier) {
+    Canvas(modifier) {
+        val c = Color.White.copy(alpha = .90f)
+        if (isPlaying) {
+            val stroke = 5.2.dp.toPx()
+            drawLine(
+                color = c,
+                start = Offset(size.width * .39f, size.height * .28f),
+                end = Offset(size.width * .39f, size.height * .72f),
+                strokeWidth = stroke,
+                cap = StrokeCap.Round,
+            )
+            drawLine(
+                color = c,
+                start = Offset(size.width * .61f, size.height * .28f),
+                end = Offset(size.width * .61f, size.height * .72f),
+                strokeWidth = stroke,
+                cap = StrokeCap.Round,
+            )
+        } else {
+            val p = androidx.compose.ui.graphics.Path()
+            p.moveTo(size.width * .35f, size.height * .23f)
+            p.lineTo(size.width * .73f, size.height * .50f)
+            p.lineTo(size.width * .35f, size.height * .77f)
+            p.close()
+            drawPath(p, c)
+        }
+    }
+}
 
-          '''
+'''
           s = s.replace(marker, helpers + marker, 1)
 
-          replace_exact(
-          '''@Composable
-          private fun HomeBottomNav(onLibrary: () -> Unit, modifier: Modifier = Modifier) {
-              Row(
-                  modifier
-                      .fillMaxWidth()
-                      .height(60.dp)
-                      .background(Color.Black.copy(alpha = .045f))
-                      .padding(horizontal = 66.dp),
-                  verticalAlignment = Alignment.CenterVertically,
-                  horizontalArrangement = Arrangement.SpaceBetween,
-              ) {
-                  Text(
-                      "首页",
-                      color = Color.White.copy(alpha = .93f),
-                      fontSize = 15.sp,
-                      fontWeight = FontWeight.SemiBold,
-                  )
-                  Text(
-                      "音乐库",
-                      color = Color.White.copy(alpha = .50f),
-                      fontSize = 15.sp,
-                      fontWeight = FontWeight.Medium,
-                      modifier = Modifier.clickable(onClick = onLibrary).padding(10.dp),
-                  )
-              }
-          }
-          ''',
-          '''@Composable
-          private fun HomeBottomNav(onLibrary: () -> Unit, modifier: Modifier = Modifier) {
-              Row(
-                  modifier
-                      .fillMaxWidth()
-                      .height(60.dp)
-                      .padding(horizontal = 66.dp),
-                  verticalAlignment = Alignment.CenterVertically,
-                  horizontalArrangement = Arrangement.SpaceBetween,
-              ) {
-                  Text(
-                      "首页",
-                      color = Color.White.copy(alpha = .92f),
-                      fontSize = 14.sp,
-                      fontWeight = FontWeight.Medium,
-                  )
-                  Text(
-                      "音乐库",
-                      color = Color.White.copy(alpha = .52f),
-                      fontSize = 14.sp,
-                      fontWeight = FontWeight.Normal,
-                      modifier = Modifier.clickable(onClick = onLibrary).padding(10.dp),
-                  )
-              }
-          }
-          ''',
-          'home nav blend')
+          sub(
+              r'@Composable\nprivate fun HomeBottomNav\(onLibrary: \(\) -> Unit, modifier: Modifier = Modifier\) \{.*?\n\}\n\n(?=@Composable\nprivate fun LibraryBottomNav)',
+              '''@Composable
+private fun HomeBottomNav(onLibrary: () -> Unit, modifier: Modifier = Modifier) {
+    Row(
+        modifier
+            .fillMaxWidth()
+            .height(60.dp)
+            .padding(horizontal = 66.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween,
+    ) {
+        Text(
+            "首页",
+            color = Color.White.copy(alpha = .92f),
+            fontSize = 14.sp,
+            fontWeight = FontWeight.Medium,
+        )
+        Text(
+            "音乐库",
+            color = Color.White.copy(alpha = .52f),
+            fontSize = 14.sp,
+            fontWeight = FontWeight.Normal,
+            modifier = Modifier.clickable(onClick = onLibrary).padding(10.dp),
+        )
+    }
+}
 
-          replace_exact(
-          '''@Composable
-          private fun LibraryBottomNav(onHome: () -> Unit, modifier: Modifier = Modifier) {
-              Row(
-                  modifier
-                      .fillMaxWidth()
-                      .height(60.dp)
-                      .background(Color.White.copy(alpha = .48f))
-                      .padding(horizontal = 66.dp),
-                  verticalAlignment = Alignment.CenterVertically,
-                  horizontalArrangement = Arrangement.SpaceBetween,
-              ) {
-                  Text(
-                      "首页",
-                      color = Color(0xFF9A9B96),
-                      fontSize = 15.sp,
-                      fontWeight = FontWeight.Medium,
-                      modifier = Modifier.clickable(onClick = onHome).padding(10.dp),
-                  )
-                  Text(
-                      "音乐库",
-                      color = MainText,
-                      fontSize = 15.sp,
-                      fontWeight = FontWeight.SemiBold,
-                  )
-              }
-          }
-          ''',
-          '''@Composable
-          private fun LibraryBottomNav(onHome: () -> Unit, modifier: Modifier = Modifier) {
-              Row(
-                  modifier
-                      .fillMaxWidth()
-                      .height(60.dp)
-                      .padding(horizontal = 66.dp),
-                  verticalAlignment = Alignment.CenterVertically,
-                  horizontalArrangement = Arrangement.SpaceBetween,
-              ) {
-                  Text(
-                      "首页",
-                      color = MainText.copy(alpha = .44f),
-                      fontSize = 14.sp,
-                      fontWeight = FontWeight.Normal,
-                      modifier = Modifier.clickable(onClick = onHome).padding(10.dp),
-                  )
-                  Text(
-                      "音乐库",
-                      color = MainText.copy(alpha = .90f),
-                      fontSize = 14.sp,
-                      fontWeight = FontWeight.Medium,
-                  )
-              }
-          }
-          ''',
-          'library nav blend')
+''',
+              'home nav blend')
 
-          replace_exact(
-              'val recent = recentIds.mapNotNull { id -> tracks.find { it.id == id } }.distinctBy { it.id }',
-              'val recent = recentIds.mapNotNull { id -> tracks.find { it.id == id } }.distinctBy { it.id }.filterNot { it.id.startsWith("local:") }',
-              'recent local dedupe')
+          sub(
+              r'@Composable\nprivate fun LibraryBottomNav\(onHome: \(\) -> Unit, modifier: Modifier = Modifier\) \{.*?\n\}\n\n(?=@Composable\nfun LibraryScreen)',
+              '''@Composable
+private fun LibraryBottomNav(onHome: () -> Unit, modifier: Modifier = Modifier) {
+    Row(
+        modifier
+            .fillMaxWidth()
+            .height(60.dp)
+            .padding(horizontal = 66.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween,
+    ) {
+        Text(
+            "首页",
+            color = MainText.copy(alpha = .44f),
+            fontSize = 14.sp,
+            fontWeight = FontWeight.Normal,
+            modifier = Modifier.clickable(onClick = onHome).padding(10.dp),
+        )
+        Text(
+            "音乐库",
+            color = MainText.copy(alpha = .90f),
+            fontSize = 14.sp,
+            fontWeight = FontWeight.Medium,
+        )
+    }
+}
 
-          replace_exact(
-          '''                Text(
-                      "音乐库",
-                      color = MainText,
-                      fontSize = 20.5.sp,
-                      fontWeight = FontWeight.SemiBold,
-          ''',
-          '''                Text(
-                      "音乐库",
-                      color = MainText.copy(alpha = .92f),
-                      fontSize = 18.5.sp,
-                      fontWeight = FontWeight.Medium,
-          ''',
-          'library title typography')
+''',
+              'library nav blend')
 
-          replace_exact('contentPadding = PaddingValues(start = 18.dp, end = 18.dp, bottom = 92.dp),',
-                        'contentPadding = PaddingValues(start = 18.dp, end = 18.dp, bottom = 18.dp),',
-                        'library content bottom padding')
+          old_recent = 'val recent = recentIds.mapNotNull { id -> tracks.find { it.id == id } }.distinctBy { it.id }'
+          if old_recent not in s:
+              raise SystemExit('recent expression missing')
+          s = s.replace(old_recent, old_recent + '.filterNot { it.id.startsWith("local:") }', 1)
 
-          replace_exact(
-          '''        MiniPlayer(
-              track = currentTrack,
-              isPlaying = isPlaying,
-              onPlayPause = onPlayPause,
-              onQueue = onQueue,
-              modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = nav + 63.dp),
-          )
-          ''',
-          '',
-          'remove library mini player')
+          s = s.replace('fontSize = 20.5.sp,\n                    fontWeight = FontWeight.SemiBold,',
+                        'fontSize = 18.5.sp,\n                    fontWeight = FontWeight.Medium,', 1)
+          s = s.replace('contentPadding = PaddingValues(start = 18.dp, end = 18.dp, bottom = 92.dp),',
+                        'contentPadding = PaddingValues(start = 18.dp, end = 18.dp, bottom = 18.dp),', 1)
 
-          replace_exact(
-          '''            .clip(RoundedCornerShape(16.dp))
-              .background(Color.White.copy(alpha = .56f))
-              .border(.6.dp, Color.White.copy(alpha = .60f), RoundedCornerShape(16.dp))
-          ''',
-          '''            .clip(RoundedCornerShape(16.dp))
-              .background(Color.White.copy(alpha = .34f))
-          ''',
-          'favorite card lighten')
+          sub(
+              r'''\n\s*MiniPlayer\(\n\s*track = currentTrack,\n\s*isPlaying = isPlaying,\n\s*onPlayPause = onPlayPause,\n\s*onQueue = onQueue,\n\s*modifier = Modifier\.align\(Alignment\.BottomCenter\)\.padding\(bottom = nav \+ 63\.dp\),\n\s*\)''',
+              '',
+              'remove library mini player')
 
-          replace_exact('fontSize = 15.5.sp,\n            fontWeight = FontWeight.Medium,',
-                        'fontSize = 14.2.sp,\n            fontWeight = FontWeight.Medium,',
-                        'favorite card typography')
+          s = s.replace('.background(Color.White.copy(alpha = .56f))\n            .border(.6.dp, Color.White.copy(alpha = .60f), RoundedCornerShape(16.dp))',
+                        '.background(Color.White.copy(alpha = .34f))', 1)
+          s = s.replace('fontSize = 15.5.sp,\n            fontWeight = FontWeight.Medium,',
+                        'fontSize = 14.2.sp,\n            fontWeight = FontWeight.Medium,', 1)
 
-          replace_exact(
-          '''            fontSize = 16.sp,
-              fontWeight = FontWeight.SemiBold,
-          ''',
-          '''            fontSize = 14.8.sp,
-              fontWeight = FontWeight.Medium,
-          ''',
-          'section title typography')
+          sub(
+              r'(@Composable\nprivate fun SectionTitle\(title: String, count: Int\) \{.*?fontSize = )16\.sp,(\n\s*fontWeight = FontWeight\.)SemiBold,',
+              r'\g<1>14.8.sp,\g<2>Medium,',
+              'section title typography')
 
-          replace_exact(
-          '''                fontSize = 14.sp,
-                  fontWeight = FontWeight.Medium,
-          ''',
-          '''                fontSize = 13.4.sp,
-                  fontWeight = FontWeight.Normal,
-          ''',
-          'track row title typography')
+          sub(
+              r'(@Composable\nprivate fun TrackRow\(.*?track\.title,.*?fontSize = )14\.sp,(\n\s*fontWeight = FontWeight\.)Medium,',
+              r'\g<1>13.4.sp,\g<2>Normal,',
+              'track row title typography')
+          sub(
+              r'(@Composable\nprivate fun TrackRow\(.*?track\.artist,.*?fontSize = )11\.8\.sp,',
+              r'\g<1>11.3.sp,',
+              'track row artist typography')
 
-          replace_exact('fontSize = 11.8.sp,\n                maxLines = 1,',
-                        'fontSize = 11.3.sp,\n                maxLines = 1,',
-                        'track row artist typography')
-
-          replace_exact('.padding(bottom = nav + 74.dp)', '.padding(bottom = nav + 12.dp)', 'favorites bottom padding')
-
-          replace_exact(
-          '''        MiniPlayer(
-              currentTrack,
-              isPlaying,
-              onPlayPause,
-              onQueue,
-              Modifier.align(Alignment.BottomCenter).padding(bottom = nav + 10.dp),
-          )
-          ''',
-          '',
-          'remove favorites mini player')
-
-          # The retained player state must drive the tone-arm directly. Keep the original, reference-like 0° landing angle.
-          main = Path('app/src/main/java/com/immersive/music/MainActivity.kt')
-          m = main.read_text()
-          old = 'needleOnDisc = needleOnDisc,'
-          if old in m:
-              m = m.replace(old, 'needleOnDisc = playIntent,', 1)
-          main.write_text(m)
+          s = s.replace('.padding(bottom = nav + 74.dp)', '.padding(bottom = nav + 12.dp)', 1)
+          sub(
+              r'''\n\s*MiniPlayer\(\n\s*currentTrack,\n\s*isPlaying,\n\s*onPlayPause,\n\s*onQueue,\n\s*Modifier\.align\(Alignment\.BottomCenter\)\.padding\(bottom = nav \+ 10\.dp\),\n\s*\)''',
+              '',
+              'remove favorites mini player')
 
           ui.write_text(s)
+
+          main = Path('app/src/main/java/com/immersive/music/MainActivity.kt')
+          m = main.read_text()
+          if 'needleOnDisc = needleOnDisc,' in m:
+              m = m.replace('needleOnDisc = needleOnDisc,', 'needleOnDisc = playIntent,', 1)
+          main.write_text(m)
           PY
 
       - name: Set up Java 17
