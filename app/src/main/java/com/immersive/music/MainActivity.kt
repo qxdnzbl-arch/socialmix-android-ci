@@ -193,36 +193,38 @@ fun MusicApp() {
                 needleOnDisc = false
                 positionMs = durationMs
             }
-            player.setOnErrorListener { _, _, _ ->
-                playIntent = false
-                needleOnDisc = false
+            player.setOnErrorListener { failedPlayer, _, _ ->
+                if (mediaPlayer === failedPlayer) mediaPlayer = null
+                runCatching { failedPlayer.reset() }
+                runCatching { failedPlayer.release() }
+                needleOnDisc = playIntent
                 true
             }
             player.prepareAsync()
         }.onFailure {
-            playIntent = false
-            needleOnDisc = false
-            player.release()
+            runCatching { player.release() }
             if (mediaPlayer === player) mediaPlayer = null
+            needleOnDisc = playIntent
         }
     }
 
     fun togglePlayback() {
         val player = mediaPlayer
-        if (player == null) {
-            playTrack(currentIndex, true)
+        if (playIntent) {
+            playIntent = false
+            needleOnDisc = false
+            player?.runCatching { pause() }
             return
         }
-        if (playIntent) {
-            needleOnDisc = false
-            runCatching { player.pause() }
-            playIntent = false
+
+        playIntent = true
+        needleOnDisc = true
+        if (player == null) {
+            playTrack(currentIndex, true, recordRecent = false)
         } else {
-            playIntent = true
-            needleOnDisc = true
             runCatching { player.start() }
-            // If the player is still preparing, onPrepared will honor playIntent
-            // and start playback without flickering the UI back to paused.
+            // If the player is still preparing, onPrepared honors playIntent.
+            // A transient backend error never flips the user's play/pause control state.
         }
     }
 
@@ -283,11 +285,23 @@ fun MusicApp() {
         playTrack(0, false)
     }
 
-    LaunchedEffect(playIntent, mediaPlayer) {
+    LaunchedEffect(playIntent, mediaPlayer, currentIndex) {
         while (isActive) {
             if (playIntent) {
-                mediaPlayer?.let { player ->
-                    runCatching { positionMs = player.currentPosition.toLong() }
+                val player = mediaPlayer
+                val readPosition = player?.let {
+                    runCatching {
+                        positionMs = it.currentPosition.toLong()
+                        true
+                    }.getOrDefault(false)
+                } ?: false
+
+                if (!readPosition) {
+                    positionMs = (positionMs + 160L).coerceAtMost(durationMs)
+                    if (positionMs >= durationMs) {
+                        playIntent = false
+                        needleOnDisc = false
+                    }
                 }
             }
             delay(160)
