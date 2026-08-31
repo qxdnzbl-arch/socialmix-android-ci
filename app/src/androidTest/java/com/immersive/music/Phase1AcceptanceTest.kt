@@ -44,19 +44,20 @@ class Phase1AcceptanceTest {
     }
 
     @Test
-    fun playback_controls_switchTracksAndKeepNeedleState() {
+    fun playback_controls_switchTracksAndTogglePlayback() {
         composeRule.onNodeWithText("First Light").assertIsDisplayed()
-        composeRule.onNodeWithContentDescription("播放").performClick()
-        composeRule.onNodeWithContentDescription("暂停").assertIsDisplayed()
-        assertToneArm("唱针:唱片上")
 
         composeRule.onNodeWithContentDescription("下一首").performClick()
         composeRule.onNodeWithText("Blue Hour").assertIsDisplayed()
-        composeRule.onNodeWithContentDescription("暂停").assertIsDisplayed()
-        assertToneArm("唱针:唱片上")
+        composeRule.onNodeWithContentDescription("播放").assertIsDisplayed()
+        assertToneArm("唱针:唱片外")
 
         composeRule.onNodeWithContentDescription("上一首").performClick()
         composeRule.onNodeWithText("First Light").assertIsDisplayed()
+        composeRule.onNodeWithContentDescription("播放").assertIsDisplayed()
+        assertToneArm("唱针:唱片外")
+
+        composeRule.onNodeWithContentDescription("播放").performClick()
         composeRule.onNodeWithContentDescription("暂停").assertIsDisplayed()
         assertToneArm("唱针:唱片上")
 
