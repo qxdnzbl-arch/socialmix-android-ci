@@ -57,7 +57,7 @@ private fun PlaybackModeGlyph(mode: PlaybackMode, modifier: Modifier = Modifier)
             drawPath(
                 path = loop,
                 color = c,
-                style = Stroke(width = stroke, cap = StrokeCap.Round, join = StrokeJoin.Round),
+                style = Stroke(width = stroke, cap = StrokeCap.Round),
             )
 
             // One integrated NetEase-style right-facing arrowhead.
