@@ -11,7 +11,6 @@ import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
-import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTouchInput
 import androidx.test.platform.app.InstrumentationRegistry
 import org.junit.Rule
@@ -89,7 +88,7 @@ class Phase1AcceptanceTest {
     }
 
     @Test
-    fun playbackMode_andLibraryLabels_followRequestedModel() {
+    fun playbackMode_andLibrary_haveNoRedundantLabels() {
         composeRule.onNodeWithContentDescription("顺序播放").performClick()
         waitForControl("单曲循环")
         composeRule.onNodeWithContentDescription("单曲循环").performClick()
@@ -98,22 +97,23 @@ class Phase1AcceptanceTest {
         composeRule.onNodeWithText("音乐库").performClick()
         composeRule.onAllNodesWithText("最近播放").assertCountEquals(0)
         composeRule.onAllNodesWithText("本地音乐").assertCountEquals(0)
-        composeRule.onNodeWithText("我喜欢的音乐").assertIsDisplayed()
+        composeRule.onAllNodesWithText("我喜欢的音乐").assertCountEquals(0)
     }
 
     @Test
-    fun queue_longPress_deleteOnlyRemovesFromQueue() {
+    fun queue_longPress_revealsInlineDelete_withoutExtraSheet() {
         composeRule.onNodeWithContentDescription("播放列表").performClick()
         composeRule.onNodeWithText("播放列表").assertIsDisplayed()
+
         composeRule.onNodeWithContentDescription("长按删除:First Light")
             .performTouchInput { longClick() }
-        composeRule.onNodeWithText("歌曲选项").assertIsDisplayed()
-        composeRule.onNodeWithText("删除").assertIsDisplayed().performClick()
-        composeRule.onAllNodesWithText("从最近播放移除").assertCountEquals(0)
 
-        composeRule.onNodeWithContentDescription("搜索").performClick()
-        composeRule.onNodeWithContentDescription("搜索输入框").performTextInput("First Light")
-        composeRule.onAllNodesWithText("First Light").assertCountEquals(2)
+        composeRule.onAllNodesWithText("歌曲选项").assertCountEquals(0)
+        composeRule.onNodeWithContentDescription("删除队列:First Light")
+            .assertIsDisplayed()
+            .performClick()
+
+        composeRule.onAllNodesWithContentDescription("长按删除:First Light").assertCountEquals(0)
     }
 
     @Test
@@ -131,7 +131,7 @@ class Phase1AcceptanceTest {
     }
 
     @Test
-    fun search_isOnlyAUtility() {
+    fun search_isCompactUtilityOnly() {
         composeRule.onNodeWithContentDescription("搜索").performClick()
         composeRule.onNodeWithContentDescription("搜索输入框").assertIsDisplayed()
         composeRule.onNodeWithText("只搜索你的歌曲").assertIsDisplayed()
