@@ -7,22 +7,23 @@ import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteOpenHelper
 
 /**
- * Small durable cache for chat UI state.
+ * Durable per-account cache for chat UI state.
  *
- * Auth tokens stay in SharedPreferences; user-visible chat data lives here so process death,
+ * Auth tokens stay in SharedPreferences. User-visible chat data lives here so process death,
  * slow network, or a temporary Supabase outage does not turn the UI into a blank loading page.
  */
 class LocalChatStore(context: Context) : SQLiteOpenHelper(
     context.applicationContext,
     "socialmix_chat_cache.db",
     null,
-    1
+    2
 ) {
     override fun onCreate(db: SQLiteDatabase) {
         db.execSQL(
             """
             create table profile_cache(
-              id text primary key,
+              owner_id text primary key,
+              profile_id text not null,
               username text not null,
               display_name text not null,
               updated_at integer not null
@@ -32,17 +33,20 @@ class LocalChatStore(context: Context) : SQLiteOpenHelper(
         db.execSQL(
             """
             create table friend_cache(
-              id text primary key,
+              owner_id text not null,
+              id text not null,
               username text not null,
               display_name text not null,
-              updated_at integer not null
+              updated_at integer not null,
+              primary key(owner_id, id)
             )
             """.trimIndent()
         )
         db.execSQL(
             """
             create table conversation_cache(
-              conversation_id text primary key,
+              owner_id text not null,
+              conversation_id text not null,
               friend_id text not null,
               friend_username text not null,
               friend_display_name text not null,
@@ -50,14 +54,16 @@ class LocalChatStore(context: Context) : SQLiteOpenHelper(
               last_message_type text not null default '',
               last_message_at text not null default '',
               unread_count integer not null default 0,
-              updated_at integer not null
+              updated_at integer not null,
+              primary key(owner_id, conversation_id)
             )
             """.trimIndent()
         )
         db.execSQL(
             """
             create table message_cache(
-              local_id text primary key,
+              owner_id text not null,
+              local_id text not null,
               server_id text,
               conversation_id text not null,
               sender_id text not null,
@@ -67,34 +73,45 @@ class LocalChatStore(context: Context) : SQLiteOpenHelper(
               delivery_state text not null,
               error_message text not null default '',
               updated_at integer not null,
-              unique(conversation_id, sender_id, client_message_id)
+              primary key(owner_id, local_id),
+              unique(owner_id, conversation_id, sender_id, client_message_id)
             )
             """.trimIndent()
         )
-        db.execSQL("create unique index message_server_id_idx on message_cache(server_id) where server_id is not null")
-        db.execSQL("create index message_conversation_created_idx on message_cache(conversation_id, created_at, local_id)")
+        db.execSQL("create unique index message_server_id_idx on message_cache(owner_id, server_id) where server_id is not null")
+        db.execSQL("create index message_conversation_created_idx on message_cache(owner_id, conversation_id, created_at, local_id)")
     }
 
-    override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) = Unit
+    override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
+        db.execSQL("drop table if exists message_cache")
+        db.execSQL("drop table if exists conversation_cache")
+        db.execSQL("drop table if exists friend_cache")
+        db.execSQL("drop table if exists profile_cache")
+        onCreate(db)
+    }
 
     @Synchronized
-    fun clearAll() {
-        writableDatabase.beginTransaction()
+    fun clearOwner(ownerId: String) {
+        if (ownerId.isBlank()) return
+        val db = writableDatabase
+        db.beginTransaction()
         try {
-            writableDatabase.delete("message_cache", null, null)
-            writableDatabase.delete("conversation_cache", null, null)
-            writableDatabase.delete("friend_cache", null, null)
-            writableDatabase.delete("profile_cache", null, null)
-            writableDatabase.setTransactionSuccessful()
+            db.delete("message_cache", "owner_id=?", arrayOf(ownerId))
+            db.delete("conversation_cache", "owner_id=?", arrayOf(ownerId))
+            db.delete("friend_cache", "owner_id=?", arrayOf(ownerId))
+            db.delete("profile_cache", "owner_id=?", arrayOf(ownerId))
+            db.setTransactionSuccessful()
         } finally {
-            writableDatabase.endTransaction()
+            db.endTransaction()
         }
     }
 
     @Synchronized
-    fun saveProfile(profile: LiveProfile) {
+    fun saveProfile(ownerId: String, profile: LiveProfile) {
+        if (ownerId.isBlank()) return
         val v = ContentValues().apply {
-            put("id", profile.id)
+            put("owner_id", ownerId)
+            put("profile_id", profile.id)
             put("username", profile.username)
             put("display_name", profile.displayName)
             put("updated_at", System.currentTimeMillis())
@@ -103,22 +120,27 @@ class LocalChatStore(context: Context) : SQLiteOpenHelper(
     }
 
     @Synchronized
-    fun profile(): LiveProfile? = readableDatabase.rawQuery(
-        "select id, username, display_name from profile_cache order by updated_at desc limit 1",
-        null
-    ).use { c ->
-        if (!c.moveToFirst()) null else LiveProfile(c.string("id"), c.string("username"), c.string("display_name"))
+    fun profile(ownerId: String): LiveProfile? {
+        if (ownerId.isBlank()) return null
+        return readableDatabase.rawQuery(
+            "select profile_id, username, display_name from profile_cache where owner_id=? limit 1",
+            arrayOf(ownerId)
+        ).use { c ->
+            if (!c.moveToFirst()) null else LiveProfile(c.string("profile_id"), c.string("username"), c.string("display_name"))
+        }
     }
 
     @Synchronized
-    fun replaceFriends(items: List<LiveProfile>) {
+    fun replaceFriends(ownerId: String, items: List<LiveProfile>) {
+        if (ownerId.isBlank()) return
         val db = writableDatabase
         db.beginTransaction()
         try {
-            db.delete("friend_cache", null, null)
+            db.delete("friend_cache", "owner_id=?", arrayOf(ownerId))
             val now = System.currentTimeMillis()
             items.forEach { friend ->
                 val v = ContentValues().apply {
+                    put("owner_id", ownerId)
                     put("id", friend.id)
                     put("username", friend.username)
                     put("display_name", friend.displayName)
@@ -133,22 +155,26 @@ class LocalChatStore(context: Context) : SQLiteOpenHelper(
     }
 
     @Synchronized
-    fun friends(): List<LiveProfile> = readableDatabase.rawQuery(
-        "select id, username, display_name from friend_cache order by display_name collate nocase, username collate nocase",
-        null
-    ).use { c ->
-        buildList {
-            while (c.moveToNext()) add(LiveProfile(c.string("id"), c.string("username"), c.string("display_name")))
+    fun friends(ownerId: String): List<LiveProfile> {
+        if (ownerId.isBlank()) return emptyList()
+        return readableDatabase.rawQuery(
+            "select id, username, display_name from friend_cache where owner_id=? order by display_name collate nocase, username collate nocase",
+            arrayOf(ownerId)
+        ).use { c ->
+            buildList {
+                while (c.moveToNext()) add(LiveProfile(c.string("id"), c.string("username"), c.string("display_name")))
+            }
         }
     }
 
     @Synchronized
-    fun replaceConversations(items: List<ConversationSummary>) {
+    fun replaceConversations(ownerId: String, items: List<ConversationSummary>) {
+        if (ownerId.isBlank()) return
         val db = writableDatabase
         db.beginTransaction()
         try {
-            db.delete("conversation_cache", null, null)
-            items.forEach { saveConversation(db, it) }
+            db.delete("conversation_cache", "owner_id=?", arrayOf(ownerId))
+            items.forEach { saveConversation(db, ownerId, it) }
             db.setTransactionSuccessful()
         } finally {
             db.endTransaction()
@@ -156,10 +182,14 @@ class LocalChatStore(context: Context) : SQLiteOpenHelper(
     }
 
     @Synchronized
-    fun saveConversation(item: ConversationSummary) = saveConversation(writableDatabase, item)
+    fun saveConversation(ownerId: String, item: ConversationSummary) {
+        if (ownerId.isBlank()) return
+        saveConversation(writableDatabase, ownerId, item)
+    }
 
-    private fun saveConversation(db: SQLiteDatabase, item: ConversationSummary) {
+    private fun saveConversation(db: SQLiteDatabase, ownerId: String, item: ConversationSummary) {
         val v = ContentValues().apply {
+            put("owner_id", ownerId)
             put("conversation_id", item.conversationId)
             put("friend_id", item.friend.id)
             put("friend_username", item.friend.username)
@@ -174,53 +204,60 @@ class LocalChatStore(context: Context) : SQLiteOpenHelper(
     }
 
     @Synchronized
-    fun conversations(): List<ConversationSummary> = readableDatabase.rawQuery(
-        """
-        select conversation_id, friend_id, friend_username, friend_display_name,
-               last_message, last_message_type, last_message_at, unread_count
-        from conversation_cache
-        order by case when last_message_at='' then 1 else 0 end, last_message_at desc, updated_at desc
-        """.trimIndent(),
-        null
-    ).use { c ->
-        buildList {
-            while (c.moveToNext()) {
-                add(
-                    ConversationSummary(
-                        conversationId = c.string("conversation_id"),
-                        friend = LiveProfile(c.string("friend_id"), c.string("friend_username"), c.string("friend_display_name")),
-                        lastMessage = c.string("last_message"),
-                        lastMessageType = c.string("last_message_type"),
-                        lastMessageAt = c.string("last_message_at"),
-                        unreadCount = c.long("unread_count")
+    fun conversations(ownerId: String): List<ConversationSummary> {
+        if (ownerId.isBlank()) return emptyList()
+        return readableDatabase.rawQuery(
+            """
+            select conversation_id, friend_id, friend_username, friend_display_name,
+                   last_message, last_message_type, last_message_at, unread_count
+            from conversation_cache
+            where owner_id=?
+            order by case when last_message_at='' then 1 else 0 end, last_message_at desc, updated_at desc
+            """.trimIndent(),
+            arrayOf(ownerId)
+        ).use { c ->
+            buildList {
+                while (c.moveToNext()) {
+                    add(
+                        ConversationSummary(
+                            conversationId = c.string("conversation_id"),
+                            friend = LiveProfile(c.string("friend_id"), c.string("friend_username"), c.string("friend_display_name")),
+                            lastMessage = c.string("last_message"),
+                            lastMessageType = c.string("last_message_type"),
+                            lastMessageAt = c.string("last_message_at"),
+                            unreadCount = c.long("unread_count")
+                        )
                     )
-                )
+                }
             }
         }
     }
 
     @Synchronized
-    fun conversationIdForFriend(friendId: String): String? = readableDatabase.rawQuery(
-        "select conversation_id from conversation_cache where friend_id=? limit 1",
-        arrayOf(friendId)
-    ).use { c -> if (c.moveToFirst()) c.string("conversation_id") else null }
+    fun conversationIdForFriend(ownerId: String, friendId: String): String? {
+        if (ownerId.isBlank() || friendId.isBlank()) return null
+        return readableDatabase.rawQuery(
+            "select conversation_id from conversation_cache where owner_id=? and friend_id=? limit 1",
+            arrayOf(ownerId, friendId)
+        ).use { c -> if (c.moveToFirst()) c.string("conversation_id") else null }
+    }
 
     @Synchronized
-    fun messages(conversationId: String, limit: Int = 250): List<LiveMessage> {
-        if (conversationId.isBlank()) return emptyList()
+    fun messages(ownerId: String, conversationId: String, limit: Int = 250): List<LiveMessage> {
+        if (ownerId.isBlank() || conversationId.isBlank()) return emptyList()
         return readableDatabase.rawQuery(
             """
             select local_id, server_id, sender_id, client_message_id, content, created_at,
                    delivery_state, error_message
             from (
               select * from message_cache
-              where conversation_id=?
+              where owner_id=? and conversation_id=?
               order by created_at desc, local_id desc
               limit ?
             ) recent
             order by created_at asc, local_id asc
             """.trimIndent(),
-            arrayOf(conversationId, limit.toString())
+            arrayOf(ownerId, conversationId, limit.toString())
         ).use { c ->
             buildList {
                 while (c.moveToNext()) {
@@ -242,9 +279,11 @@ class LocalChatStore(context: Context) : SQLiteOpenHelper(
     }
 
     @Synchronized
-    fun saveOptimistic(conversationId: String, message: LiveMessage) {
+    fun saveOptimistic(ownerId: String, conversationId: String, message: LiveMessage) {
+        if (ownerId.isBlank()) return
         val clientId = message.clientMessageId.ifBlank { message.id.removePrefix("local:") }
         val v = ContentValues().apply {
+            put("owner_id", ownerId)
             put("local_id", "local:$clientId")
             putNull("server_id")
             put("conversation_id", conversationId)
@@ -260,16 +299,18 @@ class LocalChatStore(context: Context) : SQLiteOpenHelper(
     }
 
     @Synchronized
-    fun upsertServerMessage(conversationId: String, message: LiveMessage) {
+    fun upsertServerMessage(ownerId: String, conversationId: String, message: LiveMessage) {
+        if (ownerId.isBlank()) return
         val db = writableDatabase
         val clientId = message.clientMessageId.ifBlank { message.id }
         val existingLocalId = db.rawQuery(
-            "select local_id from message_cache where conversation_id=? and sender_id=? and client_message_id=? limit 1",
-            arrayOf(conversationId, message.senderId, clientId)
+            "select local_id from message_cache where owner_id=? and conversation_id=? and sender_id=? and client_message_id=? limit 1",
+            arrayOf(ownerId, conversationId, message.senderId, clientId)
         ).use { c -> if (c.moveToFirst()) c.string("local_id") else null }
 
         val localId = existingLocalId ?: message.id
         val v = ContentValues().apply {
+            put("owner_id", ownerId)
             put("local_id", localId)
             put("server_id", message.id)
             put("conversation_id", conversationId)
@@ -285,7 +326,8 @@ class LocalChatStore(context: Context) : SQLiteOpenHelper(
     }
 
     @Synchronized
-    fun markSending(conversationId: String, senderId: String, clientMessageId: String) {
+    fun markSending(ownerId: String, conversationId: String, senderId: String, clientMessageId: String) {
+        if (ownerId.isBlank()) return
         val v = ContentValues().apply {
             put("delivery_state", MessageDelivery.SENDING.name)
             put("error_message", "")
@@ -294,13 +336,14 @@ class LocalChatStore(context: Context) : SQLiteOpenHelper(
         writableDatabase.update(
             "message_cache",
             v,
-            "conversation_id=? and sender_id=? and client_message_id=?",
-            arrayOf(conversationId, senderId, clientMessageId)
+            "owner_id=? and conversation_id=? and sender_id=? and client_message_id=?",
+            arrayOf(ownerId, conversationId, senderId, clientMessageId)
         )
     }
 
     @Synchronized
-    fun markFailed(conversationId: String, senderId: String, clientMessageId: String, error: String) {
+    fun markFailed(ownerId: String, conversationId: String, senderId: String, clientMessageId: String, error: String) {
+        if (ownerId.isBlank()) return
         val v = ContentValues().apply {
             put("delivery_state", MessageDelivery.FAILED.name)
             put("error_message", error.take(160))
@@ -309,19 +352,25 @@ class LocalChatStore(context: Context) : SQLiteOpenHelper(
         writableDatabase.update(
             "message_cache",
             v,
-            "conversation_id=? and sender_id=? and client_message_id=?",
-            arrayOf(conversationId, senderId, clientMessageId)
+            "owner_id=? and conversation_id=? and sender_id=? and client_message_id=?",
+            arrayOf(ownerId, conversationId, senderId, clientMessageId)
         )
     }
 
     @Synchronized
-    fun markInterruptedSendsFailed() {
+    fun markInterruptedSendsFailed(ownerId: String) {
+        if (ownerId.isBlank()) return
         val v = ContentValues().apply {
             put("delivery_state", MessageDelivery.FAILED.name)
             put("error_message", "发送被中断，点此重试")
             put("updated_at", System.currentTimeMillis())
         }
-        writableDatabase.update("message_cache", v, "delivery_state=?", arrayOf(MessageDelivery.SENDING.name))
+        writableDatabase.update(
+            "message_cache",
+            v,
+            "owner_id=? and delivery_state=?",
+            arrayOf(ownerId, MessageDelivery.SENDING.name)
+        )
     }
 
     private fun Cursor.string(column: String): String {
