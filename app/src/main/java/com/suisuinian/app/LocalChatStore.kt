@@ -18,6 +18,13 @@ class LocalChatStore(context: Context) : SQLiteOpenHelper(
     null,
     2
 ) {
+    private val appContext = context.applicationContext
+
+    private fun currentOwner(): String = appContext
+        .getSharedPreferences("socialmix_live_session", Context.MODE_PRIVATE)
+        .getString("user_id", "")
+        .orEmpty()
+
     override fun onCreate(db: SQLiteDatabase) {
         db.execSQL(
             """
@@ -89,6 +96,26 @@ class LocalChatStore(context: Context) : SQLiteOpenHelper(
         db.execSQL("drop table if exists profile_cache")
         onCreate(db)
     }
+
+    // Convenience overloads use the session belonging to this Context. This also keeps
+    // instrumentation tests with isolated Context/SharedPreferences truly isolated.
+    fun clearAll() = clearOwner(currentOwner())
+    fun saveProfile(profile: LiveProfile) = saveProfile(currentOwner(), profile)
+    fun profile(): LiveProfile? = profile(currentOwner())
+    fun replaceFriends(items: List<LiveProfile>) = replaceFriends(currentOwner(), items)
+    fun friends(): List<LiveProfile> = friends(currentOwner())
+    fun replaceConversations(items: List<ConversationSummary>) = replaceConversations(currentOwner(), items)
+    fun saveConversation(item: ConversationSummary) = saveConversation(currentOwner(), item)
+    fun conversations(): List<ConversationSummary> = conversations(currentOwner())
+    fun conversationIdForFriend(friendId: String): String? = conversationIdForFriend(currentOwner(), friendId)
+    fun messages(conversationId: String, limit: Int = 250): List<LiveMessage> = messages(currentOwner(), conversationId, limit)
+    fun saveOptimistic(conversationId: String, message: LiveMessage) = saveOptimistic(currentOwner(), conversationId, message)
+    fun upsertServerMessage(conversationId: String, message: LiveMessage) = upsertServerMessage(currentOwner(), conversationId, message)
+    fun markSending(conversationId: String, senderId: String, clientMessageId: String) =
+        markSending(currentOwner(), conversationId, senderId, clientMessageId)
+    fun markFailed(conversationId: String, senderId: String, clientMessageId: String, error: String) =
+        markFailed(currentOwner(), conversationId, senderId, clientMessageId, error)
+    fun markInterruptedSendsFailed() = markInterruptedSendsFailed(currentOwner())
 
     @Synchronized
     fun clearOwner(ownerId: String) {
