@@ -8,6 +8,7 @@ import androidx.test.platform.app.InstrumentationRegistry
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -23,10 +24,10 @@ class CoreResponsivenessAcceptanceTest {
     }
 
     @Test
-    fun cachedStartupOptimisticSendAndRealtimeReceive() = runBlocking {
+    fun cachedStartupOptimisticSendRealtimeReceiveAndNoDuplicate() = runBlocking {
         val base = InstrumentationRegistry.getInstrumentation().targetContext
-        val ctxA = IsolatedContext(base, "core_quality_a")
-        val ctxB = IsolatedContext(base, "core_quality_b")
+        val ctxA = IsolatedContext(base, "production_core_a")
+        val ctxB = IsolatedContext(base, "production_core_b")
         val a = SupabaseApi(ctxA)
         val b = SupabaseApi(ctxB)
         a.logout(); b.logout()
@@ -36,17 +37,13 @@ class CoreResponsivenessAcceptanceTest {
         assertTrue("A login failed: ${loginA.message}", loginA.success)
         assertTrue("B login failed: ${loginB.message}", loginB.success)
 
-        val pa = a.myProfile()
-        val pb = b.myProfile()
-        assertNotNull(pa)
-        assertNotNull(pb)
-        val profileA = requireNotNull(pa)
-        val profileB = requireNotNull(pb)
+        val profileA = requireNotNull(a.myProfile())
+        val profileB = requireNotNull(b.myProfile())
 
-        val recreatedA = SupabaseApi(IsolatedContext(base, "core_quality_a"))
+        val recreatedA = SupabaseApi(IsolatedContext(base, "production_core_a"))
         val cachedProfile = recreatedA.cachedProfile()
         assertNotNull("profile cache missing after successful sync", cachedProfile)
-        assertTrue(requireNotNull(cachedProfile).id == profileA.id)
+        assertEquals(profileA.id, requireNotNull(cachedProfile).id)
 
         if (a.friends().none { it.id == profileB.id }) {
             assertNull("friend request failed", a.sendFriendRequest(profileB.id))
@@ -57,19 +54,20 @@ class CoreResponsivenessAcceptanceTest {
 
         val summaries = a.directConversations()
         assertTrue("conversation list is empty after friendship", summaries.any { it.friend.id == profileB.id })
-        assertTrue(
-            "conversation cache was not persisted",
-            a.cachedConversations().any { it.friend.id == profileB.id }
-        )
+        assertTrue("conversation cache missing", a.cachedConversations().any { it.friend.id == profileB.id })
 
-        val cid = a.conversationId(profileB.id)
-        assertNotNull("direct conversation missing", cid)
-        val conversationId = requireNotNull(cid)
+        val conversationId = requireNotNull(a.conversationId(profileB.id))
+        val aView = a.chatFeed(conversationId)
+        val bView = b.chatFeed(conversationId)
+        a.syncMessages(conversationId)
+        b.syncMessages(conversationId)
+        a.startRealtime()
+        b.startRealtime()
 
-        val aView = a.messages(conversationId)
-        val bView = b.messages(conversationId)
-        val marker = "core-fast-${System.currentTimeMillis()}"
+        // Let both authenticated realtime sockets become warm before measuring receive latency.
+        delay(1200)
 
+        val marker = "production-fast-${System.currentTimeMillis()}"
         val sendJob = launch { assertNull("A send failed", a.sendText(conversationId, marker)) }
 
         var localAppearedFast = false
@@ -78,9 +76,9 @@ class CoreResponsivenessAcceptanceTest {
                 localAppearedFast = true
                 return@repeat
             }
-            delay(50)
+            delay(30)
         }
-        assertTrue("outgoing message did not appear locally within 500ms", localAppearedFast)
+        assertTrue("outgoing message did not appear locally within 300ms", localAppearedFast)
         sendJob.join()
 
         var realtimeReceived = false
@@ -89,11 +87,17 @@ class CoreResponsivenessAcceptanceTest {
                 realtimeReceived = true
                 return@repeat
             }
-            delay(150)
+            delay(100)
         }
-        assertTrue("B did not receive message through realtime within 3s", realtimeReceived)
+        assertTrue("B did not receive warm realtime message within 2s", realtimeReceived)
 
-        val cachedMessages = SupabaseApi(IsolatedContext(base, "core_quality_a")).cachedMessages(conversationId)
-        assertTrue("message cache did not persist confirmed message", cachedMessages.any { it.content == marker })
+        // Reconcile against the server and verify optimistic + realtime paths did not duplicate the row.
+        a.syncMessages(conversationId)
+        b.syncMessages(conversationId)
+        assertEquals("A has duplicate message bubble", 1, aView.count { it.content == marker })
+        assertEquals("B has duplicate message bubble", 1, bView.count { it.content == marker })
+
+        val cachedMessages = SupabaseApi(IsolatedContext(base, "production_core_a")).cachedMessages(conversationId)
+        assertTrue("message cache did not persist confirmed message", cachedMessages.any { it.content == marker && it.delivery == MessageDelivery.SENT })
     }
 }
