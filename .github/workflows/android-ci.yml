@@ -77,22 +77,19 @@ jobs:
             sleep 2
             adb exec-out screencap -p > deliverable/home-playing.png
 
-            # Queue icon is in the right side of the metadata row.
             adb shell input tap 952 1735
             sleep 2
             adb exec-out screencap -p > deliverable/queue-screen.png
             adb shell input keyevent KEYCODE_BACK || true
             sleep 1
 
-            # Bottom navigation: library.
             adb shell input tap 815 2250
             sleep 2
             adb exec-out screencap -p > deliverable/library-screen.png
 
-            # Back to home, then search icon in the common top bar.
             adb shell input tap 270 2250
             sleep 1
-            adb shell input tap 944 145
+            adb shell input tap 950 220
             sleep 2
             adb exec-out screencap -p > deliverable/search-screen.png
 
