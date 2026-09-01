@@ -23,6 +23,7 @@ jobs:
           python ci/final_tonearm.py
           python ci/final_visual_alignment.py
           python ci/final_visual_polish.py
+          python ci/user_requested_v79.py
 
       - name: Set up Java 17
         uses: actions/setup-java@v5
