@@ -113,7 +113,7 @@ class Phase1AcceptanceTest {
 
         composeRule.onNodeWithContentDescription("搜索").performClick()
         composeRule.onNodeWithContentDescription("搜索输入框").performTextInput("First Light")
-        composeRule.onNodeWithText("First Light").assertIsDisplayed()
+        composeRule.onAllNodesWithText("First Light").assertCountEquals(2)
     }
 
     @Test
