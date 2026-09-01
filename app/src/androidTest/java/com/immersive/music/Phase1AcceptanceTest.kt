@@ -134,6 +134,7 @@ class Phase1AcceptanceTest {
     fun search_isCompactUtilityOnly() {
         composeRule.onNodeWithContentDescription("搜索").performClick()
         composeRule.onNodeWithContentDescription("搜索输入框").assertIsDisplayed()
+        composeRule.onNodeWithText("搜索歌曲或歌手").assertIsDisplayed()
         composeRule.onNodeWithText("只搜索你的歌曲").assertIsDisplayed()
     }
 }
