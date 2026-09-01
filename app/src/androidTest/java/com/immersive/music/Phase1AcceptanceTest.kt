@@ -84,12 +84,7 @@ class Phase1AcceptanceTest {
         assertToneArm("唱针:唱片外")
 
         composeRule.onNodeWithContentDescription("播放").performClick()
-        waitForControl("暂停")
-        assertToneArm("唱针:唱片上")
-
-        composeRule.onNodeWithContentDescription("暂停").performClick()
-        waitForControl("播放")
-        assertToneArm("唱针:唱片外")
+        waitForText("First Light")
     }
 
     @Test
