@@ -5,11 +5,13 @@ import android.os.Build
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performTouchInput
 import androidx.test.platform.app.InstrumentationRegistry
 import org.junit.Rule
 import org.junit.Test
@@ -64,6 +66,7 @@ class Phase1AcceptanceTest {
         waitForControl("播放")
         waitForControl("上一首")
         waitForControl("下一首")
+        waitForControl("顺序播放")
         assertToneArm("唱针:唱片外")
     }
 
@@ -82,24 +85,30 @@ class Phase1AcceptanceTest {
         waitForText("First Light")
         waitForControl("播放")
         assertToneArm("唱针:唱片外")
-
-        composeRule.onNodeWithContentDescription("播放").performClick()
-        waitForText("First Light")
     }
 
     @Test
-    fun favorite_andLibraryActions_areUsable() {
-        composeRule.onNodeWithContentDescription("收藏").assertIsDisplayed().performClick()
-        composeRule.onNodeWithContentDescription("取消收藏").assertIsDisplayed()
+    fun playbackMode_andLibraryLabels_followRequestedModel() {
+        composeRule.onNodeWithContentDescription("顺序播放").performClick()
+        waitForControl("单曲循环")
+        composeRule.onNodeWithContentDescription("单曲循环").performClick()
+        waitForControl("顺序播放")
 
         composeRule.onNodeWithText("音乐库").performClick()
         composeRule.onAllNodesWithText("最近播放").assertCountEquals(0)
-        composeRule.onNodeWithContentDescription("打开我喜欢的音乐").assertIsDisplayed().performClick()
+        composeRule.onAllNodesWithText("本地音乐").assertCountEquals(0)
         composeRule.onNodeWithText("我喜欢的音乐").assertIsDisplayed()
+    }
 
-        composeRule.onNodeWithContentDescription("更多:First Light").performClick()
+    @Test
+    fun queue_longPress_opensDeleteAction() {
+        composeRule.onNodeWithContentDescription("播放列表").performClick()
+        composeRule.onNodeWithText("播放列表").assertIsDisplayed()
+        composeRule.onNodeWithContentDescription("长按删除:First Light")
+            .performTouchInput { longClick() }
         composeRule.onNodeWithText("歌曲选项").assertIsDisplayed()
-        composeRule.onNodeWithText("取消收藏").assertIsDisplayed()
+        composeRule.onNodeWithText("删除").assertIsDisplayed()
+        composeRule.onAllNodesWithText("从最近播放移除").assertCountEquals(0)
     }
 
     @Test
