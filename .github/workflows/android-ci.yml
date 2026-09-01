@@ -45,6 +45,9 @@ jobs:
       - name: Apply chat latency fix
         run: python3 ci/chat_latency_patch.py
 
+      - name: Apply non-blocking startup/cache fix
+        run: python3 ci/startup_quality_patch.py
+
       - name: Set up Java 17
         uses: actions/setup-java@v4
         with:
@@ -63,7 +66,7 @@ jobs:
         run: |
           if [ -e /dev/kvm ]; then sudo chmod 666 /dev/kvm; fi
 
-      - name: Android emulator smoke test
+      - name: Android emulator acceptance tests
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 35
@@ -85,14 +88,14 @@ jobs:
         if: success()
         run: |
           mkdir -p deliverable
-          cp app/build/outputs/apk/debug/app-debug.apk deliverable/SocialMix-B-Phase1.apk
-          sha256sum deliverable/SocialMix-B-Phase1.apk | tee deliverable/SHA256.txt
+          cp app/build/outputs/apk/debug/app-debug.apk deliverable/SocialMix-B-Core-Stable.apk
+          sha256sum deliverable/SocialMix-B-Core-Stable.apk | tee deliverable/SHA256.txt
 
       - name: Upload verified APK
         if: success()
         uses: actions/upload-artifact@v4
         with:
-          name: SocialMix-B-Phase1-Verified
+          name: SocialMix-B-Core-Stable-Verified
           path: deliverable/
           if-no-files-found: error
           retention-days: 14
