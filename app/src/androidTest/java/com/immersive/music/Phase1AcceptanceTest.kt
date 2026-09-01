@@ -63,6 +63,9 @@ class Phase1AcceptanceTest {
         composeRule.onNodeWithText("极高音质").assertIsDisplayed()
         composeRule.onNodeWithText("首页").assertIsDisplayed()
         composeRule.onNodeWithText("音乐库").assertIsDisplayed()
+        composeRule.onNodeWithContentDescription("页面顶部:首页").assertIsDisplayed()
+        composeRule.onNodeWithContentDescription("完整循环歌名:First Light").assertIsDisplayed()
+        composeRule.onNodeWithContentDescription("完整循环歌手:Mori").assertIsDisplayed()
         waitForControl("播放")
         waitForControl("上一首")
         waitForControl("下一首")
@@ -95,6 +98,7 @@ class Phase1AcceptanceTest {
         waitForControl("顺序播放")
 
         composeRule.onNodeWithText("音乐库").performClick()
+        composeRule.onNodeWithContentDescription("页面顶部:音乐库").assertIsDisplayed()
         composeRule.onAllNodesWithText("最近播放").assertCountEquals(0)
         composeRule.onAllNodesWithText("本地音乐").assertCountEquals(0)
         composeRule.onAllNodesWithText("我喜欢的音乐").assertCountEquals(0)
@@ -131,10 +135,11 @@ class Phase1AcceptanceTest {
     }
 
     @Test
-    fun search_isCompactUtilityOnly() {
+    fun search_isCompactAndHasNoRedundantHelper() {
         composeRule.onNodeWithContentDescription("搜索").performClick()
+        composeRule.onNodeWithContentDescription("页面顶部:搜索").assertIsDisplayed()
         composeRule.onNodeWithContentDescription("搜索输入框").assertIsDisplayed()
         composeRule.onNodeWithText("搜索歌曲或歌手").assertIsDisplayed()
-        composeRule.onNodeWithText("只搜索你的歌曲").assertIsDisplayed()
+        composeRule.onAllNodesWithText("只搜索你的歌曲").assertCountEquals(0)
     }
 }
