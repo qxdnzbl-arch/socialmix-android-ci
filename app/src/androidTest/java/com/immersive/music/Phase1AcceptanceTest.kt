@@ -11,6 +11,7 @@ import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTouchInput
 import androidx.test.platform.app.InstrumentationRegistry
 import org.junit.Rule
@@ -101,21 +102,25 @@ class Phase1AcceptanceTest {
     }
 
     @Test
-    fun queue_longPress_opensDeleteAction() {
+    fun queue_longPress_deleteOnlyRemovesFromQueue() {
         composeRule.onNodeWithContentDescription("播放列表").performClick()
         composeRule.onNodeWithText("播放列表").assertIsDisplayed()
         composeRule.onNodeWithContentDescription("长按删除:First Light")
             .performTouchInput { longClick() }
         composeRule.onNodeWithText("歌曲选项").assertIsDisplayed()
-        composeRule.onNodeWithText("删除").assertIsDisplayed()
+        composeRule.onNodeWithText("删除").assertIsDisplayed().performClick()
         composeRule.onAllNodesWithText("从最近播放移除").assertCountEquals(0)
+
+        composeRule.onNodeWithContentDescription("搜索").performClick()
+        composeRule.onNodeWithContentDescription("搜索输入框").performTextInput("First Light")
+        composeRule.onNodeWithText("First Light").assertIsDisplayed()
     }
 
     @Test
     fun localImport_opensInsideAppInsteadOfSystemFolders() {
         grantAudioPermission()
         composeRule.onNodeWithText("音乐库").performClick()
-        composeRule.onNodeWithContentDescription("导入本地音乐").assertIsDisplayed().performClick()
+        composeRule.onNodeWithContentDescription("添加喜欢的音乐").assertIsDisplayed().performClick()
         composeRule.waitUntil(timeoutMillis = 5_000) {
             runCatching {
                 composeRule.onNodeWithContentDescription("手机音乐选择面板").assertIsDisplayed()
