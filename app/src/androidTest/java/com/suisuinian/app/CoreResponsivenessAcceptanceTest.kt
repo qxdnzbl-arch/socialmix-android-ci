@@ -36,25 +36,27 @@ class CoreResponsivenessAcceptanceTest {
         assertTrue("A login failed: ${loginA.message}", loginA.success)
         assertTrue("B login failed: ${loginB.message}", loginB.success)
 
-        val profileA = a.myProfile()
-        val profileB = b.myProfile()
-        assertNotNull(profileA)
-        assertNotNull(profileB)
+        val pa = a.myProfile()
+        val pb = b.myProfile()
+        assertNotNull(pa)
+        assertNotNull(pb)
+        val profileA = requireNotNull(pa)
+        val profileB = requireNotNull(pb)
 
         val recreatedA = SupabaseApi(IsolatedContext(base, "core_quality_a"))
         val cachedProfile = recreatedA.cachedProfile()
         assertNotNull("profile cache missing after successful sync", cachedProfile)
-        assertTrue(cachedProfile!!.id == profileA!!.id)
+        assertTrue(requireNotNull(cachedProfile).id == profileA.id)
 
-        if (a.friends().none { it.id == profileB!!.id }) {
+        if (a.friends().none { it.id == profileB.id }) {
             assertNull("friend request failed", a.sendFriendRequest(profileB.id))
             val request = b.incomingRequests().firstOrNull { it.sender.id == profileA.id }
             assertNotNull("B did not receive friend request", request)
-            assertNull("accept friend request failed", b.respondFriendRequest(request!!.id, true))
+            assertNull("accept friend request failed", b.respondFriendRequest(requireNotNull(request).id, true))
         }
 
         val summaries = a.directConversations()
-        assertTrue("conversation list is empty after friendship", summaries.any { it.friend.id == profileB!!.id })
+        assertTrue("conversation list is empty after friendship", summaries.any { it.friend.id == profileB.id })
         assertTrue(
             "conversation cache was not persisted",
             a.cachedConversations().any { it.friend.id == profileB.id }
@@ -62,7 +64,7 @@ class CoreResponsivenessAcceptanceTest {
 
         val cid = a.conversationId(profileB.id)
         assertNotNull("direct conversation missing", cid)
-        val conversationId = cid!!
+        val conversationId = requireNotNull(cid)
 
         val aView = a.messages(conversationId)
         val bView = b.messages(conversationId)
