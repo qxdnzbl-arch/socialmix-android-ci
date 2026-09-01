@@ -67,20 +67,14 @@ jobs:
             adb shell pm grant com.immersive.music android.permission.READ_MEDIA_AUDIO || true
             adb shell input keyevent KEYCODE_WAKEUP || true
             adb shell wm dismiss-keyguard || true
-
-            dismiss_launcher_anr() {
-              adb shell uiautomator dump /sdcard/window.xml >/dev/null 2>&1 || true
-              if adb shell cat /sdcard/window.xml 2>/dev/null | grep -q "Pixel Launcher isn't responding"; then
-                adb shell input tap 410 1235 || true
-                sleep 2
-              fi
-              adb shell am broadcast -a android.intent.action.CLOSE_SYSTEM_DIALOGS >/dev/null 2>&1 || true
-            }
+            adb shell am broadcast -a android.intent.action.CLOSE_SYSTEM_DIALOGS >/dev/null 2>&1 || true
+            adb shell uiautomator dump /sdcard/window.xml >/dev/null 2>&1 || true
+            adb shell cat /sdcard/window.xml 2>/dev/null | grep -q "Pixel Launcher isn't responding" && adb shell input tap 410 1235 || true
 
             adb shell am force-stop com.immersive.music || true
             adb shell am start -W -a android.intent.action.MAIN -c android.intent.category.LAUNCHER -n com.immersive.music/com.immersive.music.MainActivity
             sleep 4
-            dismiss_launcher_anr
+            adb shell am broadcast -a android.intent.action.CLOSE_SYSTEM_DIALOGS >/dev/null 2>&1 || true
             adb shell am start -W -n com.immersive.music/com.immersive.music.MainActivity >/dev/null
             sleep 1
             adb shell pidof com.immersive.music
@@ -88,7 +82,6 @@ jobs:
             mkdir -p deliverable
             adb exec-out screencap -p > deliverable/home-paused.png
 
-            # Capture both playback-mode icon states for final visual review.
             adb shell input tap 800 1735
             sleep 1
             adb exec-out screencap -p > deliverable/home-single-loop.png
@@ -97,26 +90,23 @@ jobs:
 
             adb shell input tap 540 2080
             sleep 2
-            dismiss_launcher_anr
             adb exec-out screencap -p > deliverable/home-playing.png
 
             adb shell input tap 952 1735
             sleep 2
-            dismiss_launcher_anr
             adb exec-out screencap -p > deliverable/queue-screen.png
             adb shell input keyevent KEYCODE_BACK || true
             sleep 1
 
             adb shell input tap 815 2250
             sleep 2
-            dismiss_launcher_anr
             adb exec-out screencap -p > deliverable/library-screen.png
 
             adb shell input tap 270 2250
             sleep 1
             adb shell input tap 950 220
             sleep 2
-            dismiss_launcher_anr
+            adb shell am broadcast -a android.intent.action.CLOSE_SYSTEM_DIALOGS >/dev/null 2>&1 || true
             adb exec-out screencap -p > deliverable/search-screen.png
 
       - name: Prepare deliverable
