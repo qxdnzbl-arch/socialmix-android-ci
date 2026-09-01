@@ -40,12 +40,10 @@ class Phase1RegistrationAcceptanceTest {
         assertTrue("B login failed: ${loginB.message}", loginB.success)
         assertTrue("C login failed: ${loginC.message}", loginC.success)
 
-        val profileA = a.myProfile()
-        val profileB = b.myProfile()
-        assertNotNull(profileA)
-        assertNotNull(profileB)
-        assertTrue(profileA!!.username == "skillci_a_7e8d6e")
-        assertTrue(profileB!!.username == "skillci_b_3d9cbd")
+        val profileA = requireNotNull(a.myProfile())
+        val profileB = requireNotNull(b.myProfile())
+        assertTrue(profileA.username == "skillci_a_7e8d6e")
+        assertTrue(profileB.username == "skillci_b_3d9cbd")
 
         val foundB = a.searchExactUsername("skillci_b_3d9cbd")
         assertNotNull("A cannot search B", foundB)
@@ -54,16 +52,18 @@ class Phase1RegistrationAcceptanceTest {
             assertNull("friend request failed", a.sendFriendRequest(profileB.id))
             val request = b.incomingRequests().firstOrNull { it.sender.id == profileA.id }
             assertNotNull("B did not receive friend request", request)
-            assertNull("accept friend request failed", b.respondFriendRequest(request!!.id, true))
+            assertNull("accept friend request failed", b.respondFriendRequest(requireNotNull(request).id, true))
         }
         assertTrue("A does not see B as friend", a.friends().any { it.id == profileB.id })
         assertTrue("B does not see A as friend", b.friends().any { it.id == profileA.id })
 
-        val conversationId = a.conversationId(profileB.id)
-        assertNotNull("direct conversation was not created", conversationId)
-        val cid = conversationId!!
+        val cid = requireNotNull(a.conversationId(profileB.id))
+        val bRealtime = b.chatFeed(cid)
+        b.syncMessages(cid)
+        a.startRealtime()
+        b.startRealtime()
+        delay(1200)
 
-        val bRealtime = b.messages(cid)
         val marker = "skill-phase1-${System.currentTimeMillis()}"
         assertNull("A send failed", a.sendText(cid, marker))
         var realtimeReceived = false
@@ -72,20 +72,23 @@ class Phase1RegistrationAcceptanceTest {
                 realtimeReceived = true
                 return@repeat
             }
-            delay(500)
+            delay(100)
         }
         assertTrue("B did not receive A message through realtime", realtimeReceived)
 
         val bAfterRestart = SupabaseApi(IsolatedContext(base, "skill_b"))
         assertTrue("B session did not survive API recreation", bAfterRestart.isLoggedIn)
-        val history = bAfterRestart.messages(cid)
+        var history = bAfterRestart.cachedMessages(cid)
+        if (history.none { it.content == marker }) history = bAfterRestart.syncMessages(cid)
         assertTrue("message history did not persist", history.any { it.content == marker })
 
-        val cView = c.messages(cid)
+        val cView = c.chatFeed(cid)
+        c.startRealtime()
+        runCatching { c.syncMessages(cid) }
         assertFalse("non-member C can read existing conversation", cView.any { it.content == marker })
         val privateMarker = "skill-private-${System.currentTimeMillis()}"
         assertNull("A private send failed", a.sendText(cid, privateMarker))
-        delay(2500)
+        delay(1800)
         assertFalse("non-member C received conversation realtime data", cView.any { it.content == privateMarker })
 
         val sessionPrefs = base.getSharedPreferences("socialmix_live_session_skill_a", Context.MODE_PRIVATE)
@@ -97,6 +100,6 @@ class Phase1RegistrationAcceptanceTest {
         a.logout()
         assertFalse("logout left A logged in", a.isLoggedIn)
         assertTrue("logged-out user can still read friends", runCatching { a.friends() }.isFailure)
-        assertTrue("logged-out user can still read chat", runCatching { a.messages(cid) }.isFailure)
+        assertTrue("logged-out user can still sync chat", runCatching { a.syncMessages(cid) }.isFailure)
     }
 }
