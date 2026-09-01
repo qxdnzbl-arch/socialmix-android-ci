@@ -12,22 +12,18 @@ def sub(pattern: str, repl: str, name: str, count: int = 1) -> None:
         raise SystemExit(f'{name}: expected {count}, replaced {n}')
     s = s2
 
-# Vertical overflow dots are visually lighter and cleaner than the horizontal glyph.
 s = s.replace(
     'import androidx.compose.material.icons.rounded.MoreHoriz\n',
     'import androidx.compose.material.icons.rounded.MoreVert\n',
     1,
 )
 
-# State used by inline delete affordances.
 if 'import androidx.compose.runtime.mutableStateOf\n' not in s:
     anchor = 'import androidx.compose.runtime.remember\n'
     if anchor not in s:
         raise SystemExit('runtime remember import missing')
     s = s.replace(anchor, anchor + 'import androidx.compose.runtime.mutableStateOf\n', 1)
 
-# No-ripple icon button: keep full click semantics/hit target while removing the circular
-# Material press halo the user explicitly rejected.
 marker = '@Composable\nfun HomeScreen'
 if marker not in s:
     raise SystemExit('HomeScreen marker missing')
@@ -80,8 +76,6 @@ private fun InlineDeleteAction(
 '''
 s = s.replace(marker, helpers + marker, 1)
 
-# Playback mode icon: use the clean rounded repeat glyph family so its visual weight,
-# dimensions and line language match the adjacent queue icon.
 sub(
     r'''@Composable\nprivate fun PlaybackModeGlyph\(mode: PlaybackMode, modifier: Modifier = Modifier\) \{.*?\n\}\n\n(?=@Composable\nprivate fun VinylDisc)''',
     '''@Composable
@@ -102,7 +96,6 @@ private fun PlaybackModeGlyph(mode: PlaybackMode, modifier: Modifier = Modifier)
     'simplify playback mode glyph',
 )
 
-# Give playback-mode and queue glyphs the same visual size.
 s = s.replace(
     '''                    PlaybackModeGlyph(
                         mode = playbackMode,
@@ -120,14 +113,11 @@ sub(
     'match home queue icon size',
 )
 
-# Music library itself already means the user's kept music, so remove the redundant
-# "我喜欢的音乐" section label/count. The list begins directly under the page header.
 old = '                item { SectionTitle("我喜欢的音乐", local.size) }\n'
 if old not in s:
     raise SystemExit('redundant liked section title missing')
 s = s.replace(old, '', 1)
 
-# Compact search: same visual scale as the rest of the app instead of a large pill/header.
 sub(
     r'''@Composable\nfun SearchScreen\(.*?\n\}\n\n(?=@Composable\nprivate fun TrackRow)''',
     '''@Composable
@@ -245,8 +235,6 @@ fun SearchScreen(
     'compact search screen',
 )
 
-# Direct, inline delete. Tapping the vertical dots or long-pressing a queue row reveals
-# "删除" on that same row; there is no second song-options bottom sheet.
 sub(
     r'''@Composable\nprivate fun TrackRow\(.*?\n\}\n\n(?=@OptIn\(ExperimentalMaterial3Api::class\)\n@Composable\nfun QueueSheet)''',
     '''@Composable
@@ -337,8 +325,6 @@ private fun TrackRow(
     'inline row delete',
 )
 
-# Queue keeps the long-press gesture but now delegates directly to queue removal after
-# the inline delete label is tapped.
 sub(
     r'''@OptIn\(ExperimentalMaterial3Api::class\)\n@Composable\nfun QueueSheet\(.*?\n\}\n\n(?=@OptIn\(ExperimentalMaterial3Api::class\)\n@Composable\nfun TrackActionSheet)''',
     '''@OptIn(ExperimentalMaterial3Api::class)
@@ -385,31 +371,24 @@ fun QueueSheet(
     'direct queue delete',
 )
 
-# The extra "歌曲选项" sheet is deliberately removed: both delete entry points are inline.
 sub(
     r'''@OptIn\(ExperimentalMaterial3Api::class\)\n@Composable\nfun TrackActionSheet\(.*?\n\}\n\n@Composable\nprivate fun ActionRow\(.*?\n\}\n\n(?=@OptIn\(ExperimentalMaterial3Api::class\)\n@Composable\nfun LocalMusicSheet)''',
     '',
     'remove redundant song options sheet',
 )
 
-# Remove circular Material press feedback from all icon buttons in this UI file.
-# QuietIconButton keeps semantic click actions so automated/accessibility interaction remains valid.
-s = s.replace('IconButton(', 'QuietIconButton(')
+# Replace actual Material IconButton calls only; do not rename QuietIconButton itself.
+s = re.sub(r'(?<!Quiet)IconButton\(', 'QuietIconButton(', s)
 
 ui.write_text(s)
 
 main = Path('app/src/main/java/com/immersive/music/MainActivity.kt')
 m = main.read_text()
 
-# No intermediate sheet state is needed anymore.
 m = m.replace('    var menuTrack by remember { mutableStateOf<Track?>(null) }\n', '', 1)
 m = m.replace('    var queueMenuTrack by remember { mutableStateOf<Track?>(null) }\n', '', 1)
-
-# In the library, tapping vertical dots now reveals the inline delete on that row;
-# the callback itself performs the persistent App-library deletion.
 m = m.replace('onMore = { menuTrack = it },', 'onMore = { deleteTrack(it) },')
 
-# Queue long-press reveals inline delete and removes only from queue when tapped.
 old = '''            onLongPressDelete = { track ->
                 showQueue = false
                 queueMenuTrack = track
@@ -418,7 +397,6 @@ if old not in m:
     raise SystemExit('queue menu callback missing')
 m = m.replace(old, '            onLongPressDelete = ::removeFromQueue,', 1)
 
-# Remove both intermediate TrackActionSheet call sites left by v79/v80.
 m2, n = re.subn(
     r'''\n    queueMenuTrack\?\.let \{ selected ->.*?\n    \}\n\n    menuTrack\?\.let \{ selected ->.*?\n    \}\n(?=\n    if \(showLocalMusic\))''',
     '',
