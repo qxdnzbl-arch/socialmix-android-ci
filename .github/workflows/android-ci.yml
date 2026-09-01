@@ -29,6 +29,7 @@ jobs:
           python ci/user_requested_v82.py
           python ci/user_requested_v82_fix.py
           python ci/user_requested_v83.py
+          python ci/user_requested_v84.py
 
       - name: Set up Java 17
         uses: actions/setup-java@v5
@@ -67,8 +68,6 @@ jobs:
             adb shell input keyevent KEYCODE_WAKEUP || true
             adb shell wm dismiss-keyguard || true
 
-            # Instrumentation can occasionally leave a Pixel Launcher ANR dialog above the app.
-            # Detect and close that system dialog before every visual capture sequence.
             dismiss_launcher_anr() {
               adb shell uiautomator dump /sdcard/window.xml >/dev/null 2>&1 || true
               if adb shell cat /sdcard/window.xml 2>/dev/null | grep -q "Pixel Launcher isn't responding"; then
@@ -88,6 +87,13 @@ jobs:
             adb shell dumpsys activity activities | grep -E 'mResumedActivity|topResumedActivity' | grep 'com.immersive.music'
             mkdir -p deliverable
             adb exec-out screencap -p > deliverable/home-paused.png
+
+            # Capture both playback-mode icon states for final visual review.
+            adb shell input tap 800 1735
+            sleep 1
+            adb exec-out screencap -p > deliverable/home-single-loop.png
+            adb shell input tap 800 1735
+            sleep 1
 
             adb shell input tap 540 2080
             sleep 2
@@ -117,15 +123,15 @@ jobs:
         if: success()
         run: |
           mkdir -p deliverable
-          cp app/build/outputs/apk/debug/app-debug.apk deliverable/Immersive-Music-v83.apk
+          cp app/build/outputs/apk/debug/app-debug.apk deliverable/Immersive-Music-v84.apk
           cp SPEC-music-phase1.md deliverable/SPEC-music-phase1.md
-          sha256sum deliverable/Immersive-Music-v83.apk | tee deliverable/SHA256.txt
+          sha256sum deliverable/Immersive-Music-v84.apk | tee deliverable/SHA256.txt
 
       - name: Upload verified deliverable
         if: success()
         uses: actions/upload-artifact@v4
         with:
-          name: Immersive-Music-v83-Verified
+          name: Immersive-Music-v84-Verified
           path: deliverable/
           if-no-files-found: error
           retention-days: 14
