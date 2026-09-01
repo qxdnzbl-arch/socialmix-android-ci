@@ -93,6 +93,7 @@ class Phase1AcceptanceTest {
         composeRule.onNodeWithContentDescription("取消收藏").assertIsDisplayed()
 
         composeRule.onNodeWithText("音乐库").performClick()
+        composeRule.onAllNodesWithText("最近播放").assertCountEquals(0)
         composeRule.onNodeWithContentDescription("打开我喜欢的音乐").assertIsDisplayed().performClick()
         composeRule.onNodeWithText("我喜欢的音乐").assertIsDisplayed()
         composeRule.onNodeWithContentDescription("返回音乐库").performClick()
