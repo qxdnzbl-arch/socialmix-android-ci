@@ -48,12 +48,11 @@ m = m.replace(old, new, 1)
 
 main.write_text(m)
 
-# Replace the Android acceptance suite with one ordered end-to-end scenario so
-# MediaStore and app state cannot leak between independent test methods.
+# One ordered Android end-to-end scenario: import into MediaStore, verify that
+# import alone leaves the queue empty, then verify an explicit play adds the song.
 test = Path('app/src/androidTest/java/com/immersive/music/Phase1AcceptanceTest.kt')
 test.write_text(r'''package com.immersive.music
 
-import android.Manifest
 import android.content.ContentValues
 import android.os.Build
 import android.provider.MediaStore
@@ -73,16 +72,6 @@ class Phase1AcceptanceTest {
     val composeRule = createAndroidComposeRule<MainActivity>()
 
     private val testTitle = "Queue Isolation Test"
-
-    private fun grantAudioPermission() {
-        val permission =
-            if (Build.VERSION.SDK_INT >= 33) Manifest.permission.READ_MEDIA_AUDIO
-            else Manifest.permission.READ_EXTERNAL_STORAGE
-        val pkg = composeRule.activity.packageName
-        InstrumentationRegistry.getInstrumentation().uiAutomation
-            .executeShellCommand("pm grant $pkg $permission")
-            .close()
-    }
 
     private fun seedPhoneAudio() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
@@ -104,10 +93,8 @@ class Phase1AcceptanceTest {
             MediaStore.Audio.Media.EXTERNAL_CONTENT_URI
         }
         val uri = requireNotNull(resolver.insert(collection, values))
-        val pcmBytes = 8_000
-        val dataSize = pcmBytes
-        val totalSize = 44 + dataSize
-        val wav = ByteArray(totalSize)
+        val dataSize = 8_000
+        val wav = ByteArray(44 + dataSize)
         fun putAscii(offset: Int, text: String) {
             text.toByteArray(Charsets.US_ASCII).copyInto(wav, offset)
         }
@@ -150,7 +137,7 @@ class Phase1AcceptanceTest {
 
     @Test
     fun libraryImport_doesNotCreateQueue_untilSongIsPlayed() {
-        grantAudioPermission()
+        composeRule.waitForIdle()
 
         // First-run production state is genuinely empty.
         composeRule.onAllNodesWithText("First Light").assertCountEquals(0)
