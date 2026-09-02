@@ -125,25 +125,29 @@ def assert_nav_symmetry(screen_width):
 
 def assert_search_geometry(screen_width):
     back = find_node(desc="返回")
+    pill = find_node(desc="搜索栏")
     field = find_node(desc="搜索输入框")
-    assert_centered(field, screen_width, "Search field")
+    assert_centered(pill, screen_width, "Search pill")
 
     bx1, by1, bx2, by2 = bounds(back)
+    px1, py1, px2, py2 = bounds(pill)
     fx1, fy1, fx2, fy2 = bounds(field)
-    if bx2 > fx1 + 2:
-        raise AssertionError(f"Back button overlaps search field: back={bounds(back)}, field={bounds(field)}")
-    if fx1 < 0 or fx2 > screen_width:
-        raise AssertionError(f"Search field leaves screen: {bounds(field)} / width={screen_width}")
-    if (fx2 - fx1) < screen_width * 0.48:
-        raise AssertionError(f"Search field became implausibly narrow: {bounds(field)} / width={screen_width}")
-    if abs(center_y(back) - center_y(field)) > max(5.0, (fy2 - fy1) * 0.18):
-        raise AssertionError(f"Back/search vertical alignment drifted: back={bounds(back)}, field={bounds(field)}")
+    if bx2 > px1 + 2:
+        raise AssertionError(f"Back button overlaps search pill: back={bounds(back)}, pill={bounds(pill)}")
+    if px1 < 0 or px2 > screen_width:
+        raise AssertionError(f"Search pill leaves screen: {bounds(pill)} / width={screen_width}")
+    if (px2 - px1) < screen_width * 0.48:
+        raise AssertionError(f"Search pill became implausibly narrow: {bounds(pill)} / width={screen_width}")
+    if not (px1 <= fx1 <= fx2 <= px2):
+        raise AssertionError(f"Search text input escaped pill: pill={bounds(pill)}, field={bounds(field)}")
+    if abs(center_y(back) - center_y(pill)) > max(5.0, (py2 - py1) * 0.18):
+        raise AssertionError(f"Back/search vertical alignment drifted: back={bounds(back)}, pill={bounds(pill)}")
 
-    left_margin = fx1
-    right_margin = screen_width - fx2
+    left_margin = px1
+    right_margin = screen_width - px2
     if abs(left_margin - right_margin) > max(3.0, screen_width * 0.006):
         raise AssertionError(
-            f"Search field margins are asymmetric: left={left_margin}, right={right_margin}, width={screen_width}"
+            f"Search pill margins are asymmetric: left={left_margin}, right={right_margin}, width={screen_width}"
         )
 
 
@@ -170,6 +174,7 @@ def main():
             screenshot(f"{name}-home")
 
             tap_node(find_node(desc="搜索"))
+            find_node(desc="搜索栏", timeout=15)
             find_node(desc="搜索输入框", timeout=15)
             root = dump_ui()
             width, _ = root_size(root)
