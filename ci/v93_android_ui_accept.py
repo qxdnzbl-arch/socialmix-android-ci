@@ -5,7 +5,7 @@ import subprocess
 import time
 import xml.etree.ElementTree as ET
 
-TITLE = "Queue Isolation Test"
+TITLE = "queue-isolation-test"
 PKG = "com.immersive.music"
 ACTIVITY = f"{PKG}/{PKG}.MainActivity"
 DELIVERABLE = "deliverable"
@@ -170,7 +170,7 @@ def main():
 
     if not adb("shell", "pidof", PKG, check=False, text=True).strip():
         raise AssertionError("App process died during acceptance flow")
-    print("V93_ANDROID_QUEUE_ISOLATION=PASS")
+    print("V94_ANDROID_QUEUE_ISOLATION=PASS")
 
 
 if __name__ == "__main__":
