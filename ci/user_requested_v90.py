@@ -1,0 +1,208 @@
+from pathlib import Path
+
+main = Path('app/src/main/java/com/immersive/music/MainActivity.kt')
+m = main.read_text()
+
+# Importing a song means adding it to the app music library only.
+# It must NOT silently add the song to the current playback queue.
+old = '''            if (tracks.none { it.id == imported.id }) tracks.add(imported)
+            if (!queueIds.contains(imported.id)) queueIds.add(imported.id)
+            if (!favoriteIds.contains(imported.id)) {'''
+new = '''            if (tracks.none { it.id == imported.id }) tracks.add(imported)
+            if (!favoriteIds.contains(imported.id)) {'''
+if old not in m:
+    raise SystemExit('import-to-queue block missing')
+m = m.replace(old, new, 1)
+
+# Restoring the persisted music library after app relaunch must also leave the
+# playback queue untouched. A restored library is not a restored queue.
+old = '''        imported.forEach {
+            if (tracks.none { t -> t.id == it.id }) tracks.add(it)
+            if (!queueIds.contains(it.id)) queueIds.add(it.id)
+            if (!favoriteIds.contains(it.id)) favoriteIds.add(it.id)
+        }
+        saveFavorites()
+        playTrack(0, false)'''
+new = '''        imported.forEach {
+            if (tracks.none { t -> t.id == it.id }) tracks.add(it)
+            if (!favoriteIds.contains(it.id)) favoriteIds.add(it.id)
+        }
+        saveFavorites()'''
+if old not in m:
+    raise SystemExit('restore-to-queue block missing')
+m = m.replace(old, new, 1)
+
+# Until the user actually chooses a song to play, the home player stays in its
+# neutral empty shell even if the library already contains imported songs.
+old = '''    val activeQueue = queueIds.mapNotNull { id -> tracks.find { it.id == id } }
+    val currentTrack = activeQueue.getOrNull(currentIndex)
+        ?: tracks.firstOrNull()
+        ?: EmptyTrack
+'''
+new = '''    val activeQueue = queueIds.mapNotNull { id -> tracks.find { it.id == id } }
+    val currentTrack = activeQueue.getOrNull(currentIndex) ?: EmptyTrack
+'''
+if old not in m:
+    raise SystemExit('currentTrack queue fallback missing')
+m = m.replace(old, new, 1)
+
+main.write_text(m)
+
+# Replace the Android acceptance suite with one ordered end-to-end scenario so
+# MediaStore and app state cannot leak between independent test methods.
+test = Path('app/src/androidTest/java/com/immersive/music/Phase1AcceptanceTest.kt')
+test.write_text(r'''package com.immersive.music
+
+import android.Manifest
+import android.content.ContentValues
+import android.os.Build
+import android.provider.MediaStore
+import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performClick
+import androidx.test.platform.app.InstrumentationRegistry
+import org.junit.Rule
+import org.junit.Test
+
+class Phase1AcceptanceTest {
+    @get:Rule
+    val composeRule = createAndroidComposeRule<MainActivity>()
+
+    private val testTitle = "Queue Isolation Test"
+
+    private fun grantAudioPermission() {
+        val permission =
+            if (Build.VERSION.SDK_INT >= 33) Manifest.permission.READ_MEDIA_AUDIO
+            else Manifest.permission.READ_EXTERNAL_STORAGE
+        val pkg = composeRule.activity.packageName
+        InstrumentationRegistry.getInstrumentation().uiAutomation
+            .executeShellCommand("pm grant $pkg $permission")
+            .close()
+    }
+
+    private fun seedPhoneAudio() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val resolver = context.contentResolver
+        val values = ContentValues().apply {
+            put(MediaStore.Audio.Media.DISPLAY_NAME, "queue-isolation-test.wav")
+            put(MediaStore.Audio.Media.TITLE, testTitle)
+            put(MediaStore.Audio.Media.ARTIST, "QA")
+            put(MediaStore.Audio.Media.MIME_TYPE, "audio/wav")
+            put(MediaStore.Audio.Media.IS_MUSIC, 1)
+            if (Build.VERSION.SDK_INT >= 29) {
+                put(MediaStore.Audio.Media.RELATIVE_PATH, "Music/ImmersiveMusicQA")
+                put(MediaStore.Audio.Media.IS_PENDING, 1)
+            }
+        }
+        val collection = if (Build.VERSION.SDK_INT >= 29) {
+            MediaStore.Audio.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
+        } else {
+            MediaStore.Audio.Media.EXTERNAL_CONTENT_URI
+        }
+        val uri = requireNotNull(resolver.insert(collection, values))
+        val pcmBytes = 8_000
+        val dataSize = pcmBytes
+        val totalSize = 44 + dataSize
+        val wav = ByteArray(totalSize)
+        fun putAscii(offset: Int, text: String) {
+            text.toByteArray(Charsets.US_ASCII).copyInto(wav, offset)
+        }
+        fun putLe16(offset: Int, value: Int) {
+            wav[offset] = (value and 0xff).toByte()
+            wav[offset + 1] = ((value shr 8) and 0xff).toByte()
+        }
+        fun putLe32(offset: Int, value: Int) {
+            repeat(4) { i -> wav[offset + i] = ((value shr (8 * i)) and 0xff).toByte() }
+        }
+        putAscii(0, "RIFF")
+        putLe32(4, 36 + dataSize)
+        putAscii(8, "WAVE")
+        putAscii(12, "fmt ")
+        putLe32(16, 16)
+        putLe16(20, 1)
+        putLe16(22, 1)
+        putLe32(24, 8_000)
+        putLe32(28, 16_000)
+        putLe16(32, 2)
+        putLe16(34, 16)
+        putAscii(36, "data")
+        putLe32(40, dataSize)
+        resolver.openOutputStream(uri)?.use { it.write(wav) }
+        if (Build.VERSION.SDK_INT >= 29) {
+            resolver.update(uri, ContentValues().apply {
+                put(MediaStore.Audio.Media.IS_PENDING, 0)
+            }, null, null)
+        }
+    }
+
+    private fun waitForText(text: String) {
+        composeRule.waitUntil(timeoutMillis = 6_000) {
+            runCatching {
+                composeRule.onNodeWithText(text).assertIsDisplayed()
+                true
+            }.getOrDefault(false)
+        }
+    }
+
+    @Test
+    fun libraryImport_doesNotCreateQueue_untilSongIsPlayed() {
+        grantAudioPermission()
+
+        // First-run production state is genuinely empty.
+        composeRule.onAllNodesWithText("First Light").assertCountEquals(0)
+        composeRule.onAllNodesWithText("Blue Hour").assertCountEquals(0)
+        composeRule.onAllNodesWithText("Night Bloom").assertCountEquals(0)
+        composeRule.onNodeWithContentDescription("播放列表").performClick()
+        composeRule.onNodeWithText("播放列表").assertIsDisplayed()
+        composeRule.onAllNodesWithText(testTitle).assertCountEquals(0)
+        composeRule.activityRule.scenario.onActivity { it.onBackPressedDispatcher.onBackPressed() }
+
+        // Put one real MediaStore audio item on the emulator and import it.
+        seedPhoneAudio()
+        composeRule.onNodeWithText("音乐库").performClick()
+        composeRule.onNodeWithContentDescription("添加喜欢的音乐").assertIsDisplayed().performClick()
+        waitForText(testTitle)
+        composeRule.onNodeWithText(testTitle).performClick()
+        composeRule.waitUntil(timeoutMillis = 6_000) {
+            runCatching {
+                composeRule.onNodeWithContentDescription("已添加:$testTitle").assertIsDisplayed()
+                true
+            }.getOrDefault(false)
+        }
+        composeRule.activityRule.scenario.onActivity { it.onBackPressedDispatcher.onBackPressed() }
+        waitForText(testTitle)
+
+        // Import only: song is in the library, but queue is still empty.
+        composeRule.onNodeWithText("首页").performClick()
+        composeRule.onNodeWithContentDescription("播放列表").performClick()
+        composeRule.onNodeWithText("播放列表").assertIsDisplayed()
+        composeRule.onAllNodesWithText(testTitle).assertCountEquals(0)
+        composeRule.activityRule.scenario.onActivity { it.onBackPressedDispatcher.onBackPressed() }
+
+        // Only an explicit play action moves the song into the playback queue.
+        composeRule.onNodeWithText("音乐库").performClick()
+        waitForText(testTitle)
+        composeRule.onNodeWithText(testTitle).performClick()
+        waitForText(testTitle)
+        composeRule.onNodeWithContentDescription("播放列表").performClick()
+        composeRule.onNodeWithText("播放列表").assertIsDisplayed()
+        composeRule.onNodeWithText(testTitle).assertIsDisplayed()
+    }
+}
+''')
+
+spec = Path('SPEC-music-phase1.md')
+p = spec.read_text()
+needle = '- 播放队列与 App 音乐库是两个独立数据层。\n'
+replacement = '''- 播放队列与 App 音乐库是两个独立数据层。
+- 导入手机音乐只加入 App 音乐库，不自动加入播放队列；只有用户明确点击歌曲开始播放时，该歌曲才进入当前播放队列。
+- App 重启恢复音乐库时不得顺带重建或填充播放队列。
+'''
+if needle not in p:
+    raise SystemExit('SPEC queue/library rule anchor missing')
+p = p.replace(needle, replacement, 1)
+spec.write_text(p)
