@@ -13,83 +13,86 @@ def sub(pattern: str, repl: str, name: str, count: int = 1) -> None:
     s = s2
 
 
-# Final NetEase screenshot trace.
-# Coordinates below follow the centerline measured from the user's clean NetEase
-# screenshot crop rather than a generic repeat icon. Reference pixel centerline:
-# lower-right open end ~ (57,44), bottom run y~59, left side x~16,
-# top run y~26 from x~28 to x~50, arrow tip ~ (59,26).
+# Reference-locked silhouette from the user's NetEase screenshot.
+# Source silhouette is 45 x 41 pixels. These measured contour points reproduce
+# that shape and aspect ratio instead of substituting a generic repeat icon.
 sub(
     r'''@Composable\nprivate fun PlaybackModeGlyph\(mode: PlaybackMode, modifier: Modifier = Modifier\) \{.*?\n\}\n\n(?=@Composable\nprivate fun VinylDisc)''',
     '''@Composable
 private fun PlaybackModeGlyph(mode: PlaybackMode, modifier: Modifier = Modifier) {
     Box(modifier, contentAlignment = Alignment.Center) {
         Canvas(Modifier.fillMaxSize()) {
-            val c = Color.White.copy(alpha = .72f)
-            val vw = 22.0.dp.toPx()
-            val vh = 20.0.dp.toPx()
+            val c = Color.White.copy(alpha = .68f)
+            val vw = 18.5.dp.toPx()
+            val vh = (18.5f * 41f / 45f).dp.toPx()
             val left = (size.width - vw) / 2f
             val top = (size.height - vh) / 2f
-            fun p(x: Float, y: Float) = Offset(left + vw * x, top + vh * y)
 
-            val loop = androidx.compose.ui.graphics.Path().apply {
-                val a = p(.956f, .600f)
-                moveTo(a.x, a.y)
+            fun px(x: Int) = left + vw * (x / 44f)
+            fun py(y: Int) = top + vh * (y / 40f)
 
-                var q = p(.956f, .825f)
-                var r = p(.820f, .975f)
-                var t = p(.667f, .975f)
-                cubicTo(q.x, q.y, r.x, r.y, t.x, t.y)
-
-                t = p(.311f, .975f)
-                lineTo(t.x, t.y)
-
-                q = p(.160f, .975f)
-                r = p(.044f, .820f)
-                t = p(.044f, .675f)
-                cubicTo(q.x, q.y, r.x, r.y, t.x, t.y)
-
-                q = p(.000f, .550f)
-                r = p(.044f, .350f)
-                t = p(.156f, .250f)
-                cubicTo(q.x, q.y, r.x, r.y, t.x, t.y)
-
-                q = p(.200f, .190f)
-                r = p(.260f, .150f)
-                t = p(.311f, .150f)
-                cubicTo(q.x, q.y, r.x, r.y, t.x, t.y)
-
-                t = p(.800f, .150f)
-                lineTo(t.x, t.y)
-            }
-            drawPath(
-                path = loop,
-                color = c,
-                style = Stroke(
-                    width = 1.52.dp.toPx(),
-                    cap = StrokeCap.Round,
-                    join = StrokeJoin.Round,
-                ),
-            )
-
-            // Screenshot-matched short horizontal arrowhead: one clean triangle,
-            // no fork, no detached tail, no circular-C silhouette.
-            val tip = p(1.000f, .150f)
-            val upper = p(.800f, .025f)
-            val lower = p(.800f, .275f)
-            val head = androidx.compose.ui.graphics.Path().apply {
-                moveTo(tip.x, tip.y)
-                lineTo(upper.x, upper.y)
-                lineTo(lower.x, lower.y)
+            val traced = androidx.compose.ui.graphics.Path().apply {
+                moveTo(px(41), py(4))
+                lineTo(px(33), py(0))
+                lineTo(px(33), py(3))
+                lineTo(px(32), py(4))
+                lineTo(px(14), py(4))
+                lineTo(px(13), py(5))
+                lineTo(px(11), py(5))
+                lineTo(px(7), py(7))
+                lineTo(px(3), py(11))
+                lineTo(px(0), py(17))
+                lineTo(px(0), py(26))
+                lineTo(px(1), py(27))
+                lineTo(px(1), py(29))
+                lineTo(px(3), py(33))
+                lineTo(px(7), py(37))
+                lineTo(px(11), py(39))
+                lineTo(px(14), py(39))
+                lineTo(px(15), py(40))
+                lineTo(px(29), py(40))
+                lineTo(px(30), py(39))
+                lineTo(px(32), py(39))
+                lineTo(px(36), py(37))
+                lineTo(px(41), py(32))
+                lineTo(px(43), py(28))
+                lineTo(px(43), py(26))
+                lineTo(px(44), py(25))
+                lineTo(px(44), py(21))
+                lineTo(px(42), py(21))
+                lineTo(px(42), py(25))
+                lineTo(px(41), py(26))
+                lineTo(px(40), py(30))
+                lineTo(px(34), py(36))
+                lineTo(px(30), py(37))
+                lineTo(px(29), py(38))
+                lineTo(px(15), py(38))
+                lineTo(px(7), py(34))
+                lineTo(px(3), py(29))
+                lineTo(px(3), py(27))
+                lineTo(px(2), py(26))
+                lineTo(px(2), py(18))
+                lineTo(px(5), py(12))
+                lineTo(px(9), py(8))
+                lineTo(px(11), py(7))
+                lineTo(px(13), py(7))
+                lineTo(px(14), py(6))
+                lineTo(px(32), py(6))
+                lineTo(px(33), py(7))
+                lineTo(px(33), py(10))
+                lineTo(px(34), py(10))
+                lineTo(px(38), py(7))
+                lineTo(px(41), py(6))
                 close()
             }
-            drawPath(head, c)
+            drawPath(traced, c)
         }
 
         if (mode == PlaybackMode.SINGLE_LOOP) {
             Text(
                 "1",
-                color = Color.White.copy(alpha = .72f),
-                fontSize = 7.0.sp,
+                color = Color.White.copy(alpha = .68f),
+                fontSize = 6.8.sp,
                 fontWeight = FontWeight.Normal,
             )
         }
@@ -97,7 +100,7 @@ private fun PlaybackModeGlyph(mode: PlaybackMode, modifier: Modifier = Modifier)
 }
 
 ''',
-    'smooth NetEase screenshot-traced playback-mode glyph',
+    'NetEase pixel-contour playback-mode glyph',
 )
 
 ui.write_text(s)
