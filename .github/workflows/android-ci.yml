@@ -56,7 +56,7 @@ jobs:
         run: |
           if [ -e /dev/kvm ]; then sudo chmod 666 /dev/kvm; fi
 
-      - name: Emulator acceptance tests and visual capture
+      - name: Android 35 real UI acceptance and visual capture
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 35
@@ -66,52 +66,141 @@ jobs:
           disable-animations: false
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -no-boot-anim -camera-back none
           script: |
-            adb install -r app/build/outputs/apk/debug/app-debug.apk
-            adb shell pm grant com.immersive.music android.permission.READ_MEDIA_AUDIO || true
-            gradle --no-daemon :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.immersive.music.Phase1AcceptanceTest
+            set -euo pipefail
+            mkdir -p deliverable
 
-            adb shell pm clear com.immersive.music || true
             adb install -r app/build/outputs/apk/debug/app-debug.apk
+            adb shell pm clear com.immersive.music >/dev/null
             adb shell pm grant com.immersive.music android.permission.READ_MEDIA_AUDIO || true
+
+            python - <<'PY'
+            import wave
+            path = '/tmp/Queue Isolation Test.wav'
+            with wave.open(path, 'wb') as w:
+                w.setnchannels(1)
+                w.setsampwidth(2)
+                w.setframerate(8000)
+                w.writeframes(b'\x00\x00' * 8000)
+            PY
+            adb shell mkdir -p /sdcard/Music
+            adb push "/tmp/Queue Isolation Test.wav" "/sdcard/Music/Queue Isolation Test.wav" >/dev/null
+            adb shell am broadcast -a android.intent.action.MEDIA_SCANNER_SCAN_FILE -d 'file:///sdcard/Music/Queue%20Isolation%20Test.wav' >/dev/null
+            sleep 3
+            adb shell content query --uri content://media/external/audio/media --projection _id:title 2>/dev/null | grep -q 'Queue Isolation Test'
+
             adb shell input keyevent KEYCODE_WAKEUP || true
             adb shell wm dismiss-keyguard || true
             adb shell am broadcast -a android.intent.action.CLOSE_SYSTEM_DIALOGS >/dev/null 2>&1 || true
-            adb shell uiautomator dump /sdcard/window.xml >/dev/null 2>&1 || true
-            adb shell cat /sdcard/window.xml 2>/dev/null | grep -q "Pixel Launcher isn't responding" && adb shell input tap 410 1235 || true
-
             adb shell am force-stop com.immersive.music || true
-            adb shell am start -W -a android.intent.action.MAIN -c android.intent.category.LAUNCHER -n com.immersive.music/com.immersive.music.MainActivity
+            adb shell am start -W -a android.intent.action.MAIN -c android.intent.category.LAUNCHER -n com.immersive.music/com.immersive.music.MainActivity >/dev/null
             sleep 4
-            adb shell am broadcast -a android.intent.action.CLOSE_SYSTEM_DIALOGS >/dev/null 2>&1 || true
-            adb shell am start -W -n com.immersive.music/com.immersive.music.MainActivity >/dev/null
-            sleep 1
             adb shell pidof com.immersive.music
             adb shell dumpsys activity activities | grep -E 'mResumedActivity|topResumedActivity' | grep 'com.immersive.music'
-            mkdir -p deliverable
-            adb exec-out screencap -p > deliverable/home-paused.png
+            adb exec-out screencap -p > deliverable/home-before-import.png
 
-            adb shell input tap 800 1735
-            sleep 1
-            adb exec-out screencap -p > deliverable/home-single-loop.png
-            adb shell input tap 800 1735
-            sleep 1
+            cat > /tmp/ui_accept.py <<'PY'
+            import re
+            import subprocess
+            import time
+            import xml.etree.ElementTree as ET
+            from pathlib import Path
 
-            adb shell input tap 952 1735
-            sleep 2
-            adb exec-out screencap -p > deliverable/queue-empty.png
+            TITLE = 'Queue Isolation Test'
+
+            def run(*args, check=True):
+                return subprocess.run(args, check=check, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+
+            def dump():
+                last = None
+                for _ in range(10):
+                    run('adb', 'shell', 'uiautomator', 'dump', '/sdcard/window.xml', check=False)
+                    raw = run('adb', 'exec-out', 'cat', '/sdcard/window.xml', check=False).stdout
+                    try:
+                        if raw.strip():
+                            return ET.fromstring(raw.decode('utf-8', 'replace'))
+                    except Exception as exc:
+                        last = exc
+                    time.sleep(.5)
+                raise RuntimeError(f'Unable to read Android UI hierarchy: {last}')
+
+            def matches(node, text=None, desc=None):
+                if text is not None and node.attrib.get('text') == text:
+                    return True
+                if desc is not None and node.attrib.get('content-desc') == desc:
+                    return True
+                return False
+
+            def find(text=None, desc=None, timeout=8.0):
+                deadline = time.time() + timeout
+                while time.time() < deadline:
+                    root = dump()
+                    for node in root.iter('node'):
+                        if matches(node, text=text, desc=desc):
+                            return node
+                    time.sleep(.35)
+                raise AssertionError(f'UI node not found: text={text!r}, desc={desc!r}')
+
+            def exists(text=None, desc=None):
+                root = dump()
+                return any(matches(n, text=text, desc=desc) for n in root.iter('node'))
+
+            def tap(text=None, desc=None):
+                node = find(text=text, desc=desc)
+                m = re.match(r'\[(\d+),(\d+)\]\[(\d+),(\d+)\]', node.attrib['bounds'])
+                if not m:
+                    raise AssertionError(f'Bad bounds for node: {node.attrib}')
+                x1, y1, x2, y2 = map(int, m.groups())
+                run('adb', 'shell', 'input', 'tap', str((x1+x2)//2), str((y1+y2)//2))
+                time.sleep(.8)
+
+            def back():
+                run('adb', 'shell', 'input', 'keyevent', 'KEYCODE_BACK')
+                time.sleep(.8)
+
+            def shot(name):
+                with open(f'deliverable/{name}.png', 'wb') as f:
+                    subprocess.run(['adb', 'exec-out', 'screencap', '-p'], check=True, stdout=f)
+
+            # Import a real MediaStore song into the library.
+            tap(text='音乐库')
+            tap(desc='添加喜欢的音乐')
+            find(text='选择手机音乐')
+            tap(text=TITLE)
+            find(desc=f'已添加:{TITLE}')
+            back()
+            find(text=TITLE)
+            shot('library-after-import')
+
+            # Core regression check: import alone must NOT create playback-queue state.
+            tap(text='首页')
+            tap(desc='播放列表')
+            find(text='播放列表')
+            if exists(text=TITLE):
+                raise AssertionError('Imported library song leaked into playback queue before being played')
+            shot('queue-after-import-empty')
+            back()
+
+            # Explicit play is the only point where the song enters the current queue.
+            tap(text='音乐库')
+            tap(text=TITLE)
+            find(text='心动')
+            tap(desc='播放列表')
+            find(text='播放列表')
+            find(text=TITLE)
+            shot('queue-after-explicit-play')
+
+            # Process must still be alive after the complete path.
+            pid = run('adb', 'shell', 'pidof', 'com.immersive.music').stdout.decode().strip()
+            if not pid:
+                raise AssertionError('App process died during acceptance flow')
+
+            print('V90_QUEUE_ISOLATION_ACCEPTANCE=PASS')
+            PY
+            python /tmp/ui_accept.py
+
             adb shell input keyevent KEYCODE_BACK || true
             sleep 1
-
-            adb shell input tap 815 2250
-            sleep 2
-            adb exec-out screencap -p > deliverable/library-empty.png
-
-            adb shell input tap 270 2250
-            sleep 1
-            adb shell input tap 950 220
-            sleep 2
-            adb shell am broadcast -a android.intent.action.CLOSE_SYSTEM_DIALOGS >/dev/null 2>&1 || true
-            adb exec-out screencap -p > deliverable/search-screen.png
+            adb exec-out screencap -p > deliverable/home-after-play.png
 
       - name: Prepare deliverable
         if: success()
