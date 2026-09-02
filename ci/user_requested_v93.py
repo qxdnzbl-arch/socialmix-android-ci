@@ -19,17 +19,18 @@ class MediaFixtureTest {
     fun seedReadablePhoneMusic() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val resolver = context.contentResolver
-        val title = "Queue Isolation Test"
+        val title = "queue-isolation-test"
+        val displayName = "queue-isolation-test.wav"
         val collection = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             MediaStore.Audio.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
         } else {
             MediaStore.Audio.Media.EXTERNAL_CONTENT_URI
         }
 
-        resolver.delete(collection, "${MediaStore.Audio.Media.TITLE} = ?", arrayOf(title))
+        resolver.delete(collection, "${MediaStore.Audio.Media.DISPLAY_NAME} = ?", arrayOf(displayName))
 
         val values = ContentValues().apply {
-            put(MediaStore.Audio.Media.DISPLAY_NAME, "queue-isolation-test.wav")
+            put(MediaStore.Audio.Media.DISPLAY_NAME, displayName)
             put(MediaStore.Audio.Media.TITLE, title)
             put(MediaStore.Audio.Media.ARTIST, "QA")
             put(MediaStore.Audio.Media.MIME_TYPE, "audio/wav")
@@ -76,9 +77,9 @@ class MediaFixtureTest {
 
         resolver.query(
             collection,
-            arrayOf(MediaStore.Audio.Media._ID),
-            "${MediaStore.Audio.Media.TITLE} = ?",
-            arrayOf(title),
+            arrayOf(MediaStore.Audio.Media._ID, MediaStore.Audio.Media.TITLE),
+            "${MediaStore.Audio.Media.DISPLAY_NAME} = ?",
+            arrayOf(displayName),
             null,
         )!!.use { cursor ->
             assertTrue("Seeded audio must be visible to the app", cursor.moveToFirst())
