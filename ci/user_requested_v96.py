@@ -62,7 +62,8 @@ replacement = '''            Row(
                 Column(
                     Modifier
                         .weight(1f)
-                        .padding(horizontal = 8.dp),
+                        .padding(horizontal = 8.dp)
+                        .semantics { contentDescription = "歌曲信息中心" },
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
                     PlayerMarqueeLine(
