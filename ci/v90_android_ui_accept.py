@@ -38,11 +38,15 @@ def wait_boot():
     raise AssertionError("Android emulator did not finish booting")
 
 
+def dump_ui_raw():
+    adb("shell", "uiautomator", "dump", "/sdcard/window.xml", check=False)
+    return adb("exec-out", "cat", "/sdcard/window.xml", check=False)
+
+
 def dump_ui():
     last = None
     for _ in range(15):
-        adb("shell", "uiautomator", "dump", "/sdcard/window.xml", check=False)
-        raw = adb("exec-out", "cat", "/sdcard/window.xml", check=False)
+        raw = dump_ui_raw()
         try:
             if raw.strip():
                 return ET.fromstring(raw.decode("utf-8", "replace"))
@@ -62,13 +66,22 @@ def node_matches(node, text=None, desc=None):
 
 def find_node(text=None, desc=None, timeout=12):
     deadline = time.time() + timeout
+    last_xml = ""
     while time.time() < deadline:
         root = dump_ui()
+        last_xml = ET.tostring(root, encoding="unicode")
         for node in root.iter("node"):
             if node_matches(node, text=text, desc=desc):
                 return node
         time.sleep(0.35)
-    raise AssertionError(f"UI node not found: text={text!r}, desc={desc!r}")
+    focus = adb("shell", "dumpsys", "window", "windows", check=False, text=True)
+    logcat = adb("logcat", "-d", "-t", "250", check=False, text=True)
+    raise AssertionError(
+        f"UI node not found: text={text!r}, desc={desc!r}\n"
+        f"LAST_UI={last_xml[-12000:]}\n"
+        f"WINDOWS={focus[-6000:]}\n"
+        f"LOGCAT={logcat[-12000:]}"
+    )
 
 
 def exists(text=None, desc=None):
@@ -96,6 +109,19 @@ def screenshot(name):
     os.makedirs(DELIVERABLE, exist_ok=True)
     with open(os.path.join(DELIVERABLE, f"{name}.png"), "wb") as f:
         subprocess.run(["adb", "exec-out", "screencap", "-p"], stdout=f, check=True)
+
+
+def dismiss_emulator_overlays():
+    adb("shell", "input", "keyevent", "KEYCODE_WAKEUP", check=False)
+    adb("shell", "wm", "dismiss-keyguard", check=False)
+    adb("shell", "am", "broadcast", "-a", "android.intent.action.CLOSE_SYSTEM_DIALOGS", check=False)
+    time.sleep(0.5)
+    raw = dump_ui_raw().decode("utf-8", "replace")
+    if "Pixel Launcher" in raw and "responding" in raw:
+        # Same recovery used by the previously verified v89 emulator flow.
+        adb("shell", "input", "tap", "410", "1235", check=False)
+        time.sleep(1)
+    adb("shell", "am", "broadcast", "-a", "android.intent.action.CLOSE_SYSTEM_DIALOGS", check=False)
 
 
 def create_and_scan_audio():
@@ -137,8 +163,14 @@ def create_and_scan_audio():
 
 
 def launch_clean():
+    dismiss_emulator_overlays()
     adb("shell", "am", "force-stop", PKG, check=False)
     adb("shell", "am", "start", "-W", "-n", ACTIVITY)
+    time.sleep(2)
+    dismiss_emulator_overlays()
+    # Re-assert the activity after dismissing any boot-time launcher/system overlay.
+    adb("shell", "am", "start", "-W", "-n", ACTIVITY)
+    time.sleep(1)
     find_node(text="心动", timeout=15)
     if not adb("shell", "pidof", PKG, check=False, text=True).strip():
         raise AssertionError("App process is not alive")
@@ -159,7 +191,6 @@ def main():
     launch_clean()
     screenshot("home-before-import")
 
-    # Import into the app library.
     tap(text="音乐库")
     tap(desc="添加喜欢的音乐")
     find_node(text="选择手机音乐")
@@ -169,15 +200,12 @@ def main():
     find_node(text=TITLE, timeout=15)
     screenshot("library-after-import")
 
-    # Import alone must not create queue state.
     tap(text="首页")
     assert_queue_excludes_title("queue-after-import-empty")
 
-    # Relaunch must restore library but still must not restore/fill queue.
     launch_clean()
     assert_queue_excludes_title("queue-after-relaunch-empty")
 
-    # Explicit play is the only point where the selected song enters the queue.
     tap(text="音乐库")
     find_node(text=TITLE, timeout=15)
     tap(text=TITLE)
