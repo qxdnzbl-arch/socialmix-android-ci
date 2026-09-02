@@ -49,14 +49,14 @@ jobs:
         with:
           gradle-version: '8.11.1'
 
-      - name: Build APK and test APK
-        run: gradle --no-daemon :app:assembleDebug :app:assembleDebugAndroidTest
+      - name: Build APK
+        run: gradle --no-daemon :app:assembleDebug
 
       - name: Enable KVM
         run: |
           if [ -e /dev/kvm ]; then sudo chmod 666 /dev/kvm; fi
 
-      - name: Android 35 queue-isolation acceptance
+      - name: Android 35 real UI queue-isolation acceptance
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 35
@@ -69,13 +69,7 @@ jobs:
             adb install -r app/build/outputs/apk/debug/app-debug.apk
             adb shell pm clear com.immersive.music >/dev/null
             adb shell pm grant com.immersive.music android.permission.READ_MEDIA_AUDIO || true
-            gradle --no-daemon :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.immersive.music.Phase1AcceptanceTest
-            adb shell am force-stop com.immersive.music || true
-            adb shell am start -W -a android.intent.action.MAIN -c android.intent.category.LAUNCHER -n com.immersive.music/com.immersive.music.MainActivity >/dev/null
-            sleep 3
-            adb shell pidof com.immersive.music
-            mkdir -p deliverable
-            adb exec-out screencap -p > deliverable/home-v90.png
+            python ci/v90_android_ui_accept.py
 
       - name: Prepare deliverable
         if: success()
