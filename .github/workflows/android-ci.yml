@@ -66,7 +66,7 @@ jobs:
           disable-animations: false
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -no-boot-anim -camera-back none
           script: |
-            set -euo pipefail
+            set -eu
             mkdir -p deliverable
 
             adb install -r app/build/outputs/apk/debug/app-debug.apk
@@ -103,7 +103,6 @@ jobs:
             import subprocess
             import time
             import xml.etree.ElementTree as ET
-            from pathlib import Path
 
             TITLE = 'Queue Isolation Test'
 
@@ -161,7 +160,6 @@ jobs:
                 with open(f'deliverable/{name}.png', 'wb') as f:
                     subprocess.run(['adb', 'exec-out', 'screencap', '-p'], check=True, stdout=f)
 
-            # Import a real MediaStore song into the library.
             tap(text='音乐库')
             tap(desc='添加喜欢的音乐')
             find(text='选择手机音乐')
@@ -171,7 +169,6 @@ jobs:
             find(text=TITLE)
             shot('library-after-import')
 
-            # Core regression check: import alone must NOT create playback-queue state.
             tap(text='首页')
             tap(desc='播放列表')
             find(text='播放列表')
@@ -180,7 +177,6 @@ jobs:
             shot('queue-after-import-empty')
             back()
 
-            # Explicit play is the only point where the song enters the current queue.
             tap(text='音乐库')
             tap(text=TITLE)
             find(text='心动')
@@ -189,7 +185,6 @@ jobs:
             find(text=TITLE)
             shot('queue-after-explicit-play')
 
-            # Process must still be alive after the complete path.
             pid = run('adb', 'shell', 'pidof', 'com.immersive.music').stdout.decode().strip()
             if not pid:
                 raise AssertionError('App process died during acceptance flow')
