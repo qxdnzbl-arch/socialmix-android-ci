@@ -12,7 +12,9 @@ PROFILES = [
     ("compact-320dp", "720x1280", 360),
     ("common-360dp", "720x1600", 320),
     ("standard-411dp", "1080x2400", 420),
-    ("breakpoint-432dp", "1080x2100", 400),
+    ("continuity-412dp", "1030x2200", 400),
+    ("continuity-430dp", "1075x2200", 400),
+    ("continuity-432dp", "1080x2100", 400),
     ("wide-480dp", "1080x2160", 360),
     ("wide-549dp", "1440x2560", 420),
     ("large-600dp", "1440x2400", 384),
@@ -116,7 +118,6 @@ def assert_home_geometry(name, density):
     halo = find_node(desc="黑胶外框")
     arm = find_tonearm()
 
-    # The page title and vinyl remain mathematically centered, independent of device width.
     for node, label in ((title, "title"), (halo, "vinyl")):
         delta = abs(center_x(node) - width / 2.0)
         if delta > max(3.0, width * 0.008):
@@ -127,7 +128,6 @@ def assert_home_geometry(name, density):
     halo_w = hx2 - hx1
     ratio = halo_w / width
 
-    # Phones from compact through 600dp must keep a deliberate, substantial vinyl scale.
     if not (0.58 <= ratio <= 0.84):
         raise AssertionError(f"{name} vinyl scale looks device-dependent: ratio={ratio:.3f}")
 
@@ -135,9 +135,9 @@ def assert_home_geometry(name, density):
     if dp_width > 430 and ratio < 0.61:
         raise AssertionError(f"{name} wide-phone vinyl is too small: dp={dp_width:.1f}, ratio={ratio:.3f}")
 
-    # Tone arm must stay attached to the vinyl visual object, not the phone's right edge.
     horizontal_offset = abs(center_x(arm) - center_x(halo))
-    if horizontal_offset > halo_w * 0.48:
+    arm_offset_ratio = horizontal_offset / halo_w
+    if arm_offset_ratio > 0.48:
         raise AssertionError(
             f"{name} tone arm pulled away horizontally: offset={horizontal_offset:.1f}, halo={halo_w}"
         )
@@ -152,15 +152,33 @@ def assert_home_geometry(name, density):
         raise AssertionError(f"{name} tone arm leaves screen: arm={bounds(arm)}, width={width}")
 
     screenshot(name)
+    return dp_width, ratio, arm_offset_ratio
 
 
 def main():
     os.makedirs(DELIVERABLE, exist_ok=True)
+    continuity = []
     try:
         for name, size, density in PROFILES:
             set_profile(size, density)
             launch_home()
-            assert_home_geometry(name, density)
+            result = assert_home_geometry(name, density)
+            if 405 <= result[0] <= 435:
+                continuity.append((name, *result))
+
+        # Around the old failure zone there must be no breakpoint jump in vinyl scale
+        # or tone-arm attachment. Adjacent devices should look like the same app.
+        continuity.sort(key=lambda item: item[1])
+        for prev, curr in zip(continuity, continuity[1:]):
+            if abs(curr[2] - prev[2]) > 0.025:
+                raise AssertionError(
+                    f"vinyl scale jumps between {prev[0]} and {curr[0]}: {prev[2]:.3f}->{curr[2]:.3f}"
+                )
+            if abs(curr[3] - prev[3]) > 0.04:
+                raise AssertionError(
+                    f"tone-arm anchor jumps between {prev[0]} and {curr[0]}: {prev[3]:.3f}->{curr[3]:.3f}"
+                )
+
         print("V95_RESPONSIVE_PLAYER=PASS")
     finally:
         adb("shell", "wm", "size", "reset", check=False)
