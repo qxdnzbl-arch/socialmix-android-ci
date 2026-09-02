@@ -8,19 +8,18 @@ import android.os.Build
 import android.provider.MediaStore
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
-import androidx.compose.ui.test.junit4.createEmptyComposeRule
+import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
-import androidx.test.core.app.ActivityScenario
 import androidx.test.platform.app.InstrumentationRegistry
 import org.junit.Rule
 import org.junit.Test
 
 class Phase1AcceptanceTest {
     @get:Rule
-    val composeRule = createEmptyComposeRule()
+    val composeRule = createAndroidComposeRule<MainActivity>()
 
     private val testTitle = "Queue Isolation Test"
 
@@ -84,48 +83,46 @@ class Phase1AcceptanceTest {
 
     @Test
     fun libraryImport_doesNotCreateQueue_untilSongIsPlayed() {
-        ActivityScenario.launch(MainActivity::class.java).use { scenario ->
-            waitForText("心动")
+        composeRule.waitForIdle()
 
-            composeRule.onAllNodesWithText("First Light").assertCountEquals(0)
-            composeRule.onAllNodesWithText("Blue Hour").assertCountEquals(0)
-            composeRule.onAllNodesWithText("Night Bloom").assertCountEquals(0)
+        composeRule.onAllNodesWithText("First Light").assertCountEquals(0)
+        composeRule.onAllNodesWithText("Blue Hour").assertCountEquals(0)
+        composeRule.onAllNodesWithText("Night Bloom").assertCountEquals(0)
 
-            composeRule.onNodeWithContentDescription("播放列表").performClick()
-            composeRule.onNodeWithText("播放列表").assertIsDisplayed()
-            composeRule.onAllNodesWithText(testTitle).assertCountEquals(0)
-            scenario.onActivity { it.onBackPressedDispatcher.onBackPressed() }
+        composeRule.onNodeWithContentDescription("播放列表").performClick()
+        composeRule.onNodeWithText("播放列表").assertIsDisplayed()
+        composeRule.onAllNodesWithText(testTitle).assertCountEquals(0)
+        composeRule.activityRule.scenario.onActivity { it.onBackPressedDispatcher.onBackPressed() }
 
-            seedPhoneAudio()
-            composeRule.onNodeWithText("音乐库").performClick()
-            composeRule.onNodeWithContentDescription("添加喜欢的音乐").assertIsDisplayed().performClick()
-            waitForText(testTitle)
-            composeRule.onNodeWithText(testTitle).performClick()
-            composeRule.waitUntil(timeoutMillis = 8_000) {
-                runCatching {
-                    composeRule.onNodeWithContentDescription("已添加:$testTitle").assertIsDisplayed()
-                    true
-                }.getOrDefault(false)
-            }
-            scenario.onActivity { it.onBackPressedDispatcher.onBackPressed() }
-            waitForText(testTitle)
-
-            // The song exists in the library, but import alone did not create queue state.
-            composeRule.onNodeWithText("首页").performClick()
-            composeRule.onNodeWithContentDescription("播放列表").performClick()
-            composeRule.onNodeWithText("播放列表").assertIsDisplayed()
-            composeRule.onAllNodesWithText(testTitle).assertCountEquals(0)
-            scenario.onActivity { it.onBackPressedDispatcher.onBackPressed() }
-
-            // Explicitly playing it is the moment it enters the playback queue.
-            composeRule.onNodeWithText("音乐库").performClick()
-            waitForText(testTitle)
-            composeRule.onNodeWithText(testTitle).performClick()
-            waitForText(testTitle)
-            composeRule.onNodeWithContentDescription("播放列表").performClick()
-            composeRule.onNodeWithText("播放列表").assertIsDisplayed()
-            composeRule.onNodeWithText(testTitle).assertIsDisplayed()
+        seedPhoneAudio()
+        composeRule.onNodeWithText("音乐库").performClick()
+        composeRule.onNodeWithContentDescription("添加喜欢的音乐").assertIsDisplayed().performClick()
+        waitForText(testTitle)
+        composeRule.onNodeWithText(testTitle).performClick()
+        composeRule.waitUntil(timeoutMillis = 8_000) {
+            runCatching {
+                composeRule.onNodeWithContentDescription("已添加:$testTitle").assertIsDisplayed()
+                true
+            }.getOrDefault(false)
         }
+        composeRule.activityRule.scenario.onActivity { it.onBackPressedDispatcher.onBackPressed() }
+        waitForText(testTitle)
+
+        // Import only: the library has the song while the playback queue stays empty.
+        composeRule.onNodeWithText("首页").performClick()
+        composeRule.onNodeWithContentDescription("播放列表").performClick()
+        composeRule.onNodeWithText("播放列表").assertIsDisplayed()
+        composeRule.onAllNodesWithText(testTitle).assertCountEquals(0)
+        composeRule.activityRule.scenario.onActivity { it.onBackPressedDispatcher.onBackPressed() }
+
+        // Explicit play is the only action that adds it to the queue.
+        composeRule.onNodeWithText("音乐库").performClick()
+        waitForText(testTitle)
+        composeRule.onNodeWithText(testTitle).performClick()
+        waitForText("心动")
+        composeRule.onNodeWithContentDescription("播放列表").performClick()
+        composeRule.onNodeWithText("播放列表").assertIsDisplayed()
+        composeRule.onNodeWithText(testTitle).assertIsDisplayed()
     }
 }
 ''')
