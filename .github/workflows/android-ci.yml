@@ -39,6 +39,7 @@ jobs:
           python ci/user_requested_v90_fix.py
           python ci/user_requested_v91.py
           python ci/user_requested_v92.py
+          python ci/user_requested_v93.py
 
       - name: Set up Java 17
         uses: actions/setup-java@v5
@@ -51,8 +52,8 @@ jobs:
         with:
           gradle-version: '8.11.1'
 
-      - name: Build APK
-        run: gradle --no-daemon :app:assembleDebug
+      - name: Build APK and fixture test APK
+        run: gradle --no-daemon :app:assembleDebug :app:assembleDebugAndroidTest
 
       - name: Enable KVM
         run: |
@@ -69,23 +70,25 @@ jobs:
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -no-boot-anim -camera-back none
           script: |
             adb install -r app/build/outputs/apk/debug/app-debug.apk
+            adb install -r app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
             adb shell pm clear com.immersive.music >/dev/null
             adb shell pm grant com.immersive.music android.permission.READ_MEDIA_AUDIO || true
-            python ci/v91_android_ui_accept.py
+            adb shell am instrument -w -e class com.immersive.music.MediaFixtureTest com.immersive.music.test/androidx.test.runner.AndroidJUnitRunner
+            python ci/v93_android_ui_accept.py
 
       - name: Prepare deliverable
         if: success()
         run: |
           mkdir -p deliverable
-          cp app/build/outputs/apk/debug/app-debug.apk deliverable/Immersive-Music-v92.apk
+          cp app/build/outputs/apk/debug/app-debug.apk deliverable/Immersive-Music-v93.apk
           cp SPEC-music-phase1.md deliverable/SPEC-music-phase1.md
-          sha256sum deliverable/Immersive-Music-v92.apk | tee deliverable/SHA256.txt
+          sha256sum deliverable/Immersive-Music-v93.apk | tee deliverable/SHA256.txt
 
       - name: Upload verified deliverable
         if: success()
         uses: actions/upload-artifact@v4
         with:
-          name: Immersive-Music-v92-Verified
+          name: Immersive-Music-v93-Verified
           path: deliverable/
           if-no-files-found: error
           retention-days: 14
