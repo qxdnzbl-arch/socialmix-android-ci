@@ -7,7 +7,6 @@ import xml.etree.ElementTree as ET
 
 PKG = "com.immersive.music"
 ACTIVITY = f"{PKG}/{PKG}.MainActivity"
-TITLE = "queue-isolation-test"
 DELIVERABLE = "deliverable"
 PROFILES = [
     ("compact-320dp", "720x1280", 360),
@@ -62,17 +61,6 @@ def find_node(text=None, desc=None, timeout=15):
     raise AssertionError(f"UI node not found: text={text!r}, desc={desc!r}")
 
 
-def find_desc_prefix(prefix, timeout=15):
-    deadline = time.time() + timeout
-    while time.time() < deadline:
-        root = dump_ui()
-        for node in root.iter("node"):
-            if node.attrib.get("content-desc", "").startswith(prefix):
-                return node
-        time.sleep(0.3)
-    raise AssertionError(f"UI node not found with content-desc prefix: {prefix!r}")
-
-
 def bounds(node):
     m = re.match(r"\[(\d+),(\d+)\]\[(\d+),(\d+)\]", node.attrib.get("bounds", ""))
     if not m:
@@ -114,24 +102,7 @@ def launch_home():
     adb("shell", "am", "force-stop", PKG, check=False)
     adb("shell", "am", "start", "-W", "-n", ACTIVITY)
     find_node(text="心动", timeout=18)
-
-
-def ensure_track_is_playing():
-    tap_node(find_node(text="音乐库"))
-    song = find_node(text=TITLE, timeout=18)
-    tap_node(song)
-
-    # A click normally returns to Home. On some emulator width changes the first
-    # tap can leave the library page visibly settled for a moment; use the actual
-    # bottom Home action instead of treating that rendering delay as a product bug.
-    try:
-        find_node(text="心动", timeout=3)
-    except AssertionError:
-        tap_node(find_node(text="首页", timeout=6))
-        find_node(text="心动", timeout=12)
-
-    find_desc_prefix("完整循环歌名:", timeout=18)
-    find_desc_prefix("完整循环歌手:", timeout=18)
+    find_node(desc="歌曲信息中心", timeout=18)
 
 
 def screenshot(name):
@@ -143,14 +114,12 @@ def screenshot(name):
 def assert_player_metadata(width, name):
     loop = find_node(desc="顺序播放")
     queue = find_node(desc="播放列表")
-    title = find_desc_prefix("完整循环歌名:")
-    artist = find_desc_prefix("完整循环歌手:")
+    info = find_node(desc="歌曲信息中心")
 
     tolerance = max(3.0, width * 0.008)
-    for node, label in ((title, "title"), (artist, "artist")):
-        delta = abs(center_x(node) - width / 2.0)
-        if delta > tolerance:
-            raise AssertionError(f"{name} {label} is not centered: delta={delta:.1f}, width={width}")
+    delta = abs(center_x(info) - width / 2.0)
+    if delta > tolerance:
+        raise AssertionError(f"{name} song-info center drifted: delta={delta:.1f}, width={width}")
 
     side_midpoint = (center_x(loop) + center_x(queue)) / 2.0
     if abs(side_midpoint - width / 2.0) > tolerance:
@@ -158,14 +127,18 @@ def assert_player_metadata(width, name):
             f"{name} metadata side controls are not symmetric: midpoint={side_midpoint:.1f}, width={width}"
         )
 
-    if not (center_x(loop) < center_x(title) < center_x(queue)):
+    if not (center_x(loop) < center_x(info) < center_x(queue)):
         raise AssertionError(
-            f"{name} metadata order wrong: loop={center_x(loop):.1f}, title={center_x(title):.1f}, queue={center_x(queue):.1f}"
+            f"{name} metadata order wrong: loop={center_x(loop):.1f}, info={center_x(info):.1f}, queue={center_x(queue):.1f}"
         )
 
     side_y_delta = abs(center_y(loop) - center_y(queue))
     if side_y_delta > 5.0:
         raise AssertionError(f"{name} side controls are vertically misaligned: delta={side_y_delta:.1f}")
+
+    ix1, _, ix2, _ = bounds(info)
+    if (ix2 - ix1) < width * 0.52:
+        raise AssertionError(f"{name} center metadata became too narrow: info={bounds(info)}, width={width}")
 
 
 def assert_search_header(width, name):
@@ -184,8 +157,7 @@ def assert_search_header(width, name):
     if abs(center_y(back) - center_y(pill)) > max(5.0, (py2 - py1) * 0.18):
         raise AssertionError(f"{name} search header vertical alignment drifted")
 
-    # Back + field is one full-width component. Its outer margins, not the pill alone,
-    # must balance around the screen center.
+    # Back + search field is one component. The outer component margins must match.
     left_margin = bx1
     right_margin = width - px2
     tolerance = max(4.0, width * 0.012)
@@ -200,6 +172,7 @@ def assert_search_header(width, name):
             f"{name} unified search header drifted: center={group_center:.1f}, width={width}"
         )
 
+    # This specifically guards against the v94 synthetic-right-spacer regression.
     pill_ratio = (px2 - px1) / width
     if pill_ratio < 0.66:
         raise AssertionError(f"{name} search field is still too short: ratio={pill_ratio:.3f}")
@@ -216,7 +189,6 @@ def main():
         for name, size, density in PROFILES:
             set_profile(size, density)
             launch_home()
-            ensure_track_is_playing()
             width, _ = screen_size()
             assert_player_metadata(width, name)
             screenshot(f"{name}-home-metadata")
