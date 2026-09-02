@@ -80,8 +80,21 @@ def center_y(node):
 
 
 def root_size(root):
-    x1, y1, x2, y2 = bounds(root)
-    return x2 - x1, y2 - y1
+    measured = []
+    for node in root.iter("node"):
+        raw = node.attrib.get("bounds", "")
+        m = re.match(r"\[(\d+),(\d+)\]\[(\d+),(\d+)\]", raw)
+        if not m:
+            continue
+        x1, y1, x2, y2 = map(int, m.groups())
+        width = x2 - x1
+        height = y2 - y1
+        if width > 0 and height > 0:
+            measured.append((width * height, width, height))
+    if not measured:
+        raise AssertionError("UI hierarchy contains no measurable screen node")
+    _, width, height = max(measured)
+    return width, height
 
 
 def tap_node(node):
