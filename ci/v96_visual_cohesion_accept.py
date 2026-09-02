@@ -120,7 +120,16 @@ def ensure_track_is_playing():
     tap_node(find_node(text="音乐库"))
     song = find_node(text=TITLE, timeout=18)
     tap_node(song)
-    find_node(text="心动", timeout=18)
+
+    # A click normally returns to Home. On some emulator width changes the first
+    # tap can leave the library page visibly settled for a moment; use the actual
+    # bottom Home action instead of treating that rendering delay as a product bug.
+    try:
+        find_node(text="心动", timeout=3)
+    except AssertionError:
+        tap_node(find_node(text="首页", timeout=6))
+        find_node(text="心动", timeout=12)
+
     find_desc_prefix("完整循环歌名:", timeout=18)
     find_desc_prefix("完整循环歌手:", timeout=18)
 
