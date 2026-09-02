@@ -11,6 +11,7 @@ DELIVERABLE = "deliverable"
 PROFILES = [
     ("compact-320dp", "720x1280", 360),
     ("common-360dp", "720x1600", 320),
+    ("userlike-393dp", "1080x2400", 440),
     ("standard-411dp", "1080x2400", 420),
     ("continuity-432dp", "1080x2100", 400),
     ("wide-480dp", "1080x2160", 360),
@@ -107,7 +108,7 @@ def launch_home():
 
 def screenshot(name):
     os.makedirs(DELIVERABLE, exist_ok=True)
-    with open(os.path.join(DELIVERABLE, f"v96-{name}.png"), "wb") as f:
+    with open(os.path.join(DELIVERABLE, f"v97-{name}.png"), "wb") as f:
         subprocess.run(["adb", "exec-out", "screencap", "-p"], stdout=f, check=True)
 
 
@@ -141,7 +142,7 @@ def assert_player_metadata(width, name):
         raise AssertionError(f"{name} center metadata became too narrow: info={bounds(info)}, width={width}")
 
 
-def assert_search_header(width, name):
+def assert_search_header(width, name, density):
     back = find_node(desc="返回")
     pill = find_node(desc="搜索栏")
     field = find_node(desc="搜索输入框")
@@ -157,28 +158,32 @@ def assert_search_header(width, name):
     if abs(center_y(back) - center_y(pill)) > max(5.0, (py2 - py1) * 0.18):
         raise AssertionError(f"{name} search header vertical alignment drifted")
 
-    # Back + search field is one component. The outer component margins must match.
-    left_margin = bx1
+    # The user judges the visible arrow + visible pill as one object. The 22dp arrow
+    # is centered in a 44dp touch target, so the visible left edge is 11dp inside
+    # the target. Compare that optical edge with the pill's visible right margin.
+    icon_px = 22.0 * density / 160.0
+    back_w = bx2 - bx1
+    visible_arrow_left = bx1 + max(0.0, (back_w - icon_px) / 2.0)
     right_margin = width - px2
-    tolerance = max(4.0, width * 0.012)
-    if abs(left_margin - right_margin) > tolerance:
+    optical_tolerance = max(3.0, width * 0.007)
+    if abs(visible_arrow_left - right_margin) > optical_tolerance:
         raise AssertionError(
-            f"{name} unified search header margins differ: left={left_margin}, right={right_margin}, width={width}"
+            f"{name} visible search group not centered: arrow_left={visible_arrow_left:.1f}, "
+            f"right_margin={right_margin:.1f}, width={width}"
         )
 
-    group_center = (bx1 + px2) / 2.0
-    if abs(group_center - width / 2.0) > tolerance:
+    visible_group_center = (visible_arrow_left + px2) / 2.0
+    if abs(visible_group_center - width / 2.0) > optical_tolerance:
         raise AssertionError(
-            f"{name} unified search header drifted: center={group_center:.1f}, width={width}"
+            f"{name} visible search group center drifted: center={visible_group_center:.1f}, width={width}"
         )
 
-    # This specifically guards against the v94 synthetic-right-spacer regression.
+    # Guard against the old short-field regression.
     pill_ratio = (px2 - px1) / width
-    if pill_ratio < 0.66:
+    if pill_ratio < 0.68:
         raise AssertionError(f"{name} search field is still too short: ratio={pill_ratio:.3f}")
 
     gap = px1 - bx2
-    back_w = bx2 - bx1
     if gap < 0 or gap > back_w * 0.35:
         raise AssertionError(f"{name} back/search relationship broke: gap={gap}, back_w={back_w}")
 
@@ -196,10 +201,10 @@ def main():
             tap_node(find_node(desc="搜索"))
             find_node(desc="搜索栏", timeout=18)
             width, _ = screen_size()
-            assert_search_header(width, name)
+            assert_search_header(width, name, density)
             screenshot(f"{name}-search-header")
 
-        print("V96_VISUAL_COHESION=PASS")
+        print("V97_VISUAL_COHESION=PASS")
     finally:
         adb("shell", "wm", "size", "reset", check=False)
         adb("shell", "wm", "density", "reset", check=False)
