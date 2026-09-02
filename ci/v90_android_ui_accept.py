@@ -118,10 +118,23 @@ def dismiss_emulator_overlays():
     time.sleep(0.5)
     raw = dump_ui_raw().decode("utf-8", "replace")
     if "Pixel Launcher" in raw and "responding" in raw:
-        # Same recovery used by the previously verified v89 emulator flow.
         adb("shell", "input", "tap", "410", "1235", check=False)
         time.sleep(1)
     adb("shell", "am", "broadcast", "-a", "android.intent.action.CLOSE_SYSTEM_DIALOGS", check=False)
+
+
+def media_rows():
+    return adb(
+        "shell",
+        "content",
+        "query",
+        "--uri",
+        "content://media/external/audio/media",
+        "--projection",
+        "_id:title:artist:is_music:_data",
+        check=False,
+        text=True,
+    )
 
 
 def create_and_scan_audio():
@@ -143,23 +156,68 @@ def create_and_scan_audio():
         "-d",
         "file:///sdcard/Music/Queue%20Isolation%20Test.wav",
     )
-    deadline = time.time() + 12
+
+    deadline = time.time() + 15
+    media_id = None
     while time.time() < deadline:
-        out = adb(
+        out = media_rows()
+        for line in out.splitlines():
+            if TITLE in line or remote in line:
+                match = re.search(r"_id=(\d+)", line)
+                if match:
+                    media_id = match.group(1)
+                    break
+        if media_id:
+            break
+        time.sleep(1)
+    if not media_id:
+        raise AssertionError(f"Test audio did not enter MediaStore. rows={media_rows()}")
+
+    # MediaScanner may classify a short synthetic WAV as is_music=0. The app
+    # intentionally queries only MediaStore rows where IS_MUSIC != 0, so make the
+    # acceptance fixture explicitly represent a normal music track.
+    item_uri = f"content://media/external/audio/media/{media_id}"
+    update = adb(
+        "shell",
+        "content",
+        "update",
+        "--uri",
+        item_uri,
+        "--bind",
+        "is_music:i:1",
+        "--bind",
+        f"title:s:{TITLE}",
+        "--bind",
+        "artist:s:QA",
+        check=False,
+        text=True,
+    )
+    if "Updated 0 rows" in update:
+        adb(
             "shell",
             "content",
-            "query",
+            "update",
             "--uri",
             "content://media/external/audio/media",
-            "--projection",
-            "_id:title:is_music",
+            "--bind",
+            "is_music:i:1",
+            "--bind",
+            f"title:s:{TITLE}",
+            "--bind",
+            "artist:s:QA",
+            "--where",
+            f"_id={media_id}",
             check=False,
-            text=True,
         )
-        if TITLE in out:
+
+    deadline = time.time() + 10
+    while time.time() < deadline:
+        out = media_rows()
+        matching = [line for line in out.splitlines() if f"_id={media_id}" in line]
+        if matching and TITLE in matching[0] and "is_music=1" in matching[0]:
             return
-        time.sleep(1)
-    raise AssertionError("Test audio did not enter MediaStore")
+        time.sleep(0.5)
+    raise AssertionError(f"MediaStore fixture is not visible as music. rows={media_rows()}")
 
 
 def launch_clean():
@@ -168,7 +226,6 @@ def launch_clean():
     adb("shell", "am", "start", "-W", "-n", ACTIVITY)
     time.sleep(2)
     dismiss_emulator_overlays()
-    # Re-assert the activity after dismissing any boot-time launcher/system overlay.
     adb("shell", "am", "start", "-W", "-n", ACTIVITY)
     time.sleep(1)
     find_node(text="心动", timeout=15)
