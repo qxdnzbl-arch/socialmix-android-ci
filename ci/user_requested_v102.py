@@ -13,12 +13,11 @@ def sub(pattern: str, repl: str, name: str, count: int = 1) -> None:
     s = s2
 
 
-# 1) Move the complete vinyl + tone-arm stage down as one object. The user's
-# side-by-side screenshots show the current center around y=591/1536 while the
-# supplied NetEase reference is around y=637/1536 with essentially the same disc
-# diameter. 0.060 * disc diameter reproduces that ~45 px shift on the reference
-# phone class and scales continuously on other phone widths. Metadata/control
-# layout is intentionally untouched.
+# 1) Move the complete vinyl + tone-arm stage down as one object. In the user's
+# same-phone comparison, the current halo top/center is about 45 px above the
+# supplied NetEase reference while the disc diameter is essentially unchanged.
+# That is ~8.2% of the visible disc diameter, so scale the correction from discSize
+# instead of hard-coding a device pixel coordinate. Metadata/control layout stays put.
 old = '''                Box(
                     Modifier.size(
                         width = playerStageWidth,
@@ -32,17 +31,15 @@ new = '''                Box(
                             width = playerStageWidth,
                             height = discSize * 1.13f,
                         )
-                        .offset(y = discSize * .060f),
+                        .offset(y = discSize * .082f),
                     contentAlignment = Alignment.Center,
                 ) {'''
 if old not in s:
     raise SystemExit('v95 player-stage anchor missing; refusing to guess vertical layout')
 s = s.replace(old, new, 1)
 
-# The existing compact layout has much less vertical air above the record. Preserve
-# the normal-phone NetEase pivot/record relationship exactly, but reduce only the
-# compact-phone lift so the pivot cannot overlap the centered "心动" title. This
-# reuses the app's existing compact condition; no device-specific pixel coordinate.
+# Compact phones have less air above the record. Preserve the same relative object
+# while reducing only the compact lift so the pivot cannot overlap the centered title.
 old = '''                                x = discSize * .223f,
                                 y = -(discSize * .231f),
 '''
@@ -54,22 +51,22 @@ if old not in s:
 s = s.replace(old, new, 1)
 
 
-# 2) Queue/list glyph. Match the supplied NetEase proportions instead of the v101
-# approximation: 40x37 visible box, larger 11x12 play triangle, 22x3 short first
-# line, two 40x3 full lines. It stays inside the same 24dp visual slot / 44dp hit
-# target as the left playback-mode control, so the app keeps its own scale system.
+# 2) Queue/list glyph. Match the user's NetEase reference proportions on the same
+# phone: about 40x38 visible px, 11x13 play triangle, a 22x3 short first line and
+# two 40x3 full lines. Keep the app's existing 24dp visual slot / 44dp hit target,
+# so it remains balanced with the left playback-mode icon.
 queue_fn = r'''@Composable
 private fun NetEaseQueueGlyph(modifier: Modifier = Modifier) {
     Canvas(modifier) {
         val c = Color.White.copy(alpha = .68f)
         val vw = 17.2.dp.toPx()
-        val vh = 17.1.dp.toPx()
+        val vh = 16.4.dp.toPx()
         val left = (size.width - vw) / 2f
         val top = (size.height - vh) / 2f
 
         fun px(x: Float) = left + vw * (x / 39f)
         fun py(y: Float) = top + vh * (y / 36f)
-        val line = 1.08.dp.toPx()
+        val line = 1.28.dp.toPx()
 
         val triangle = androidx.compose.ui.graphics.Path().apply {
             moveTo(px(0f), py(0f))
@@ -110,11 +107,9 @@ sub(
 )
 
 
-# 3) Tone arm. Remove the v101 pixel-boundary trace that looked like a cut-out.
-# Rebuild it as a clean native vector: one smooth Bezier tube, one pivot assembly,
-# one cartridge body. Paused/playing are the exact same rigid object rotating around
-# the same pivot; only rotation changes. Geometry follows the supplied NetEase
-# 260x190 reference bbox, but remains scaled by this app's responsive disc size.
+# 3) Tone arm. Replace the v101 pixel-boundary trace (which looked like a cut-out)
+# with a clean native vector while preserving the approved NetEase geometry.
+# Paused/playing are one rigid object rotating around one fixed pivot; no morphing.
 tonearm_fn = r'''@Composable
 private fun ToneArm(onDisc: Boolean, modifier: Modifier = Modifier) {
     val angle by animateFloatAsState(
@@ -138,15 +133,15 @@ private fun ToneArm(onDisc: Boolean, modifier: Modifier = Modifier) {
 
         val pivot = Offset(px(14f), py(14f))
 
-        // Soft mounting shadow behind the bright pivot ring.
+        // Soft dark mount behind the bright pivot ring.
         drawCircle(
             Color.Black.copy(alpha = .15f),
             radius = px(20f),
             center = pivot,
         )
 
-        // Smooth arm centerline from the NetEase paused reference. A cubic path
-        // avoids the jagged silhouette edges from the previous raster contour.
+        // Smooth arm tube. These Bezier control points follow the supplied NetEase
+        // paused-state centerline; Compose anti-aliasing keeps the edges clean.
         val arm = androidx.compose.ui.graphics.Path().apply {
             moveTo(px(14f), py(14f))
             cubicTo(
@@ -163,15 +158,15 @@ private fun ToneArm(onDisc: Boolean, modifier: Modifier = Modifier) {
         drawPath(
             arm,
             Color.Black.copy(alpha = .10f),
-            style = Stroke(width = px(12.2f), cap = StrokeCap.Round),
+            style = Stroke(width = px(12.0f), cap = StrokeCap.Round),
         )
         drawPath(
             arm,
             Color(0xFFF7F7F3),
-            style = Stroke(width = px(9.8f), cap = StrokeCap.Round),
+            style = Stroke(width = px(9.6f), cap = StrokeCap.Round),
         )
 
-        // Small dark coupling band visible immediately before the cartridge.
+        // Dark neck detail immediately before the cartridge.
         drawLine(
             Color(0xFF555653).copy(alpha = .86f),
             Offset(px(188f), py(155f)),
@@ -180,8 +175,7 @@ private fun ToneArm(onDisc: Boolean, modifier: Modifier = Modifier) {
             cap = StrokeCap.Round,
         )
 
-        // Clean cartridge/head shell, shaped from the reference but drawn as a
-        // smooth vector rather than a screenshot contour.
+        // Smooth cartridge/head shell instead of a traced screenshot boundary.
         val cartridge = androidx.compose.ui.graphics.Path().apply {
             moveTo(px(199f), py(153f))
             cubicTo(px(201f), py(151f), px(204f), py(151f), px(207f), py(152f))
@@ -195,7 +189,6 @@ private fun ToneArm(onDisc: Boolean, modifier: Modifier = Modifier) {
         }
         drawPath(cartridge, Color(0xFFF7F7F3))
 
-        // Cartridge slots/details from the NetEase reference.
         val detail = Color(0xFFB6B7B3).copy(alpha = .92f)
         drawLine(
             detail,
@@ -212,7 +205,7 @@ private fun ToneArm(onDisc: Boolean, modifier: Modifier = Modifier) {
             cap = StrokeCap.Round,
         )
 
-        // Pivot ring: bright annulus with a muted center, matching the reference.
+        // NetEase-style pivot: bright ring, muted center, soft dark mount.
         drawCircle(Color(0xFFF7F7F3), radius = px(14.5f), center = pivot)
         drawCircle(Color(0xFFB8BAB6), radius = px(6.2f), center = pivot)
     }
