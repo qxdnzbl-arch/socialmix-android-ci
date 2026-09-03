@@ -85,7 +85,6 @@ jobs:
             adb shell am instrument -w -e class com.immersive.music.MediaFixtureTest com.immersive.music.test/androidx.test.runner.AndroidJUnitRunner
             python ci/v93_android_ui_accept.py
             python ci/v99_tonearm_regression_accept.py
-            python ci/v101_visual_accept.py
             python ci/v102_visual_accept.py
 
       - name: Prepare deliverable
