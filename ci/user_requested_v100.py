@@ -3,11 +3,9 @@ from pathlib import Path
 path = Path('app/src/main/java/com/immersive/music/MusicUi.kt')
 text = path.read_text()
 
-# v99 restores the exact approved tone-arm placement on <=411dp phones. On very
-# wide phones the rotated drawing can touch the physical right edge even though its
-# layout box is technically on-screen. Add only a small CONTINUOUS extra end inset
-# after 411dp, so the approved phone geometry is unchanged and wider devices gain
-# enough optical breathing room without a breakpoint jump.
+# Keep the user's restored tone-arm relation unchanged on normal phones. On wider
+# phones, add only a small continuous end inset so the rotated stylus never touches
+# the physical edge. No breakpoint jump and no vertical repositioning.
 old = '''        val discSize = if (maxWidth <= 411.dp) {
             standardDisc
         } else {
@@ -28,9 +26,11 @@ if old not in text:
 text = text.replace(old, new, 1)
 
 old = '''                        .align(Alignment.TopEnd)
+                        .offset(y = -(discSize * .177f))
                         .padding(top = 9.dp, end = 2.dp),
 '''
 new = '''                        .align(Alignment.TopEnd)
+                        .offset(y = -(discSize * .177f))
                         .padding(top = 9.dp, end = toneArmEndInset),
 '''
 if old not in text:
