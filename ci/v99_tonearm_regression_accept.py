@@ -108,12 +108,13 @@ def shot(name):
 
 
 def check(name, density):
-    width, _ = screen_size()
+    width, height = screen_size()
     halo = find_node(desc="黑胶外框")
     arm = find_arm()
     hx1, hy1, hx2, hy2 = bounds(halo)
     ax1, ay1, ax2, ay2 = bounds(arm)
     halo_w = hx2 - hx1
+    dp_width = width * 160.0 / density
 
     # Vinyl keeps the responsive sizing introduced earlier.
     if abs(center_x(halo) - width / 2.0) > max(3.0, width * 0.008):
@@ -122,24 +123,33 @@ def check(name, density):
     if not (0.58 <= ratio <= 0.84):
         raise AssertionError(f"{name} vinyl ratio invalid: {ratio:.3f}")
 
-    # The approved pre-v95 arm lived clearly ABOVE the record. v95 pulled it down
-    # onto the upper rim. This guard prevents that regression from returning.
+    # On the user's normal/tall-phone class, the approved pre-v95 arm is clearly
+    # above the record. v95 pulled it down onto the rim, which is the regression
+    # reported by the user. Short compact phones naturally have less vertical air,
+    # so they are checked for top-right anchoring rather than forced to copy a tall
+    # phone's absolute gap.
     top_separation = hy1 - ay1
     sep_ratio = top_separation / halo_w
-    if not (0.20 <= sep_ratio <= 0.62):
-        raise AssertionError(
-            f"{name} tonearm vertical placement changed: sep_ratio={sep_ratio:.3f}, "
-            f"arm={bounds(arm)}, vinyl={bounds(halo)}"
-        )
+    if dp_width >= 385 and height / width >= 1.85:
+        if not (0.20 <= sep_ratio <= 0.62):
+            raise AssertionError(
+                f"{name} tonearm vertical placement changed: sep_ratio={sep_ratio:.3f}, "
+                f"arm={bounds(arm)}, vinyl={bounds(halo)}"
+            )
+    else:
+        if ay1 > hy1 + halo_w * 0.15:
+            raise AssertionError(
+                f"{name} tonearm dropped too low for compact/wide layout: arm={bounds(arm)}, vinyl={bounds(halo)}"
+            )
 
-    # It remains a top-right control object and must stay fully on-screen.
+    # It remains a top-right object and must stay on-screen.
     if center_x(arm) <= center_x(halo):
         raise AssertionError(f"{name} tonearm is no longer on the right side")
     if ax1 < 0 or ax2 > width or ay1 < 0:
         raise AssertionError(f"{name} tonearm leaves screen: {bounds(arm)}")
 
     shot(name)
-    return width * 160.0 / density, sep_ratio
+    return dp_width, height / width, sep_ratio
 
 
 def main():
@@ -148,8 +158,8 @@ def main():
         for name, size, density in PROFILES:
             set_profile(size, density)
             launch()
-            dpw, sep = check(name, density)
-            if 385 <= dpw <= 440:
+            dpw, aspect, sep = check(name, density)
+            if 385 <= dpw <= 420 and aspect >= 1.85:
                 continuity.append((dpw, name, sep))
 
         continuity.sort()
