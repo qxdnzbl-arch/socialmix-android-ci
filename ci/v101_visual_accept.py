@@ -5,6 +5,7 @@ import subprocess
 import time
 import xml.etree.ElementTree as ET
 
+TITLE = "queue-isolation-test"
 PKG = "com.immersive.music"
 ACTIVITY = f"{PKG}/{PKG}.MainActivity"
 DELIVERABLE = "deliverable"
@@ -102,6 +103,7 @@ def launch():
 def tap(node):
     x, y = center(bounds(node))
     adb("shell", "input", "tap", str(int(x)), str(int(y)))
+    time.sleep(.7)
 
 
 def shot(name):
@@ -150,9 +152,12 @@ def check_profile(name, size, density):
 
     shot(f"v101-{name}-paused.png")
 
-    play = find_node(desc="播放", timeout=8)
-    tap(play)
-    find_node(desc="唱针:唱片上", timeout=8)
+    # Start the already imported fixture through the same explicit library-track flow
+    # used by the core acceptance. This guarantees a real playing state instead of
+    # assuming the home play button has an active queue after process restarts.
+    tap(find_node(text="音乐库", timeout=8))
+    tap(find_node(text=TITLE, timeout=12))
+    find_node(desc="唱针:唱片上", timeout=10)
     time.sleep(.7)
     shot(f"v101-{name}-playing.png")
 
