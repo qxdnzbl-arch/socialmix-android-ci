@@ -108,7 +108,7 @@ def launch_home():
 
 def screenshot(name):
     os.makedirs(DELIVERABLE, exist_ok=True)
-    with open(os.path.join(DELIVERABLE, f"v97-{name}.png"), "wb") as f:
+    with open(os.path.join(DELIVERABLE, f"v98-{name}.png"), "wb") as f:
         subprocess.run(["adb", "exec-out", "screencap", "-p"], stdout=f, check=True)
 
 
@@ -158,14 +158,15 @@ def assert_search_header(width, name, density):
     if abs(center_y(back) - center_y(pill)) > max(5.0, (py2 - py1) * 0.18):
         raise AssertionError(f"{name} search header vertical alignment drifted")
 
-    # The user judges the visible arrow + visible pill as one object. The 22dp arrow
-    # is centered in a 44dp touch target, so the visible left edge is 11dp inside
-    # the target. Compare that optical edge with the pill's visible right margin.
+    # Validate what is visibly drawn, not merely the 44dp clickable box or the
+    # 22dp Icon box. Material ArrowBack's vector path starts at x=4 in a 24-wide
+    # viewport, so the true visible left edge has one more 4/24 icon inset.
     icon_px = 22.0 * density / 160.0
     back_w = bx2 - bx1
-    visible_arrow_left = bx1 + max(0.0, (back_w - icon_px) / 2.0)
+    icon_box_left = bx1 + max(0.0, (back_w - icon_px) / 2.0)
+    visible_arrow_left = icon_box_left + icon_px * (4.0 / 24.0)
     right_margin = width - px2
-    optical_tolerance = max(3.0, width * 0.007)
+    optical_tolerance = max(2.0, density / 160.0)
     if abs(visible_arrow_left - right_margin) > optical_tolerance:
         raise AssertionError(
             f"{name} visible search group not centered: arrow_left={visible_arrow_left:.1f}, "
@@ -178,7 +179,6 @@ def assert_search_header(width, name, density):
             f"{name} visible search group center drifted: center={visible_group_center:.1f}, width={width}"
         )
 
-    # Guard against the old short-field regression.
     pill_ratio = (px2 - px1) / width
     if pill_ratio < 0.68:
         raise AssertionError(f"{name} search field is still too short: ratio={pill_ratio:.3f}")
@@ -204,7 +204,7 @@ def main():
             assert_search_header(width, name, density)
             screenshot(f"{name}-search-header")
 
-        print("V97_VISUAL_COHESION=PASS")
+        print("V98_VISUAL_COHESION=PASS")
     finally:
         adb("shell", "wm", "size", "reset", check=False)
         adb("shell", "wm", "density", "reset", check=False)
