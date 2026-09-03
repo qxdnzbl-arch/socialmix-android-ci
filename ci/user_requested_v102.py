@@ -219,7 +219,7 @@ private fun ToneArm(onDisc: Boolean, modifier: Modifier = Modifier) {
 }
 '''
 sub(
-    r'''@Composable\nprivate fun ToneArm\(onDisc: Boolean, modifier: Modifier = Modifier\) \{.*?\n\}\n(?=@Composable\nprivate fun DemoArtwork)''',
+    r'''@Composable\nprivate fun ToneArm\(onDisc: Boolean, modifier: Modifier = Modifier\) \{.*?\n\}\n\n(?=@Composable\nprivate fun DemoArtwork)''',
     tonearm_fn + '\n',
     'clean NetEase vector tone arm',
 )
