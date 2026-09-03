@@ -47,6 +47,7 @@ jobs:
           python ci/user_requested_v98.py
           python ci/user_requested_v99.py
           python ci/user_requested_v100.py
+          python ci/user_requested_v101.py
 
       - name: Set up Java 17
         uses: actions/setup-java@v5
@@ -83,20 +84,21 @@ jobs:
             adb shell am instrument -w -e class com.immersive.music.MediaFixtureTest com.immersive.music.test/androidx.test.runner.AndroidJUnitRunner
             python ci/v93_android_ui_accept.py
             python ci/v99_tonearm_regression_accept.py
+            python ci/v101_visual_accept.py
 
       - name: Prepare deliverable
         if: success()
         run: |
           mkdir -p deliverable
-          cp app/build/outputs/apk/debug/app-debug.apk deliverable/Immersive-Music-v100.apk
+          cp app/build/outputs/apk/debug/app-debug.apk deliverable/Immersive-Music-v101.apk
           cp SPEC-music-phase1.md deliverable/SPEC-music-phase1.md
-          sha256sum deliverable/Immersive-Music-v100.apk | tee deliverable/SHA256.txt
+          sha256sum deliverable/Immersive-Music-v101.apk | tee deliverable/SHA256.txt
 
       - name: Upload verified deliverable
         if: success()
         uses: actions/upload-artifact@v4
         with:
-          name: Immersive-Music-v100-Verified
+          name: Immersive-Music-v101-Verified
           path: deliverable/
           if-no-files-found: error
           retention-days: 14
