@@ -57,6 +57,17 @@ def find_node(desc=None, text=None, timeout=15):
     raise AssertionError(f"UI node not found: desc={desc!r}, text={text!r}")
 
 
+def find_any_desc(*descs, timeout=10):
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        root = dump_ui()
+        for node in root.iter("node"):
+            if node.attrib.get("content-desc") in descs:
+                return node
+        time.sleep(.25)
+    raise AssertionError(f"UI node not found: {descs!r}")
+
+
 def bounds(node):
     m = re.match(r"\[(\d+),(\d+)\]\[(\d+),(\d+)\]", node.attrib.get("bounds", ""))
     if not m:
@@ -96,12 +107,16 @@ def check(name, size, density):
     halo = bounds(find_node(desc="黑胶外框"))
     arm = bounds(find_node(desc="唱针:唱片外"))
     queue = bounds(find_node(desc="播放列表"))
+    mode = bounds(find_any_desc("顺序播放", "单曲循环"))
+    title = bounds(find_node(text="心动"))
 
     hx1, hy1, hx2, hy2 = halo
     ax1, ay1, ax2, ay2 = arm
-    halo_w = hx2 - hx1
     halo_cx = (hx1 + hx2) / 2.0
     halo_cy = (hy1 + hy2) / 2.0
+    arm_w = ax2 - ax1
+    arm_h = ay2 - ay1
+    pivot_y = ay1 + arm_h * (14.0 / 188.0)
     dp_width = width * 160.0 / density
     aspect = height / width
 
@@ -110,13 +125,21 @@ def check(name, size, density):
         raise AssertionError(f"{name} vinyl horizontal center changed: {halo}")
 
     # On the user's tall-phone class, the supplied NetEase reference has the disc
-    # center at ~0.415 of screen height; v101 was ~0.385 and visibly too high.
-    # Keep a modest responsive tolerance while preventing the old regression.
+    # center at ~0.415 of screen height; v101 on the user's actual phone was visibly
+    # too high. Keep a responsive tolerance while preventing that regression.
     if 385 <= dp_width <= 420 and aspect >= 2.0:
         ratio = halo_cy / height
         if not (.400 <= ratio <= .440):
             raise AssertionError(
                 f"{name} player stage vertical ratio wrong: {ratio:.3f}, halo={halo}, screen={width}x{height}"
+            )
+
+    # On compact phones the arm must not collide with the centered page title.
+    if dp_width <= 330:
+        title_bottom = title[3]
+        if pivot_y < title_bottom + max(4.0, density * 2.0 / 160.0):
+            raise AssertionError(
+                f"{name} tone-arm pivot overlaps title: pivot_y={pivot_y:.1f}, title={title}, arm={arm}"
             )
 
     # Tone arm is still one object above/right of the disc and stays on-screen.
@@ -125,9 +148,12 @@ def check(name, size, density):
     if (ax1 + ax2) / 2.0 <= halo_cx:
         raise AssertionError(f"{name} tone arm no longer occupies the top-right relation: {arm}")
 
-    # Queue control keeps the app's standard 44dp interaction footprint.
-    qw = queue[2] - queue[0]
-    qh = queue[3] - queue[1]
+    # Left playback-mode and right queue controls keep equal 44dp interaction slots.
+    mw, mh = mode[2] - mode[0], mode[3] - mode[1]
+    qw, qh = queue[2] - queue[0], queue[3] - queue[1]
+    if abs(mw - qw) > 3 or abs(mh - qh) > 3:
+        raise AssertionError(f"{name} side control footprints differ: mode={mode}, queue={queue}")
+
     expected = density * 44.0 / 160.0
     if abs(qw - expected) > expected * .16 or abs(qh - expected) > expected * .16:
         raise AssertionError(f"{name} queue hit target changed: {queue}, expected~{expected:.1f}px")
