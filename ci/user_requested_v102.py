@@ -39,6 +39,20 @@ if old not in s:
     raise SystemExit('v95 player-stage anchor missing; refusing to guess vertical layout')
 s = s.replace(old, new, 1)
 
+# The existing compact layout has much less vertical air above the record. Preserve
+# the normal-phone NetEase pivot/record relationship exactly, but reduce only the
+# compact-phone lift so the pivot cannot overlap the centered "心动" title. This
+# reuses the app's existing compact condition; no device-specific pixel coordinate.
+old = '''                                x = discSize * .223f,
+                                y = -(discSize * .231f),
+'''
+new = '''                                x = discSize * .223f,
+                                y = -(discSize * if (compact) .105f else .231f),
+'''
+if old not in s:
+    raise SystemExit('v101 tone-arm responsive offset missing; refusing to guess compact placement')
+s = s.replace(old, new, 1)
+
 
 # 2) Queue/list glyph. Match the supplied NetEase proportions instead of the v101
 # approximation: 40x37 visible box, larger 11x12 play triangle, 22x3 short first
@@ -205,7 +219,7 @@ private fun ToneArm(onDisc: Boolean, modifier: Modifier = Modifier) {
 }
 '''
 sub(
-    r'''@Composable\nprivate fun ToneArm\(onDisc: Boolean, modifier: Modifier = Modifier\) \{.*?\n\}\n\n(?=@Composable\nprivate fun DemoArtwork)''',
+    r'''@Composable\nprivate fun ToneArm\(onDisc: Boolean, modifier: Modifier = Modifier\) \{.*?\n\}\n(?=@Composable\nprivate fun DemoArtwork)''',
     tonearm_fn + '\n',
     'clean NetEase vector tone arm',
 )
