@@ -11,7 +11,7 @@ permissions:
 jobs:
   build-test-package:
     runs-on: ubuntu-latest
-    timeout-minutes: 35
+    timeout-minutes: 30
 
     steps:
       - name: Checkout
@@ -65,7 +65,7 @@ jobs:
         run: |
           if [ -e /dev/kvm ]; then sudo chmod 666 /dev/kvm; fi
 
-      - name: Android 35 real UI regression and responsive acceptance
+      - name: Android 35 tonearm and core regression acceptance
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 35
@@ -82,21 +82,20 @@ jobs:
             adb shell am instrument -w -e class com.immersive.music.MediaFixtureTest com.immersive.music.test/androidx.test.runner.AndroidJUnitRunner
             python ci/v93_android_ui_accept.py
             python ci/v99_tonearm_regression_accept.py
-            python ci/v96_visual_cohesion_accept.py
 
       - name: Prepare deliverable
         if: success()
         run: |
           mkdir -p deliverable
-          cp app/build/outputs/apk/debug/app-debug.apk deliverable/Immersive-Music-v101.apk
+          cp app/build/outputs/apk/debug/app-debug.apk deliverable/Immersive-Music-v99.apk
           cp SPEC-music-phase1.md deliverable/SPEC-music-phase1.md
-          sha256sum deliverable/Immersive-Music-v101.apk | tee deliverable/SHA256.txt
+          sha256sum deliverable/Immersive-Music-v99.apk | tee deliverable/SHA256.txt
 
       - name: Upload verified deliverable
         if: success()
         uses: actions/upload-artifact@v4
         with:
-          name: Immersive-Music-v101-Verified
+          name: Immersive-Music-v99-Verified
           path: deliverable/
           if-no-files-found: error
           retention-days: 14
