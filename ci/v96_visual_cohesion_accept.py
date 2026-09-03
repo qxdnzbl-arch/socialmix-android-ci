@@ -106,9 +106,30 @@ def launch_home():
     find_node(desc="歌曲信息中心", timeout=18)
 
 
+def open_search_from_clean_home():
+    # UIAutomator can occasionally return a stale/incomplete hierarchy after many
+    # wm-size changes in one emulator session. Re-enter Home from a clean process
+    # before testing search, and retry the read only; geometry assertions remain
+    # unchanged and are still performed on the real rendered screen.
+    last = None
+    for _ in range(3):
+        adb("shell", "am", "force-stop", PKG, check=False)
+        adb("shell", "am", "start", "-W", "-n", ACTIVITY, check=False)
+        try:
+            find_node(text="心动", timeout=12)
+            search = find_node(desc="搜索", timeout=10)
+            tap_node(search)
+            return find_node(desc="搜索栏", timeout=12)
+        except AssertionError as exc:
+            last = exc
+            adb("shell", "input", "keyevent", "KEYCODE_BACK", check=False)
+            time.sleep(0.6)
+    raise AssertionError(f"Unable to open search from clean Home after retries: {last}")
+
+
 def screenshot(name):
     os.makedirs(DELIVERABLE, exist_ok=True)
-    with open(os.path.join(DELIVERABLE, f"v98-{name}.png"), "wb") as f:
+    with open(os.path.join(DELIVERABLE, f"v101-{name}.png"), "wb") as f:
         subprocess.run(["adb", "exec-out", "screencap", "-p"], stdout=f, check=True)
 
 
@@ -198,13 +219,12 @@ def main():
             assert_player_metadata(width, name)
             screenshot(f"{name}-home-metadata")
 
-            tap_node(find_node(desc="搜索"))
-            find_node(desc="搜索栏", timeout=18)
+            open_search_from_clean_home()
             width, _ = screen_size()
             assert_search_header(width, name, density)
             screenshot(f"{name}-search-header")
 
-        print("V98_VISUAL_COHESION=PASS")
+        print("V101_VISUAL_COHESION=PASS")
     finally:
         adb("shell", "wm", "size", "reset", check=False)
         adb("shell", "wm", "density", "reset", check=False)
