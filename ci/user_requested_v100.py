@@ -25,13 +25,13 @@ if old not in text:
     raise SystemExit('responsive disc sizing anchor not found; refusing to guess')
 text = text.replace(old, new, 1)
 
-old = '''                        .align(Alignment.TopEnd)
-                        .offset(y = -(discSize * .177f))
-                        .padding(top = 9.dp, end = 2.dp),
+old = '''                            .align(Alignment.TopEnd)
+                            .offset(y = -(discSize * .177f))
+                            .padding(top = 9.dp, end = 2.dp),
 '''
-new = '''                        .align(Alignment.TopEnd)
-                        .offset(y = -(discSize * .177f))
-                        .padding(top = 9.dp, end = toneArmEndInset),
+new = '''                            .align(Alignment.TopEnd)
+                            .offset(y = -(discSize * .177f))
+                            .padding(top = 9.dp, end = toneArmEndInset),
 '''
 if old not in text:
     raise SystemExit('restored tone-arm placement anchor not found; refusing to guess')
