@@ -1,0 +1,106 @@
+name: Immersive Music v107 Final Fast
+
+on:
+  push:
+    branches: [music-immersive-phase1]
+
+permissions:
+  contents: read
+
+jobs:
+  verify-package:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Apply approved UI corrections
+        run: |
+          python ci/refine_netease_ui.py
+          python ci/final_tonearm.py
+          python ci/final_visual_alignment.py
+          python ci/final_visual_polish.py
+          python ci/user_requested_v79.py
+          python ci/user_requested_v80.py
+          python ci/user_requested_v81.py
+          python ci/user_requested_v82.py
+          python ci/user_requested_v82_fix.py
+          python ci/user_requested_v83.py
+          python ci/user_requested_v84.py
+          python ci/user_requested_v85.py
+          python ci/user_requested_v86.py
+          python ci/user_requested_v87.py
+          python ci/user_requested_v88.py
+          python ci/user_requested_v89.py
+          python ci/user_requested_v90.py
+          python ci/user_requested_v90_fix.py
+          python ci/user_requested_v91.py
+          python ci/user_requested_v92.py
+          python ci/user_requested_v93.py
+          python ci/user_requested_v94.py
+          python ci/user_requested_v95.py
+          python ci/user_requested_v96.py
+          python ci/user_requested_v97.py
+          python ci/user_requested_v98.py
+          python ci/user_requested_v99.py
+          python ci/user_requested_v100.py
+          python ci/user_requested_v101.py
+          python ci/user_requested_v102.py
+          python ci/user_requested_v103.py
+          python ci/user_requested_v104.py
+          python ci/user_requested_v105.py
+          python ci/user_requested_v106.py
+          python ci/v107_centerhub_pre.py
+          python ci/v107_pause_pre.py
+          python ci/user_requested_v107.py
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+
+      - name: Build APK
+        run: gradle --no-daemon :app:assembleDebug :app:assembleDebugAndroidTest
+
+      - name: Enable KVM
+        run: |
+          if [ -e /dev/kvm ]; then sudo chmod 666 /dev/kvm; fi
+
+      - name: Android 35 focused v107 acceptance
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          target: google_apis
+          profile: pixel_6
+          disable-animations: false
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -no-boot-anim -camera-back none
+          script: |
+            adb install -r app/build/outputs/apk/debug/app-debug.apk
+            adb install -r app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
+            adb shell pm clear com.immersive.music >/dev/null
+            adb shell pm grant com.immersive.music android.permission.READ_MEDIA_AUDIO || true
+            adb shell am instrument -w -e class com.immersive.music.MediaFixtureTest com.immersive.music.test/androidx.test.runner.AndroidJUnitRunner
+            python ci/v107_detail_accept.py
+
+      - name: Prepare final APK
+        run: |
+          mkdir -p deliverable
+          cp app/build/outputs/apk/debug/app-debug.apk deliverable/Immersive-Music-v107.apk
+          cp deliverable/v107-detail-userlike-playing-single-loop.png deliverable/v107-detail-userlike-playing-single-loop.png || true
+          sha256sum deliverable/Immersive-Music-v107.apk | tee deliverable/SHA256.txt
+
+      - name: Upload final verified APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: Immersive-Music-v107-Final-Verified
+          path: deliverable/
+          if-no-files-found: error
+          retention-days: 14
