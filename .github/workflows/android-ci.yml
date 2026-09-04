@@ -54,6 +54,7 @@ jobs:
           python ci/user_requested_v105.py
           python ci/user_requested_v106.py
           python ci/v107_centerhub_pre.py
+          python ci/v107_pause_pre.py
           python ci/user_requested_v107.py
 
       - name: Set up Java 17
