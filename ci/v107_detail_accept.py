@@ -43,6 +43,15 @@ def find_node(*, descs=(), texts=(), timeout=12):
     raise AssertionError(f"missing node descs={descs} texts={texts}")
 
 
+def node_exists(*, descs=(), texts=()):
+    for n in dump_ui().iter("node"):
+        if descs and n.attrib.get("content-desc") in descs:
+            return n
+        if texts and n.attrib.get("text") in texts:
+            return n
+    return None
+
+
 def tap_node(node):
     m = re.match(r"\[(\d+),(\d+)\]\[(\d+),(\d+)\]", node.attrib.get("bounds", ""))
     if not m:
@@ -52,10 +61,28 @@ def tap_node(node):
     time.sleep(.9)
 
 
+def back():
+    adb("shell", "input", "keyevent", "KEYCODE_BACK")
+    time.sleep(.9)
+
+
 def shot(name):
     os.makedirs(DELIVERABLE, exist_ok=True)
     with open(os.path.join(DELIVERABLE, name), "wb") as f:
         subprocess.run(["adb", "exec-out", "screencap", "-p"], stdout=f, check=True)
+
+
+def ensure_fixture_in_library():
+    tap_node(find_node(texts=("音乐库",)))
+    if node_exists(texts=(FIXTURE_TITLE,)) is not None:
+        return
+
+    tap_node(find_node(descs=("添加喜欢的音乐",)))
+    find_node(texts=("选择手机音乐",), timeout=15)
+    tap_node(find_node(texts=(FIXTURE_TITLE,), timeout=15))
+    find_node(descs=(f"已添加:{FIXTURE_TITLE}",), timeout=15)
+    back()
+    find_node(texts=(FIXTURE_TITLE,), timeout=15)
 
 
 def ensure_playing():
@@ -70,17 +97,14 @@ def ensure_playing():
     except AssertionError:
         pass
 
-    # A cold restart can preserve the UI state while losing the active player item.
-    # Select the seeded fixture explicitly, then verify the real playback state.
-    tap_node(find_node(texts=("音乐库",)))
+    # If a cold restart has no active item, explicitly select the seeded fixture.
+    ensure_fixture_in_library()
     tap_node(find_node(texts=(FIXTURE_TITLE,), timeout=15))
     find_node(texts=(FIXTURE_TITLE,), timeout=12)
     find_node(descs=("暂停",), timeout=12)
 
 
 def main():
-    # Restore the user's tall-phone class so this detail screenshot is directly
-    # comparable to the screenshots that drove the v107 corrections.
     adb("shell", "wm", "size", "1080x2400")
     adb("shell", "wm", "density", "440")
     try:
@@ -94,10 +118,11 @@ def main():
             find_node(descs=("单曲循环",))
 
         ensure_playing()
+        find_node(descs=("暂停",), timeout=12)
+        find_node(descs=("单曲循环",), timeout=12)
+        find_node(descs=("播放列表",), timeout=12)
+        find_node(descs=("唱针:唱片上", "唱针:唱片外"), timeout=12)
 
-        # Capture the exact state that exposes all four requested details at once:
-        # larger loop '1', left/right triangle alignment, centered tonearm head,
-        # and the custom NetEase-proportioned pause bars.
         shot("v107-detail-userlike-playing-single-loop.png")
         print("V107_DETAIL_VISUAL_STATE=PASS")
     finally:
