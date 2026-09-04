@@ -93,6 +93,7 @@ jobs:
             python ci/v93_android_ui_accept.py
             python ci/v99_tonearm_regression_accept.py
             python ci/v102_visual_accept.py
+            python ci/v107_detail_accept.py
 
       - name: Prepare deliverable
         if: success()
