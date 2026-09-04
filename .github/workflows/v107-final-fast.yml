@@ -1,4 +1,4 @@
-name: Immersive Music v107 Final Fast
+name: Immersive Music v108 Final Fast
 
 on:
   push:
@@ -10,7 +10,7 @@ permissions:
 jobs:
   verify-package:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 18
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -54,6 +54,7 @@ jobs:
           python ci/v107_centerhub_pre.py
           python ci/v107_pause_pre.py
           python ci/user_requested_v107.py
+          python ci/user_requested_v108.py
 
       - name: Set up Java 17
         uses: actions/setup-java@v5
@@ -73,7 +74,7 @@ jobs:
         run: |
           if [ -e /dev/kvm ]; then sudo chmod 666 /dev/kvm; fi
 
-      - name: Android 35 focused v107 acceptance
+      - name: Android 35 focused v108 acceptance
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 35
@@ -85,22 +86,23 @@ jobs:
           script: |
             adb install -r app/build/outputs/apk/debug/app-debug.apk
             adb install -r app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
+            python ci/v108_visual_accept.py
             adb shell pm clear com.immersive.music >/dev/null
             adb shell pm grant com.immersive.music android.permission.READ_MEDIA_AUDIO || true
             adb shell am instrument -w -e class com.immersive.music.MediaFixtureTest com.immersive.music.test/androidx.test.runner.AndroidJUnitRunner
             python ci/v107_detail_accept.py
+            python ci/v102_visual_accept.py
 
       - name: Prepare final APK
         run: |
           mkdir -p deliverable
-          cp app/build/outputs/apk/debug/app-debug.apk deliverable/Immersive-Music-v107.apk
-          cp deliverable/v107-detail-userlike-playing-single-loop.png deliverable/v107-detail-userlike-playing-single-loop.png || true
-          sha256sum deliverable/Immersive-Music-v107.apk | tee deliverable/SHA256.txt
+          cp app/build/outputs/apk/debug/app-debug.apk deliverable/Immersive-Music-v108.apk
+          sha256sum deliverable/Immersive-Music-v108.apk | tee deliverable/SHA256.txt
 
       - name: Upload final verified APK
         uses: actions/upload-artifact@v4
         with:
-          name: Immersive-Music-v107-Final-Verified
+          name: Immersive-Music-v108-Final-Verified
           path: deliverable/
           if-no-files-found: error
           retention-days: 14
