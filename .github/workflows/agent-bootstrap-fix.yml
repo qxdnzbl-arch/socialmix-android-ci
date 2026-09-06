@@ -19,6 +19,7 @@ jobs:
         run: |
           python always-on-agent/patch_budget.py
           python always-on-agent/patch_thinking.py
+          python always-on-agent/patch_history.py
           python -m py_compile always-on-agent/main.py
       - name: Commit patch
         run: |
@@ -29,5 +30,5 @@ jobs:
           git config user.name "always-on-agent-bot"
           git config user.email "actions@users.noreply.github.com"
           git add always-on-agent/main.py
-          git commit -m "Use DeepSeek non-thinking JSON planner"
+          git commit -m "Ignore superseded agent history"
           git push origin HEAD:always-on-agent-v0
