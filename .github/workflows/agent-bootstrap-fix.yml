@@ -26,12 +26,14 @@ jobs:
           python always-on-agent/patch_action_guard.py
           python always-on-agent/patch_executor_bridge.py
           python always-on-agent/patch_execution_continuity.py
+          python always-on-agent/patch_no_passive_wait.py
           python always-on-agent/patch_self_audit_compat.py
           python always-on-agent/patch_self_audit.py
           python -m py_compile always-on-agent/main.py
           python -m pip install -r always-on-agent/requirements.txt
           cd always-on-agent
           python test_self_audit.py
+          python test_execution_continuity.py
       - name: Commit patch
         run: |
           if git diff --quiet -- always-on-agent/main.py; then
@@ -41,5 +43,5 @@ jobs:
           git config user.name "always-on-agent-bot"
           git config user.email "actions@users.noreply.github.com"
           git add always-on-agent/main.py
-          git commit -m "Enforce execution continuity with self-audit checkpoints"
+          git commit -m "Enforce no-passive-wait execution continuity"
           git push origin HEAD:always-on-agent-v0
