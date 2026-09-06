@@ -84,7 +84,7 @@ async def planner_decide(goal, history):
         return {'action_type':'clarify','title':'Connect reasoning model','instruction':'A real reasoning model is required for autonomous work.','payload':{'question':'Approve and provide a reasoning-model connection for autonomous work.'},'risk_flags':['change_credentials'],'why':'Mock mode cannot make intelligent plans.'}
     if LLM_MODE != 'openai_compatible': raise RuntimeError(f'Unsupported LLM_MODE={LLM_MODE}')
     if not (LLM_BASE_URL and LLM_API_KEY and LLM_MODEL): raise RuntimeError('LLM connection incomplete')
-    body={'model':LLM_MODEL,'messages':[{'role':'system','content':SYSTEM_RULES},{'role':'user','content':json.dumps({'goal':goal,'recent_history':history[-30:]},ensure_ascii=False)}],'temperature':0.2,'response_format':{'type':'json_object'}}
+    body={'model':LLM_MODEL,'messages':[{'role':'system','content':SYSTEM_RULES},{'role':'user','content':json.dumps({'goal':goal,'recent_history':history[-30:]},ensure_ascii=False)}],'reasoning_effort':'low','max_completion_tokens':1200,'response_format':{'type':'json_object'}}
     async with httpx.AsyncClient(timeout=120) as c:
         r=await c.post(LLM_BASE_URL+'/chat/completions',headers={'Authorization':f'Bearer {LLM_API_KEY}'},json=body); r.raise_for_status()
         return json.loads(r.json()['choices'][0]['message']['content'])
@@ -126,6 +126,18 @@ async def run_tool(kind,payload):
 async def tick_once():
     async with state_lock:
         s=await store_get()
+        # One-time recovery: the owner has now configured the real reasoning model.
+        if LLM_MODE == 'openai_compatible' and LLM_API_KEY:
+            bootstrap_ids=set()
+            changed=False
+            for t in s.get('tasks',[]):
+                if t.get('title')=='Connect reasoning model' and t.get('kind')=='clarify' and t.get('status')=='waiting_approval':
+                    t['status']='completed'; t['requires_approval']=False; t['result']={'system':'reasoning model configured'}
+                    bootstrap_ids.add(t.get('id')); add_event(s,'task_completed',t.get('goal_id'),t.get('id'),t['result']); changed=True
+            for a in s.get('approvals',[]):
+                if a.get('task_id') in bootstrap_ids and a.get('status')=='pending':
+                    a['status']='approved'; a['decision_note']='Automatically resolved after live model configuration.'; a['decided_at']=now(); changed=True
+            if changed: await store_set(s)
         pending=next((t for t in s['tasks'] if t['status']=='pending' and not t.get('requires_approval')),None)
         if pending:
             pending['status']='running'; pending['attempts']=pending.get('attempts',0)+1; await store_set(s)
@@ -167,7 +179,7 @@ async def worker_loop():
         try: await asyncio.wait_for(stop_event.wait(),timeout=WORKER_INTERVAL)
         except asyncio.TimeoutError: pass
 
-app=FastAPI(title='Always-On Owner Agent',version='0.2.0')
+app=FastAPI(title='Always-On Owner Agent',version='0.3.0')
 
 @app.on_event('startup')
 async def start():
@@ -183,7 +195,7 @@ async def health():
     try:
         s=await store_get(); ok=isinstance(s,dict); detail='supabase' if STORE_URL else 'memory-only'
     except Exception as e: detail=str(e)
-    return {'ok':ok,'version':'0.2.0','store':detail,'llm_mode':LLM_MODE}
+    return {'ok':ok,'version':'0.3.0','store':detail,'llm_mode':LLM_MODE}
 
 @app.get('/state')
 async def get_state(authorization:str|None=Header(default=None)):
