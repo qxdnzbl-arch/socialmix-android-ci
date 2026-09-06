@@ -5,7 +5,8 @@ test('iPhone 7 core music flow works and persists imported track', async ({ page
   await expect(page.getByText('心动')).toBeVisible();
 
   await page.getByRole('button', { name: '音乐库' }).last().click();
-  await expect(page.getByText('音乐库').first()).toBeVisible();
+  await expect(page.locator('#libraryPage .light-title')).toHaveText('音乐库');
+  await expect(page.locator('#libraryPage')).toHaveClass(/active/);
 
   const input = page.locator('#fileInput');
   await input.setInputFiles({
@@ -14,15 +15,15 @@ test('iPhone 7 core music flow works and persists imported track', async ({ page
     buffer: Buffer.from('ID3\u0004\u0000\u0000\u0000\u0000\u0000\u0000fake-audio')
   });
 
-  await expect(page.getByText('夜航测试')).toBeVisible();
-  await expect(page.getByText('本地音乐')).toBeVisible();
+  await expect(page.locator('#libraryList').getByText('夜航测试')).toBeVisible();
+  await expect(page.locator('#libraryList').getByText('本地音乐')).toBeVisible();
 
-  await page.getByText('夜航测试').click();
+  await page.locator('#libraryList').getByText('夜航测试').click();
   await expect(page.locator('#songTitle')).toHaveText('夜航测试');
   await expect(page.locator('#homePage')).toHaveClass(/active/);
 
   await page.locator('#queueBtn').click();
-  await expect(page.getByText('播放列表')).toBeVisible();
+  await expect(page.locator('#queueSheet .sheet-title')).toHaveText('播放列表');
   await expect(page.locator('#queueList').getByText('夜航测试')).toBeVisible();
   await page.locator('#queueScrim').click({ position: { x: 5, y: 5 } });
 
@@ -32,7 +33,7 @@ test('iPhone 7 core music flow works and persists imported track', async ({ page
 
   await page.reload();
   await page.getByRole('button', { name: '音乐库' }).last().click();
-  await expect(page.getByText('夜航测试')).toBeVisible();
+  await expect(page.locator('#libraryList').getByText('夜航测试')).toBeVisible();
 });
 
 test('manifest and service worker assets are reachable', async ({ request }) => {
