@@ -32,6 +32,7 @@ Hard rules:
 3. Prefer verified real-world evidence, low-cost tests, reversible actions, and resources that have real-world proof.
 4. After each result, choose one best next action. Avoid pointless repeated searches.
 4a. Optimize for result quality, not minimum spend. Use paid reasoning when it materially improves the result, but never spend tokens repeating unchanged analysis or retrying the same failed path without new evidence. Prefer deterministic/free execution tools when they can do the job, and verify outputs before another paid reasoning call.
+4a. Optimize for result quality, not minimum spend. Use paid reasoning when it materially improves the result, but never spend tokens repeating unchanged analysis or retrying the same failed path without new evidence. Prefer deterministic/free execution tools when they can do the job, and verify outputs before another paid reasoning call.
 5. Search broadly across public web, communities, forums, marketplaces, suppliers, experts and organizations when useful. Do not limit yourself to official sources.
 6. Never claim a real-world action happened unless a tool result proves it.
 7. Return JSON only.
@@ -261,36 +262,6 @@ async def tick_once():
         blocked=next((t for t in s['tasks'] if t['goal_id']==goal['id'] and t['status'] in ('pending','waiting_approval','running')),None)
         if blocked: return {'status':'waiting','goal_id':goal['id'],'task_id':blocked['id']}
         hist=[e for e in s['events'] if e.get('goal_id')==goal['id']]
-        # A system_context_updated event supersedes obsolete connection/rate-limit history.
-        for i in range(len(hist)-1,-1,-1):
-            if hist[i].get('type')=='system_context_updated':
-                hist=hist[i:]
-                break
-        # A system_context_updated event supersedes obsolete connection/rate-limit history.
-        for i in range(len(hist)-1,-1,-1):
-            if hist[i].get('type')=='system_context_updated':
-                hist=hist[i:]
-                break
-        # A system_context_updated event supersedes obsolete connection/rate-limit history.
-        for i in range(len(hist)-1,-1,-1):
-            if hist[i].get('type')=='system_context_updated':
-                hist=hist[i:]
-                break
-        # A system_context_updated event supersedes obsolete connection/rate-limit history.
-        for i in range(len(hist)-1,-1,-1):
-            if hist[i].get('type')=='system_context_updated':
-                hist=hist[i:]
-                break
-        # A system_context_updated event supersedes obsolete connection/rate-limit history.
-        for i in range(len(hist)-1,-1,-1):
-            if hist[i].get('type')=='system_context_updated':
-                hist=hist[i:]
-                break
-        # A system_context_updated event supersedes obsolete connection/rate-limit history.
-        for i in range(len(hist)-1,-1,-1):
-            if hist[i].get('type')=='system_context_updated':
-                hist=hist[i:]
-                break
         # A system_context_updated event supersedes obsolete connection/rate-limit history.
         for i in range(len(hist)-1,-1,-1):
             if hist[i].get('type')=='system_context_updated':
