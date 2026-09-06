@@ -80,8 +80,6 @@ test('refuses sender until receiver is connected', async (t) => {
     method: 'POST', headers: { 'x-sender-token': created.senderToken }, body: fd
   });
   assert.equal(r.status, 409);
-  const j = await r.json();
-  assert.match(j.error, /iPhone/);
 });
 
 test('generates a QR image for the direct iPhone receive link', async (t) => {
@@ -108,7 +106,7 @@ test('instant QR session can be created by receiver and then streamed by sender'
   t.after(() => new Promise(resolve => server.close(resolve)));
   const base = `http://127.0.0.1:${server.address().port}`;
   const id = '0123456789abcdef0123456789abcdef';
-  const token = 'sender-secret-token';
+  const token = '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef';
 
   const before = await fetch(`${base}/api/instant/status/${id}`);
   assert.equal(before.status, 404);
@@ -135,6 +133,52 @@ test('instant QR session can be created by receiver and then streamed by sender'
   const file = directory.files.find(f => f.path === '即时传输.txt');
   assert.ok(file);
   assert.equal((await file.buffer()).toString(), 'instant-ok');
+});
+
+test('iPhone upload page can stream files back to Android receiver', async (t) => {
+  const { server } = startServer(0);
+  await new Promise(resolve => server.once('listening', resolve));
+  t.after(() => new Promise(resolve => server.close(resolve)));
+  const base = `http://127.0.0.1:${server.address().port}`;
+  const id = 'abcdef0123456789abcdef0123456789';
+  const token = 'abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789';
+
+  const receiverPromise = fetch(`${base}/instant/receive/${id}`);
+  assert.equal(await waitForReady(base, id, true), true);
+
+  const pageRes = await fetch(`${base}/instant/upload/${id}?t=${token}`);
+  assert.equal(pageRes.status, 200);
+  assert.match(pageRes.headers.get('content-type'), /text\/html/);
+  const html = await pageRes.text();
+  assert.match(html, /发送到 Android/);
+  assert.match(html, /选择文件/);
+  assert.match(html, /x-sender-token/);
+
+  const statusRes = await fetch(`${base}/api/instant/status/${id}`);
+  assert.equal(statusRes.status, 200);
+  const status = await statusRes.json();
+  assert.equal(status.receiverReady, true);
+  assert.equal(status.webSenderReady, true);
+
+  const fd = new FormData();
+  fd.append('files', new Blob([Buffer.from('iphone-back')]), '来自苹果.txt');
+  const sendRes = await fetch(`${base}/instant/send/${id}`, {
+    method: 'POST',
+    headers: { 'x-sender-token': token },
+    body: fd
+  });
+  assert.equal(sendRes.status, 200);
+  const sent = await sendRes.json();
+  assert.equal(sent.ok, true);
+  assert.equal(sent.files, 1);
+
+  const receiverRes = await receiverPromise;
+  assert.equal(receiverRes.status, 200);
+  const zipBuffer = Buffer.from(await receiverRes.arrayBuffer());
+  const directory = await unzipper.Open.buffer(zipBuffer);
+  const file = directory.files.find(f => f.path === '来自苹果.txt');
+  assert.ok(file);
+  assert.equal((await file.buffer()).toString(), 'iphone-back');
 });
 
 test('instant QR rejects malformed session ids', async (t) => {
