@@ -1,0 +1,41 @@
+name: Internet Transfer Relay CI
+
+on:
+  push:
+    branches: [internet-transfer-relay]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: internet-transfer
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: internet-transfer/package-lock.json
+      - name: Install
+        run: npm install
+      - name: Test streaming relay
+        run: npm test
+      - name: Smoke test server
+        run: |
+          node server.js > /tmp/relay.log 2>&1 &
+          PID=$!
+          for i in {1..30}; do
+            if curl -fsS http://127.0.0.1:3000/health | grep -q '^ok$'; then break; fi
+            sleep 1
+          done
+          curl -fsS http://127.0.0.1:3000/health | grep -q '^ok$'
+          curl -fsS http://127.0.0.1:3000/ | grep -q '手机互传'
+          kill $PID
