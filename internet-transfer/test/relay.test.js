@@ -3,10 +3,11 @@ const assert = require('node:assert/strict');
 const unzipper = require('unzipper');
 const { startServer } = require('../server');
 
-async function waitForReady(base, code, timeoutMs = 3000) {
+async function waitForReady(base, code, instant = false, timeoutMs = 3000) {
   const start = Date.now();
+  const path = instant ? `/api/instant/status/${code}` : `/api/status/${code}`;
   while (Date.now() - start < timeoutMs) {
-    const r = await fetch(`${base}/api/status/${code}`);
+    const r = await fetch(`${base}${path}`);
     if (r.ok) {
       const j = await r.json();
       if (j.receiverReady) return true;
@@ -99,4 +100,49 @@ test('generates a QR image for the direct iPhone receive link', async (t) => {
   const svg = await qrRes.text();
   assert.match(svg, /<svg/);
   assert.ok(svg.length > 500);
+});
+
+test('instant QR session can be created by receiver and then streamed by sender', async (t) => {
+  const { server } = startServer(0);
+  await new Promise(resolve => server.once('listening', resolve));
+  t.after(() => new Promise(resolve => server.close(resolve)));
+  const base = `http://127.0.0.1:${server.address().port}`;
+  const id = '0123456789abcdef0123456789abcdef';
+  const token = 'sender-secret-token';
+
+  const before = await fetch(`${base}/api/instant/status/${id}`);
+  assert.equal(before.status, 404);
+
+  const receiverPromise = fetch(`${base}/instant/receive/${id}`);
+  assert.equal(await waitForReady(base, id, true), true);
+
+  const fd = new FormData();
+  fd.append('files', new Blob([Buffer.from('instant-ok')]), '即时传输.txt');
+  const sendRes = await fetch(`${base}/instant/send/${id}`, {
+    method: 'POST',
+    headers: { 'x-sender-token': token },
+    body: fd
+  });
+  assert.equal(sendRes.status, 200);
+  const sendJson = await sendRes.json();
+  assert.equal(sendJson.ok, true);
+  assert.equal(sendJson.files, 1);
+
+  const receiverRes = await receiverPromise;
+  assert.equal(receiverRes.status, 200);
+  const zipBuffer = Buffer.from(await receiverRes.arrayBuffer());
+  const directory = await unzipper.Open.buffer(zipBuffer);
+  const file = directory.files.find(f => f.path === '即时传输.txt');
+  assert.ok(file);
+  assert.equal((await file.buffer()).toString(), 'instant-ok');
+});
+
+test('instant QR rejects malformed session ids', async (t) => {
+  const { server } = startServer(0);
+  await new Promise(resolve => server.once('listening', resolve));
+  t.after(() => new Promise(resolve => server.close(resolve)));
+  const base = `http://127.0.0.1:${server.address().port}`;
+
+  const r = await fetch(`${base}/instant/receive/not-valid`);
+  assert.equal(r.status, 400);
 });
