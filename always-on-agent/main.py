@@ -39,11 +39,13 @@ Hard rules:
 4a. Optimize for result quality, not minimum spend. Use paid reasoning when it materially improves the result, but never spend tokens repeating unchanged analysis or retrying the same failed path without new evidence. Prefer deterministic/free execution tools when they can do the job, and verify outputs before another paid reasoning call.
 4a. Optimize for result quality, not minimum spend. Use paid reasoning when it materially improves the result, but never spend tokens repeating unchanged analysis or retrying the same failed path without new evidence. Prefer deterministic/free execution tools when they can do the job, and verify outputs before another paid reasoning call.
 4a. Optimize for result quality, not minimum spend. Use paid reasoning when it materially improves the result, but never spend tokens repeating unchanged analysis or retrying the same failed path without new evidence. Prefer deterministic/free execution tools when they can do the job, and verify outputs before another paid reasoning call.
+4a. Optimize for result quality, not minimum spend. Use paid reasoning when it materially improves the result, but never spend tokens repeating unchanged analysis or retrying the same failed path without new evidence. Prefer deterministic/free execution tools when they can do the job, and verify outputs before another paid reasoning call.
 5. Search broadly across public web, communities, forums, marketplaces, suppliers, experts and organizations when useful. Do not limit yourself to official sources.
 6. Never claim a real-world action happened unless a tool result proves it.
 7. Return JSON only.
-Allowed action types: web_search, web_get, note, clarify, complete.
-Payload contracts: web_search requires payload.query or payload.queries; web_get requires payload.url and must only be used when a concrete URL is already known; note uses payload.text; clarify uses payload.question. If you need a source but do not yet have a concrete URL, use web_search first.
+Allowed action types: web_search, web_get, note, executor_request, clarify, complete.
+Use executor_request when the next useful step requires a connected service or capability that this runtime cannot directly execute (for example GitHub code changes, Render configuration/deploys, Supabase maintenance, browser/plugin work, files/design/media workflows). Payload must include capability, objective, and params. Do not use note when an actual executable change is the next step.
+Payload contracts: web_search requires payload.query or payload.queries; web_get requires payload.url and must only be used when a concrete URL is already known; note uses payload.text; executor_request requires payload.capability, payload.objective, and optional payload.params; clarify uses payload.question. If you need a source but do not yet have a concrete URL, use web_search first.
 Schema: {"action_type":"...","title":"...","instruction":"...","payload":{},"risk_flags":[],"why":"..."}
 Risk flags when applicable: uncertain_fact, spend_money, use_owner_identity, make_formal_commitment, upload_private_data, destructive_action, change_credentials.
 '''
@@ -334,6 +336,14 @@ def normalize_tool_request(kind,payload,title='',instruction=''):
     elif kind=='note':
         text=str(p.get('text') or p.get('message') or p.get('status') or instruction or title or '').strip()
         p={'text':text}
+    elif kind=='executor_request':
+        cap=str(p.get('capability') or '').strip()
+        objective=str(p.get('objective') or instruction or title or '').strip()
+        params=p.get('params') if isinstance(p.get('params'),dict) else {}
+        if not cap or not objective:
+            kind='clarify'; p={'question':'Executor request is missing a confirmed capability or objective.'}
+        else:
+            p={'capability':cap,'objective':objective,'params':params}
     elif kind=='clarify':
         q=str(p.get('question') or instruction or title or 'Owner clarification required.').strip()
         p={'question':q}
@@ -384,7 +394,7 @@ async def tick_once():
             await store_set(s); return {'status':pending['status'],'task_id':pending['id']}
         goal=next((g for g in sorted(s['goals'],key=lambda x:(-x['priority'],x['id'])) if g['status']=='active'),None)
         if not goal: return {'status':'idle'}
-        blocked=next((t for t in s['tasks'] if t['goal_id']==goal['id'] and t['status'] in ('pending','waiting_approval','running')),None)
+        blocked=next((t for t in s['tasks'] if t['goal_id']==goal['id'] and t['status'] in ('pending','waiting_approval','waiting_executor','running')),None)
         if blocked: return {'status':'waiting','goal_id':goal['id'],'task_id':blocked['id']}
         hist=[e for e in s['events'] if e.get('goal_id')==goal['id']]
         # A system_context_updated event supersedes obsolete connection/rate-limit history.
@@ -411,7 +421,9 @@ async def tick_once():
             action=dict(action); action['action_type']=normalized_kind; action['payload']=normalized_payload
             add_event(s,'planner_action_repaired',goal['id'],data={'action_type':normalized_kind,'payload':normalized_payload})
         allowed,cat=policy(action); tid=s['next_ids']['task']; s['next_ids']['task']+=1
-        task={'id':tid,'goal_id':goal['id'],'title':str(action.get('title') or 'Next action'),'instruction':str(action.get('instruction') or ''),'kind':action.get('action_type','note'),'status':'pending' if allowed else 'waiting_approval','payload':action.get('payload') or {},'result':{},'requires_approval':not allowed,'attempts':0}
+        task_kind=action.get('action_type','note')
+        task_status=('waiting_executor' if allowed and task_kind=='executor_request' else ('pending' if allowed else 'waiting_approval'))
+        task={'id':tid,'goal_id':goal['id'],'title':str(action.get('title') or 'Next action'),'instruction':str(action.get('instruction') or ''),'kind':task_kind,'status':task_status,'payload':action.get('payload') or {},'result':{},'requires_approval':not allowed,'attempts':0}
         s['tasks'].append(task); add_event(s,'task_planned',goal['id'],tid,action)
         if not allowed:
             aid=s['next_ids']['approval']; s['next_ids']['approval']+=1
