@@ -311,7 +311,9 @@ function createApp() {
       session.totalFiles = filesSeen;
       session.lastActivity = Date.now();
       const filename = safeName(info && info.filename, session.usedNames);
-      archive.append(file, { name: filename, store: true });
+      // Use DEFLATE framing at level 0 instead of STORED streaming entries.
+      // Java/Android ZipInputStream can then read streamed entries whose sizes are unknown until the data descriptor arrives.
+      archive.append(file, { name: filename, store: false });
       file.on('data', () => {
         session.lastActivity = Date.now();
       });
