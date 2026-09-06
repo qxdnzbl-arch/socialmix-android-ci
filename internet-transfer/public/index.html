@@ -18,50 +18,56 @@
     button:disabled{opacity:.45;cursor:not-allowed}
     input[type=text]{width:100%;height:52px;border:1px solid #dfe2ea;border-radius:14px;padding:0 15px;font-size:21px;letter-spacing:4px;text-align:center;background:#fff;outline:none}
     input[type=file]{width:100%;font-size:16px;margin:12px 0 4px}
-    .code{font-size:38px;font-weight:760;letter-spacing:7px;text-align:center;padding:16px 0 10px}
+    .code{font-size:30px;font-weight:760;letter-spacing:6px;text-align:center;padding:8px 0 2px;color:#5a6372}
     .label{font-size:14px;color:#777;margin-bottom:6px}.status{margin-top:12px;line-height:1.55;color:#4d5564;white-space:pre-wrap}.ok{color:#15803d}.bad{color:#b42318}
     .progress{height:10px;background:#edf0f5;border-radius:999px;overflow:hidden;margin-top:12px}.bar{height:100%;width:0;background:#315fe9;transition:width .15s linear}
     .row{display:flex;gap:10px}.row>*{flex:1}.hidden{display:none!important}.tip{font-size:14px;color:#737b89;line-height:1.55;margin-top:12px}
+    .qrbox{margin:14px auto 8px;padding:14px;background:#fff;border:1px solid #e7eaf0;border-radius:20px;text-align:center}
+    .qrbox img{display:block;width:min(78vw,300px);height:auto;margin:0 auto}
+    .qrtitle{font-size:20px;font-weight:700;text-align:center;margin-top:16px}.qrhint{text-align:center;color:#596273;line-height:1.55;margin-top:6px}
   </style>
 </head>
 <body>
 <div class="wrap">
   <h1>手机互传</h1>
-  <div class="sub">OPPO 和 iPhone 都打开这个网页。文件经互联网实时中转，不经过本地热点互访，也不会长期保存。</div>
+  <div class="sub">OPPO 和 iPhone 通过互联网直接中转。iPhone 不用手输网址，也不用手输取件码。</div>
 
   <div class="tabs">
     <button id="tabSend" class="primary">我要发送</button>
-    <button id="tabReceive" class="ghost">我要接收</button>
+    <button id="tabReceive" class="ghost">手动接收</button>
   </div>
 
   <section id="sendPanel" class="card">
-    <button id="createBtn" class="primary" style="width:100%">生成取件码</button>
+    <button id="createBtn" class="primary" style="width:100%">生成接收二维码</button>
     <div id="sendReady" class="hidden">
-      <div class="label" style="margin-top:16px">把这个码告诉 iPhone</div>
+      <div class="qrtitle">iPhone 直接扫码</div>
+      <div class="qrhint">iPhone 打开系统相机 → 扫下面二维码 → 点弹出的网页。<br>不用输入任何网址或数字。</div>
+      <div class="qrbox"><img id="qrView" alt="iPhone 接收二维码"></div>
+      <div class="label" style="text-align:center;margin-top:8px">备用取件码</div>
       <div id="codeView" class="code">------</div>
-      <div id="receiverStatus" class="status">等待 iPhone 输入取件码并点“准备接收”…</div>
+      <div id="receiverStatus" class="status">等待 iPhone 扫码并打开接收链接…</div>
       <input id="files" type="file" multiple>
       <div id="fileSummary" class="status">还没有选择文件</div>
       <button id="sendBtn" class="primary" style="width:100%;margin-top:14px" disabled>开始发送</button>
       <div class="progress"><div id="bar" class="bar"></div></div>
       <div id="sendStatus" class="status"></div>
-      <div class="tip">可以一次选择很多文件。iPhone 最终只下载一个 ZIP，适合你这种几百个文件一起传。</div>
+      <div class="tip">可以一次选择很多文件。iPhone 最终只下载一个 ZIP。传输期间两边页面都不要关闭。</div>
     </div>
   </section>
 
   <section id="receivePanel" class="card hidden">
-    <div class="label">输入 OPPO 上的 6 位取件码</div>
-    <input id="codeInput" type="text" inputmode="numeric" maxlength="6" placeholder="000000">
+    <div class="label">只有扫码不方便时才用这里</div>
+    <input id="codeInput" type="text" inputmode="numeric" maxlength="6" placeholder="输入 6 位取件码">
     <button id="receiveBtn" class="primary" style="width:100%;margin-top:14px">准备接收</button>
     <div id="receiveStatus" class="status"></div>
-    <div class="tip">点“准备接收”后不要关闭页面。OPPO 开始发送后，Safari 会下载一个 <b>OPPO-to-iPhone.zip</b>。</div>
+    <div class="tip">正常情况下不需要进入这里。直接用 iPhone 相机扫 OPPO 页面上的二维码即可。</div>
   </section>
 </div>
 <script>
 (() => {
   const $ = id => document.getElementById(id);
   const tabSend=$('tabSend'),tabReceive=$('tabReceive'),sendPanel=$('sendPanel'),receivePanel=$('receivePanel');
-  const createBtn=$('createBtn'),sendReady=$('sendReady'),codeView=$('codeView'),receiverStatus=$('receiverStatus'),files=$('files'),fileSummary=$('fileSummary'),sendBtn=$('sendBtn'),bar=$('bar'),sendStatus=$('sendStatus');
+  const createBtn=$('createBtn'),sendReady=$('sendReady'),codeView=$('codeView'),qrView=$('qrView'),receiverStatus=$('receiverStatus'),files=$('files'),fileSummary=$('fileSummary'),sendBtn=$('sendBtn'),bar=$('bar'),sendStatus=$('sendStatus');
   const codeInput=$('codeInput'),receiveBtn=$('receiveBtn'),receiveStatus=$('receiveStatus');
   let code='', senderToken='', pollTimer=null;
 
@@ -76,9 +82,9 @@
     createBtn.disabled=true;createBtn.textContent='正在生成…';
     try{
       const r=await fetch('/api/create',{method:'POST',headers:{'content-type':'application/json'},body:'{}'});const j=await r.json();if(!r.ok)throw new Error(j.error||'创建失败');
-      code=j.code;senderToken=j.senderToken;codeView.textContent=code;sendReady.classList.remove('hidden');
-      createBtn.textContent='已生成';startPolling();
-    }catch(e){createBtn.disabled=false;createBtn.textContent='生成取件码';sendStatus.textContent=e.message;sendStatus.className='status bad';}
+      code=j.code;senderToken=j.senderToken;codeView.textContent=code;qrView.src='/api/qr/'+code+'?v='+Date.now();sendReady.classList.remove('hidden');
+      createBtn.textContent='二维码已生成';startPolling();
+    }catch(e){createBtn.disabled=false;createBtn.textContent='生成接收二维码';sendStatus.textContent=e.message;sendStatus.className='status bad';}
   };
 
   function startPolling(){
@@ -86,8 +92,8 @@
     const run=async()=>{
       try{
         const r=await fetch('/api/status/'+code,{cache:'no-store'});const j=await r.json();if(!r.ok)throw new Error(j.error||'状态失效');
-        if(j.receiverReady){receiverStatus.textContent='iPhone 已准备好，可以发送。';receiverStatus.className='status ok';sendBtn.disabled=files.files.length===0;}
-        else{receiverStatus.textContent='等待 iPhone 输入取件码并点“准备接收”…';receiverStatus.className='status';sendBtn.disabled=true;}
+        if(j.receiverReady){receiverStatus.textContent='iPhone 已连接，可以发送。';receiverStatus.className='status ok';sendBtn.disabled=files.files.length===0;}
+        else{receiverStatus.textContent='等待 iPhone 扫码并打开接收链接…';receiverStatus.className='status';sendBtn.disabled=true;}
       }catch(e){receiverStatus.textContent=e.message;receiverStatus.className='status bad';sendBtn.disabled=true;clearInterval(pollTimer);}
     };
     run();pollTimer=setInterval(run,1000);
