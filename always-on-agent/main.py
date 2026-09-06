@@ -19,6 +19,11 @@ LLM_MODE = os.getenv('LLM_MODE', 'mock')
 LLM_BASE_URL = os.getenv('LLM_BASE_URL', '').rstrip('/')
 LLM_API_KEY = os.getenv('LLM_API_KEY', '')
 LLM_MODEL = os.getenv('LLM_MODEL', '')
+LLM_PROVIDER = os.getenv('LLM_PROVIDER', 'generic').lower()
+LLM_MIN_BALANCE_CNY = float(os.getenv('LLM_MIN_BALANCE_CNY', '9.00'))
+LLM_DAILY_BUDGET_CNY = float(os.getenv('LLM_DAILY_BUDGET_CNY', '0.10'))
+LLM_MAX_CALLS_PER_DAY = int(os.getenv('LLM_MAX_CALLS_PER_DAY', '12'))
+LLM_MIN_CALL_INTERVAL_SECONDS = float(os.getenv('LLM_MIN_CALL_INTERVAL_SECONDS', '600'))
 
 SYSTEM_RULES = '''You are the planning brain of a persistent owner's agent.
 Hard rules:
@@ -34,7 +39,7 @@ Schema: {"action_type":"...","title":"...","instruction":"...","payload":{},"ris
 Risk flags when applicable: uncertain_fact, spend_money, use_owner_identity, make_formal_commitment, upload_private_data, destructive_action, change_credentials.
 '''
 
-DEFAULT_STATE = {'goals': [], 'tasks': [], 'approvals': [], 'events': [], 'memories': {}, 'next_ids': {'goal': 1, 'task': 1, 'approval': 1, 'event': 1}}
+DEFAULT_STATE = {'goals': [], 'tasks': [], 'approvals': [], 'events': [], 'memories': {}, 'budget': {'day':'','planner_calls':0,'last_call_at':0.0,'day_start_balance_cny':None,'last_balance_cny':None,'last_usage':{},'input_tokens_today':0,'output_tokens_today':0,'paused':False,'pause_reason':''}, 'next_ids': {'goal': 1, 'task': 1, 'approval': 1, 'event': 1}}
 state_lock = asyncio.Lock()
 stop_event = asyncio.Event()
 
@@ -77,7 +82,55 @@ def policy(action):
         if f in m: return False, m[f]
     return True, None
 
-async def planner_decide(goal, history):
+def budget_state(s):
+    b=s.setdefault('budget', {})
+    defaults={'day':'','planner_calls':0,'last_call_at':0.0,'day_start_balance_cny':None,'last_balance_cny':None,'last_usage':{},'input_tokens_today':0,'output_tokens_today':0,'paused':False,'pause_reason':''}
+    for k,v in defaults.items(): b.setdefault(k,v)
+    day=datetime.now(timezone.utc).strftime('%Y-%m-%d')
+    if b.get('day') != day:
+        b.update({'day':day,'planner_calls':0,'last_call_at':0.0,'day_start_balance_cny':None,'input_tokens_today':0,'output_tokens_today':0,'paused':False,'pause_reason':''})
+    return b
+
+async def provider_balance():
+    if LLM_PROVIDER != 'deepseek': return {'supported':False,'available':True,'currency':None,'total':None}
+    if not (LLM_BASE_URL and LLM_API_KEY): return {'supported':True,'available':False,'currency':'CNY','total':None,'error':'missing connection'}
+    async with httpx.AsyncClient(timeout=30) as c:
+        r=await c.get(LLM_BASE_URL+'/user/balance',headers={'Authorization':f'Bearer {LLM_API_KEY}'})
+        r.raise_for_status(); data=r.json()
+    info=next((x for x in data.get('balance_infos',[]) if x.get('currency')=='CNY'),None)
+    total=float(info.get('total_balance')) if info and info.get('total_balance') is not None else None
+    return {'supported':True,'available':bool(data.get('is_available')),'currency':'CNY','total':total}
+
+async def budget_preflight(s):
+    b=budget_state(s); now_ts=time.time()
+    if b['planner_calls'] >= LLM_MAX_CALLS_PER_DAY:
+        b['paused']=True; b['pause_reason']='daily_call_limit'; return {'allowed':False,'reason':'daily_call_limit'}
+    if b['last_call_at'] and now_ts-b['last_call_at'] < LLM_MIN_CALL_INTERVAL_SECONDS:
+        return {'allowed':False,'reason':'cooldown','retry_after':round(LLM_MIN_CALL_INTERVAL_SECONDS-(now_ts-b['last_call_at']),1)}
+    try:
+        bal=await provider_balance()
+    except Exception as e:
+        b['paused']=True; b['pause_reason']='balance_check_failed'; return {'allowed':False,'reason':'balance_check_failed','error':str(e)}
+    if bal.get('supported'):
+        total=bal.get('total'); b['last_balance_cny']=total
+        if b.get('day_start_balance_cny') is None and total is not None: b['day_start_balance_cny']=total
+        spent=max(0.0,(b.get('day_start_balance_cny') or total or 0)-(total or 0)) if total is not None else 0.0
+        if not bal.get('available') or total is None:
+            b['paused']=True; b['pause_reason']='balance_unavailable'; return {'allowed':False,'reason':'balance_unavailable'}
+        if total <= LLM_MIN_BALANCE_CNY:
+            b['paused']=True; b['pause_reason']='minimum_balance_reached'; return {'allowed':False,'reason':'minimum_balance_reached','balance_cny':total}
+        if spent >= LLM_DAILY_BUDGET_CNY:
+            b['paused']=True; b['pause_reason']='daily_budget_reached'; return {'allowed':False,'reason':'daily_budget_reached','spent_cny':round(spent,4),'balance_cny':total}
+        print(f"BUDGET_CHECK balance_cny={total:.4f} spent_today_cny={spent:.4f} calls={b['planner_calls']}",flush=True)
+    b['paused']=False; b['pause_reason']=''; b['planner_calls']+=1; b['last_call_at']=now_ts
+    return {'allowed':True,'balance':bal}
+
+def budget_record_usage(s, usage):
+    b=budget_state(s); usage=usage or {}; b['last_usage']=usage
+    b['input_tokens_today'] += int(usage.get('prompt_tokens') or 0)
+    b['output_tokens_today'] += int(usage.get('completion_tokens') or 0)
+
+async def planner_decide(goal, history, state):
     if LLM_MODE == 'mock':
         if not history:
             return {'action_type':'note','title':'Runtime online','instruction':'Record that the autonomous runtime is alive.','payload':{'text':'Runtime is online. A real reasoning model must be connected before autonomous research and execution.'},'risk_flags':[],'why':'Boot proof without spending money.'}
@@ -90,7 +143,8 @@ async def planner_decide(goal, history):
         if r.status_code >= 400:
             print('PLANNER_HTTP_ERROR', r.status_code, r.text[:1000], flush=True)
         r.raise_for_status()
-        return json.loads(r.json()['choices'][0]['message']['content'])
+        data=r.json(); budget_record_usage(state,data.get('usage') or {})
+        return json.loads(data['choices'][0]['message']['content'])
 
 
 def strip_html(x): return re.sub(r'\s+',' ',unescape(re.sub('<[^>]+>',' ',x or ''))).strip()
@@ -162,7 +216,13 @@ async def tick_once():
         if blocked: return {'status':'waiting','goal_id':goal['id'],'task_id':blocked['id']}
         hist=[e for e in s['events'] if e.get('goal_id')==goal['id']]
         try:
-            action=await planner_decide(goal,hist)
+            if LLM_MODE == 'openai_compatible':
+                gate=await budget_preflight(s)
+                if not gate.get('allowed'):
+                    reason=gate.get('reason','budget_guard')
+                    if reason != 'cooldown': print('BUDGET_PAUSE', reason, {k:v for k,v in gate.items() if k != 'allowed'}, flush=True)
+                    await store_set(s); return {'status':'budget_wait' if reason=='cooldown' else 'budget_paused','reason':reason}
+            action=await planner_decide(goal,hist,s)
             print('PLANNER_ACTION', action.get('action_type'), action.get('title'), flush=True)
         except Exception as e:
             print('PLANNER_ERROR', str(e), flush=True)
@@ -185,7 +245,7 @@ async def worker_loop():
         try: await asyncio.wait_for(stop_event.wait(),timeout=WORKER_INTERVAL)
         except asyncio.TimeoutError: pass
 
-app=FastAPI(title='Always-On Owner Agent',version='0.3.0')
+app=FastAPI(title='Always-On Owner Agent',version='0.4.0')
 
 @app.on_event('startup')
 async def start():
@@ -201,7 +261,7 @@ async def health():
     try:
         s=await store_get(); ok=isinstance(s,dict); detail='supabase' if STORE_URL else 'memory-only'
     except Exception as e: detail=str(e)
-    return {'ok':ok,'version':'0.3.0','store':detail,'llm_mode':LLM_MODE}
+    return {'ok':ok,'version':'0.4.0','store':detail,'llm_mode':LLM_MODE,'llm_provider':LLM_PROVIDER,'budget_guard':True}
 
 @app.get('/state')
 async def get_state(authorization:str|None=Header(default=None)):
