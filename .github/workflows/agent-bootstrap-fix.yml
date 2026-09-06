@@ -24,6 +24,7 @@ jobs:
           python always-on-agent/patch_search_fallback.py
           python always-on-agent/patch_quality_first.py
           python always-on-agent/patch_action_guard.py
+          python always-on-agent/patch_executor_bridge.py
           python -m py_compile always-on-agent/main.py
       - name: Commit patch
         run: |
@@ -34,5 +35,5 @@ jobs:
           git config user.name "always-on-agent-bot"
           git config user.email "actions@users.noreply.github.com"
           git add always-on-agent/main.py
-          git commit -m "Install autonomous action normalization guard"
+          git commit -m "Install connected-tool executor bridge"
           git push origin HEAD:always-on-agent-v0
