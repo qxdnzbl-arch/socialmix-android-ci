@@ -1,0 +1,93 @@
+from pathlib import Path
+
+p = Path('always-on-agent/main.py')
+s = p.read_text()
+if 'LLM_DAILY_BUDGET_CNY' in s:
+    print('budget fuse already installed')
+    raise SystemExit(0)
+
+s = s.replace(
+    "LLM_MODEL = os.getenv('LLM_MODEL', '')\n",
+    "LLM_MODEL = os.getenv('LLM_MODEL', '')\n"
+    "LLM_PROVIDER = os.getenv('LLM_PROVIDER', 'generic').lower()\n"
+    "LLM_MIN_BALANCE_CNY = float(os.getenv('LLM_MIN_BALANCE_CNY', '9.00'))\n"
+    "LLM_DAILY_BUDGET_CNY = float(os.getenv('LLM_DAILY_BUDGET_CNY', '0.10'))\n"
+    "LLM_MAX_CALLS_PER_DAY = int(os.getenv('LLM_MAX_CALLS_PER_DAY', '12'))\n"
+    "LLM_MIN_CALL_INTERVAL_SECONDS = float(os.getenv('LLM_MIN_CALL_INTERVAL_SECONDS', '600'))\n"
+)
+
+s = s.replace(
+    "DEFAULT_STATE = {'goals': [], 'tasks': [], 'approvals': [], 'events': [], 'memories': {}, 'next_ids': {'goal': 1, 'task': 1, 'approval': 1, 'event': 1}}",
+    "DEFAULT_STATE = {'goals': [], 'tasks': [], 'approvals': [], 'events': [], 'memories': {}, 'budget': {'day':'','planner_calls':0,'last_call_at':0.0,'day_start_balance_cny':None,'last_balance_cny':None,'last_usage':{},'input_tokens_today':0,'output_tokens_today':0,'paused':False,'pause_reason':''}, 'next_ids': {'goal': 1, 'task': 1, 'approval': 1, 'event': 1}}"
+)
+
+marker = "async def planner_decide(goal, history):\n"
+insert = r'''def budget_state(s):
+    b=s.setdefault('budget', {})
+    defaults={'day':'','planner_calls':0,'last_call_at':0.0,'day_start_balance_cny':None,'last_balance_cny':None,'last_usage':{},'input_tokens_today':0,'output_tokens_today':0,'paused':False,'pause_reason':''}
+    for k,v in defaults.items(): b.setdefault(k,v)
+    day=datetime.now(timezone.utc).strftime('%Y-%m-%d')
+    if b.get('day') != day:
+        b.update({'day':day,'planner_calls':0,'last_call_at':0.0,'day_start_balance_cny':None,'input_tokens_today':0,'output_tokens_today':0,'paused':False,'pause_reason':''})
+    return b
+
+async def provider_balance():
+    if LLM_PROVIDER != 'deepseek': return {'supported':False,'available':True,'currency':None,'total':None}
+    if not (LLM_BASE_URL and LLM_API_KEY): return {'supported':True,'available':False,'currency':'CNY','total':None,'error':'missing connection'}
+    async with httpx.AsyncClient(timeout=30) as c:
+        r=await c.get(LLM_BASE_URL+'/user/balance',headers={'Authorization':f'Bearer {LLM_API_KEY}'})
+        r.raise_for_status(); data=r.json()
+    info=next((x for x in data.get('balance_infos',[]) if x.get('currency')=='CNY'),None)
+    total=float(info.get('total_balance')) if info and info.get('total_balance') is not None else None
+    return {'supported':True,'available':bool(data.get('is_available')),'currency':'CNY','total':total}
+
+async def budget_preflight(s):
+    b=budget_state(s); now_ts=time.time()
+    if b['planner_calls'] >= LLM_MAX_CALLS_PER_DAY:
+        b['paused']=True; b['pause_reason']='daily_call_limit'; return {'allowed':False,'reason':'daily_call_limit'}
+    if b['last_call_at'] and now_ts-b['last_call_at'] < LLM_MIN_CALL_INTERVAL_SECONDS:
+        return {'allowed':False,'reason':'cooldown','retry_after':round(LLM_MIN_CALL_INTERVAL_SECONDS-(now_ts-b['last_call_at']),1)}
+    try:
+        bal=await provider_balance()
+    except Exception as e:
+        b['paused']=True; b['pause_reason']='balance_check_failed'; return {'allowed':False,'reason':'balance_check_failed','error':str(e)}
+    if bal.get('supported'):
+        total=bal.get('total'); b['last_balance_cny']=total
+        if b.get('day_start_balance_cny') is None and total is not None: b['day_start_balance_cny']=total
+        spent=max(0.0,(b.get('day_start_balance_cny') or total or 0)-(total or 0)) if total is not None else 0.0
+        if not bal.get('available') or total is None:
+            b['paused']=True; b['pause_reason']='balance_unavailable'; return {'allowed':False,'reason':'balance_unavailable'}
+        if total <= LLM_MIN_BALANCE_CNY:
+            b['paused']=True; b['pause_reason']='minimum_balance_reached'; return {'allowed':False,'reason':'minimum_balance_reached','balance_cny':total}
+        if spent >= LLM_DAILY_BUDGET_CNY:
+            b['paused']=True; b['pause_reason']='daily_budget_reached'; return {'allowed':False,'reason':'daily_budget_reached','spent_cny':round(spent,4),'balance_cny':total}
+        print(f"BUDGET_CHECK balance_cny={total:.4f} spent_today_cny={spent:.4f} calls={b['planner_calls']}",flush=True)
+    b['paused']=False; b['pause_reason']=''; b['planner_calls']+=1; b['last_call_at']=now_ts
+    return {'allowed':True,'balance':bal}
+
+def budget_record_usage(s, usage):
+    b=budget_state(s); usage=usage or {}; b['last_usage']=usage
+    b['input_tokens_today'] += int(usage.get('prompt_tokens') or 0)
+    b['output_tokens_today'] += int(usage.get('completion_tokens') or 0)
+
+'''
+if marker not in s:
+    raise SystemExit('planner marker not found')
+s = s.replace(marker, insert + "async def planner_decide(goal, history, state):\n", 1)
+
+old = """        r.raise_for_status()\n        return json.loads(r.json()['choices'][0]['message']['content'])\n"""
+new = """        r.raise_for_status()\n        data=r.json(); budget_record_usage(state,data.get('usage') or {})\n        return json.loads(data['choices'][0]['message']['content'])\n"""
+if old not in s:
+    raise SystemExit('response block not found')
+s = s.replace(old, new, 1)
+
+old2 = """        try:\n            action=await planner_decide(goal,hist)\n            print('PLANNER_ACTION', action.get('action_type'), action.get('title'), flush=True)\n"""
+new2 = """        try:\n            if LLM_MODE == 'openai_compatible':\n                gate=await budget_preflight(s)\n                if not gate.get('allowed'):\n                    reason=gate.get('reason','budget_guard')\n                    if reason != 'cooldown': print('BUDGET_PAUSE', reason, {k:v for k,v in gate.items() if k != 'allowed'}, flush=True)\n                    await store_set(s); return {'status':'budget_wait' if reason=='cooldown' else 'budget_paused','reason':reason}\n            action=await planner_decide(goal,hist,s)\n            print('PLANNER_ACTION', action.get('action_type'), action.get('title'), flush=True)\n"""
+if old2 not in s:
+    raise SystemExit('tick planner block not found')
+s = s.replace(old2, new2, 1)
+
+s = s.replace("app=FastAPI(title='Always-On Owner Agent',version='0.3.0')", "app=FastAPI(title='Always-On Owner Agent',version='0.4.0')")
+s = s.replace("return {'ok':ok,'version':'0.3.0','store':detail,'llm_mode':LLM_MODE}", "return {'ok':ok,'version':'0.4.0','store':detail,'llm_mode':LLM_MODE,'llm_provider':LLM_PROVIDER,'budget_guard':True}")
+p.write_text(s)
+print('budget fuse patched')
