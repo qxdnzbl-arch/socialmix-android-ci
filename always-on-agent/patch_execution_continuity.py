@@ -5,13 +5,33 @@ s=p.read_text()
 
 # 1) Planner guidance: internal reversible owner-project work is not a formal external commitment.
 needle="2. Spending, owner identity use, formal external commitments, private uploads, destructive actions, or credential changes must wait for approval.\n"
-insert=(needle+
+base_rules=(
 "2a. Internal, reversible code/config/deploy/database maintenance on the owner's already-confirmed projects is NOT a formal external commitment and must not be flagged make_formal_commitment. Only commitments to external parties (for example sending an application, quote, bid, contract, purchase, payment, or signed promise) use that flag.\n"
 "2b. Internal technical failures are not owner blockers. Repair, change path, or emit executor_request for connected-tool repair; do not ask the owner to approve ordinary debugging, CI fixes, deployment fixes, search fixes, or reversible project maintenance.\n"
-"2c. If the owner has asked for a result, keep the goal active until a verified deliverable exists or a genuinely owner-only action is required. Do not treat progress notes as completion.\n")
+"2c. If the owner has asked for a result, keep the goal active until a verified deliverable exists or a genuinely owner-only action is required. Do not treat progress notes as completion.\n"
+"2d. Passive waiting is prohibited while an active goal exists and there is no genuine owner-only blocker. Never emit a note whose purpose is to wait for further owner directives, wait for the next objective, or stop after recording progress. Choose the next executable action instead. Use note only when recording evidence is itself the useful action.\n"
+"2e. A delivered subtask or work contract does not end an active parent goal. If the parent goal remains active, immediately choose the next highest-value verified subtask instead of waiting for instructions.\n"
+)
 if '2a. Internal, reversible code/config/deploy/database maintenance' not in s:
     if needle not in s: raise SystemExit('SYSTEM_RULES anchor missing')
-    s=s.replace(needle,insert,1)
+    s=s.replace(needle,needle+base_rules,1)
+else:
+    anchor="2c. If the owner has asked for a result, keep the goal active until a verified deliverable exists or a genuinely owner-only action is required. Do not treat progress notes as completion.\n"
+    extra=(
+    "2d. Passive waiting is prohibited while an active goal exists and there is no genuine owner-only blocker. Never emit a note whose purpose is to wait for further owner directives, wait for the next objective, or stop after recording progress. Choose the next executable action instead. Use note only when recording evidence is itself the useful action.\n"
+    "2e. A delivered subtask or work contract does not end an active parent goal. If the parent goal remains active, immediately choose the next highest-value verified subtask instead of waiting for instructions.\n"
+    )
+    if '2d. Passive waiting is prohibited' not in s:
+        if anchor not in s: raise SystemExit('continuity rule anchor missing')
+        s=s.replace(anchor,anchor+extra,1)
+
+# 1b) Give the planner the durable work contract and current verification state.
+old_ctx="json.dumps({'goal':goal,'recent_history':history[-30:]},ensure_ascii=False)"
+new_ctx="json.dumps({'goal':goal,'work_contract':state.get('work_contract') or {},'system_guard':state.get('system_guard') or {},'audit_last_result':(state.get('audit') or {}).get('last_result') or {},'recent_history':history[-30:]},ensure_ascii=False)"
+if old_ctx in s:
+    s=s.replace(old_ctx,new_ctx,1)
+elif "'work_contract':state.get('work_contract')" not in s:
+    raise SystemExit('planner context anchor missing')
 
 # 2) Policy guard: strip false formal-commitment flags from known internal executor capabilities.
 old="""def policy(action):
