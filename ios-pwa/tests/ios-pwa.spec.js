@@ -1,6 +1,9 @@
 const { test, expect } = require('@playwright/test');
 
 test('iPhone 7 core music flow works and persists imported track', async ({ page }) => {
+  const errors=[];
+  page.on('pageerror', e => { errors.push(String(e)); console.log('PAGEERROR:', String(e)); });
+  page.on('console', m => console.log('BROWSER:', m.type(), m.text()));
   await page.goto('/');
   await expect(page.getByText('心动')).toBeVisible();
 
@@ -14,6 +17,10 @@ test('iPhone 7 core music flow works and persists imported track', async ({ page
     mimeType: 'audio/mpeg',
     buffer: Buffer.from('ID3\u0004\u0000\u0000\u0000\u0000\u0000\u0000fake-audio')
   });
+  await page.waitForTimeout(700);
+  console.log('FILECOUNT:', await input.evaluate(el=>el.files.length));
+  console.log('LIBRARYHTML:', await page.locator('#libraryList').innerHTML());
+  console.log('ERRORS:', JSON.stringify(errors));
 
   await expect(page.locator('#libraryList').getByText('夜航测试')).toBeVisible();
   await expect(page.locator('#libraryList').getByText('本地音乐')).toBeVisible();
