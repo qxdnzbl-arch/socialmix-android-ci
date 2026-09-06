@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#f7f8fb">
+  <title>手机互传</title>
+  <style>
+    :root{font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","PingFang SC","Segoe UI",sans-serif;color:#17181c;background:#f7f8fb}
+    *{box-sizing:border-box}
+    body{margin:0;background:#f7f8fb}
+    .wrap{max-width:560px;margin:0 auto;padding:28px 18px 42px}
+    h1{font-size:30px;margin:4px 0 8px;letter-spacing:-.5px}.sub{color:#666;line-height:1.6;margin-bottom:22px}
+    .card{background:#fff;border:1px solid #eceef3;border-radius:22px;padding:18px;box-shadow:0 10px 32px rgba(18,24,40,.05);margin-bottom:16px}
+    .tabs{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px}
+    button,.btn{appearance:none;border:0;border-radius:15px;min-height:50px;padding:0 16px;font-size:17px;font-weight:650;cursor:pointer}
+    .primary{background:#315fe9;color:#fff}.secondary{background:#eef2ff;color:#294bc5}.ghost{background:#f2f3f6;color:#222}.danger{background:#fff1f1;color:#b91c1c}
+    button:disabled{opacity:.45;cursor:not-allowed}
+    input[type=text]{width:100%;height:52px;border:1px solid #dfe2ea;border-radius:14px;padding:0 15px;font-size:21px;letter-spacing:4px;text-align:center;background:#fff;outline:none}
+    input[type=file]{width:100%;font-size:16px;margin:12px 0 4px}
+    .code{font-size:38px;font-weight:760;letter-spacing:7px;text-align:center;padding:16px 0 10px}
+    .label{font-size:14px;color:#777;margin-bottom:6px}.status{margin-top:12px;line-height:1.55;color:#4d5564;white-space:pre-wrap}.ok{color:#15803d}.bad{color:#b42318}
+    .progress{height:10px;background:#edf0f5;border-radius:999px;overflow:hidden;margin-top:12px}.bar{height:100%;width:0;background:#315fe9;transition:width .15s linear}
+    .row{display:flex;gap:10px}.row>*{flex:1}.hidden{display:none!important}.tip{font-size:14px;color:#737b89;line-height:1.55;margin-top:12px}
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <h1>手机互传</h1>
+  <div class="sub">OPPO 和 iPhone 都打开这个网页。文件经互联网实时中转，不经过本地热点互访，也不会长期保存。</div>
+
+  <div class="tabs">
+    <button id="tabSend" class="primary">我要发送</button>
+    <button id="tabReceive" class="ghost">我要接收</button>
+  </div>
+
+  <section id="sendPanel" class="card">
+    <button id="createBtn" class="primary" style="width:100%">生成取件码</button>
+    <div id="sendReady" class="hidden">
+      <div class="label" style="margin-top:16px">把这个码告诉 iPhone</div>
+      <div id="codeView" class="code">------</div>
+      <div id="receiverStatus" class="status">等待 iPhone 输入取件码并点“准备接收”…</div>
+      <input id="files" type="file" multiple>
+      <div id="fileSummary" class="status">还没有选择文件</div>
+      <button id="sendBtn" class="primary" style="width:100%;margin-top:14px" disabled>开始发送</button>
+      <div class="progress"><div id="bar" class="bar"></div></div>
+      <div id="sendStatus" class="status"></div>
+      <div class="tip">可以一次选择很多文件。iPhone 最终只下载一个 ZIP，适合你这种几百个文件一起传。</div>
+    </div>
+  </section>
+
+  <section id="receivePanel" class="card hidden">
+    <div class="label">输入 OPPO 上的 6 位取件码</div>
+    <input id="codeInput" type="text" inputmode="numeric" maxlength="6" placeholder="000000">
+    <button id="receiveBtn" class="primary" style="width:100%;margin-top:14px">准备接收</button>
+    <div id="receiveStatus" class="status"></div>
+    <div class="tip">点“准备接收”后不要关闭页面。OPPO 开始发送后，Safari 会下载一个 <b>OPPO-to-iPhone.zip</b>。</div>
+  </section>
+</div>
+<script>
+(() => {
+  const $ = id => document.getElementById(id);
+  const tabSend=$('tabSend'),tabReceive=$('tabReceive'),sendPanel=$('sendPanel'),receivePanel=$('receivePanel');
+  const createBtn=$('createBtn'),sendReady=$('sendReady'),codeView=$('codeView'),receiverStatus=$('receiverStatus'),files=$('files'),fileSummary=$('fileSummary'),sendBtn=$('sendBtn'),bar=$('bar'),sendStatus=$('sendStatus');
+  const codeInput=$('codeInput'),receiveBtn=$('receiveBtn'),receiveStatus=$('receiveStatus');
+  let code='', senderToken='', pollTimer=null;
+
+  function switchMode(mode){
+    const sending=mode==='send';
+    sendPanel.classList.toggle('hidden',!sending);receivePanel.classList.toggle('hidden',sending);
+    tabSend.className=sending?'primary':'ghost';tabReceive.className=sending?'ghost':'primary';
+  }
+  tabSend.onclick=()=>switchMode('send');tabReceive.onclick=()=>switchMode('receive');
+
+  createBtn.onclick=async()=>{
+    createBtn.disabled=true;createBtn.textContent='正在生成…';
+    try{
+      const r=await fetch('/api/create',{method:'POST',headers:{'content-type':'application/json'},body:'{}'});const j=await r.json();if(!r.ok)throw new Error(j.error||'创建失败');
+      code=j.code;senderToken=j.senderToken;codeView.textContent=code;sendReady.classList.remove('hidden');
+      createBtn.textContent='已生成';startPolling();
+    }catch(e){createBtn.disabled=false;createBtn.textContent='生成取件码';sendStatus.textContent=e.message;sendStatus.className='status bad';}
+  };
+
+  function startPolling(){
+    clearInterval(pollTimer);
+    const run=async()=>{
+      try{
+        const r=await fetch('/api/status/'+code,{cache:'no-store'});const j=await r.json();if(!r.ok)throw new Error(j.error||'状态失效');
+        if(j.receiverReady){receiverStatus.textContent='iPhone 已准备好，可以发送。';receiverStatus.className='status ok';sendBtn.disabled=files.files.length===0;}
+        else{receiverStatus.textContent='等待 iPhone 输入取件码并点“准备接收”…';receiverStatus.className='status';sendBtn.disabled=true;}
+      }catch(e){receiverStatus.textContent=e.message;receiverStatus.className='status bad';sendBtn.disabled=true;clearInterval(pollTimer);}
+    };
+    run();pollTimer=setInterval(run,1000);
+  }
+
+  files.onchange=()=>{
+    const list=[...files.files];const total=list.reduce((n,f)=>n+f.size,0);fileSummary.textContent=list.length?`已选 ${list.length} 个文件 · ${format(total)}`:'还没有选择文件';
+    if(receiverStatus.classList.contains('ok'))sendBtn.disabled=list.length===0;
+  };
+  function format(n){const u=['B','KB','MB','GB','TB'];let i=0,v=n;while(v>=1024&&i<u.length-1){v/=1024;i++}return `${v.toFixed(i?2:0)} ${u[i]}`}
+
+  sendBtn.onclick=()=>{
+    const list=[...files.files];if(!list.length||!code)return;
+    sendBtn.disabled=true;createBtn.disabled=true;bar.style.width='0%';sendStatus.textContent='正在发送，请保持页面打开…';sendStatus.className='status';
+    const fd=new FormData();for(const f of list)fd.append('files',f,f.name);
+    const xhr=new XMLHttpRequest();xhr.open('POST','/send/'+code);xhr.setRequestHeader('x-sender-token',senderToken);
+    xhr.upload.onprogress=e=>{if(e.lengthComputable){const p=Math.min(100,Math.round(e.loaded/e.total*100));bar.style.width=p+'%';sendStatus.textContent=`正在发送 ${p}% · ${format(e.loaded)} / ${format(e.total)}`;}};
+    xhr.onload=()=>{let j={};try{j=JSON.parse(xhr.responseText||'{}')}catch(_){}if(xhr.status>=200&&xhr.status<300){bar.style.width='100%';sendStatus.textContent=`发送完成，共 ${j.files||list.length} 个文件。iPhone 下载结束后即可解压。`;sendStatus.className='status ok';clearInterval(pollTimer);}else{sendStatus.textContent=j.error||`发送失败（${xhr.status}）`;sendStatus.className='status bad';sendBtn.disabled=false;}};
+    xhr.onerror=()=>{sendStatus.textContent='网络中断，发送失败。';sendStatus.className='status bad';sendBtn.disabled=false;};
+    xhr.send(fd);
+  };
+
+  receiveBtn.onclick=async()=>{
+    const c=codeInput.value.replace(/\D/g,'').slice(0,6);codeInput.value=c;if(c.length!==6){receiveStatus.textContent='请输入 6 位取件码';receiveStatus.className='status bad';return;}
+    receiveBtn.disabled=true;receiveStatus.textContent='正在连接发送端…';receiveStatus.className='status';
+    try{
+      const r=await fetch('/api/status/'+c,{cache:'no-store'});const j=await r.json();if(!r.ok)throw new Error(j.error||'取件码无效');
+      receiveStatus.textContent='已连接。现在保持这个页面，等待 OPPO 开始发送。';receiveStatus.className='status ok';
+      setTimeout(()=>{window.location.href='/receive/'+c;},250);
+    }catch(e){receiveBtn.disabled=false;receiveStatus.textContent=e.message;receiveStatus.className='status bad';}
+  };
+})();
+</script>
+</body>
+</html>
