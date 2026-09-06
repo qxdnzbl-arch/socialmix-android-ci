@@ -32,6 +32,8 @@ Hard rules:
 2a. Internal, reversible code/config/deploy/database maintenance on the owner's already-confirmed projects is NOT a formal external commitment and must not be flagged make_formal_commitment. Only commitments to external parties (for example sending an application, quote, bid, contract, purchase, payment, or signed promise) use that flag.
 2b. Internal technical failures are not owner blockers. Repair, change path, or emit executor_request for connected-tool repair; do not ask the owner to approve ordinary debugging, CI fixes, deployment fixes, search fixes, or reversible project maintenance.
 2c. If the owner has asked for a result, keep the goal active until a verified deliverable exists or a genuinely owner-only action is required. Do not treat progress notes as completion.
+2d. Passive waiting is prohibited while an active goal exists and there is no genuine owner-only blocker. Never emit a note whose purpose is to wait for further owner directives, wait for the next objective, or stop after recording progress. Choose the next executable action instead. Use note only when recording evidence is itself the useful action.
+2e. A delivered subtask or work contract does not end an active parent goal. If the parent goal remains active, immediately choose the next highest-value verified subtask instead of waiting for instructions.
 3. Prefer verified real-world evidence, low-cost tests, reversible actions, and resources that have real-world proof.
 4. After each result, choose one best next action. Avoid pointless repeated searches.
 4a. Optimize for result quality, not minimum spend. Use paid reasoning when it materially improves the result, but never spend tokens repeating unchanged analysis or retrying the same failed path without new evidence. Prefer deterministic/free execution tools when they can do the job, and verify outputs before another paid reasoning call.
@@ -238,7 +240,7 @@ async def planner_decide(goal, history, state):
         return {'action_type':'clarify','title':'Connect reasoning model','instruction':'A real reasoning model is required for autonomous work.','payload':{'question':'Approve and provide a reasoning-model connection for autonomous work.'},'risk_flags':['change_credentials'],'why':'Mock mode cannot make intelligent plans.'}
     if LLM_MODE != 'openai_compatible': raise RuntimeError(f'Unsupported LLM_MODE={LLM_MODE}')
     if not (LLM_BASE_URL and LLM_API_KEY and LLM_MODEL): raise RuntimeError('LLM connection incomplete')
-    body={'model':LLM_MODEL,'messages':[{'role':'system','content':SYSTEM_RULES},{'role':'user','content':json.dumps({'goal':goal,'recent_history':history[-30:]},ensure_ascii=False)}],'thinking':{'type':'disabled'},'max_tokens':1200,'response_format':{'type':'json_object'}}
+    body={'model':LLM_MODEL,'messages':[{'role':'system','content':SYSTEM_RULES},{'role':'user','content':json.dumps({'goal':goal,'work_contract':state.get('work_contract') or {},'system_guard':state.get('system_guard') or {},'audit_last_result':(state.get('audit') or {}).get('last_result') or {},'recent_history':history[-30:]},ensure_ascii=False)}],'thinking':{'type':'disabled'},'max_tokens':1200,'response_format':{'type':'json_object'}}
     async with httpx.AsyncClient(timeout=120) as c:
         r=await c.post(LLM_BASE_URL+'/chat/completions',headers={'Authorization':f'Bearer {LLM_API_KEY}'},json=body)
         if r.status_code >= 400:
