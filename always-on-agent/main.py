@@ -86,7 +86,10 @@ async def planner_decide(goal, history):
     if not (LLM_BASE_URL and LLM_API_KEY and LLM_MODEL): raise RuntimeError('LLM connection incomplete')
     body={'model':LLM_MODEL,'messages':[{'role':'system','content':SYSTEM_RULES},{'role':'user','content':json.dumps({'goal':goal,'recent_history':history[-30:]},ensure_ascii=False)}],'reasoning_effort':'low','max_completion_tokens':1200,'response_format':{'type':'json_object'}}
     async with httpx.AsyncClient(timeout=120) as c:
-        r=await c.post(LLM_BASE_URL+'/chat/completions',headers={'Authorization':f'Bearer {LLM_API_KEY}'},json=body); r.raise_for_status()
+        r=await c.post(LLM_BASE_URL+'/chat/completions',headers={'Authorization':f'Bearer {LLM_API_KEY}'},json=body)
+        if r.status_code >= 400:
+            print('PLANNER_HTTP_ERROR', r.status_code, r.text[:1000], flush=True)
+        r.raise_for_status()
         return json.loads(r.json()['choices'][0]['message']['content'])
 
 
