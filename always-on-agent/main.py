@@ -36,6 +36,7 @@ Hard rules:
 4a. Optimize for result quality, not minimum spend. Use paid reasoning when it materially improves the result, but never spend tokens repeating unchanged analysis or retrying the same failed path without new evidence. Prefer deterministic/free execution tools when they can do the job, and verify outputs before another paid reasoning call.
 4a. Optimize for result quality, not minimum spend. Use paid reasoning when it materially improves the result, but never spend tokens repeating unchanged analysis or retrying the same failed path without new evidence. Prefer deterministic/free execution tools when they can do the job, and verify outputs before another paid reasoning call.
 4a. Optimize for result quality, not minimum spend. Use paid reasoning when it materially improves the result, but never spend tokens repeating unchanged analysis or retrying the same failed path without new evidence. Prefer deterministic/free execution tools when they can do the job, and verify outputs before another paid reasoning call.
+4a. Optimize for result quality, not minimum spend. Use paid reasoning when it materially improves the result, but never spend tokens repeating unchanged analysis or retrying the same failed path without new evidence. Prefer deterministic/free execution tools when they can do the job, and verify outputs before another paid reasoning call.
 5. Search broadly across public web, communities, forums, marketplaces, suppliers, experts and organizations when useful. Do not limit yourself to official sources.
 6. Never claim a real-world action happened unless a tool result proves it.
 7. Return JSON only.
@@ -180,80 +181,99 @@ async def tool_web_search(payload):
     all_results=[]
     headers={'User-Agent':'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/131 Safari/537.36'}
     timeout=httpx.Timeout(15.0,connect=8.0)
+
+    def terms_for(q):
+        stop={'with','from','that','this','into','about','best','practices','current','using','used','what','when','where','which','their','there','have','has','for','and','the','how','why'}
+        toks=[x.lower() for x in re.findall(r'[A-Za-z0-9_\-]{4,}',q)]
+        return [x for x in toks if x not in stop][:10]
+
+    def relevant(item,terms):
+        if not terms: return True
+        hay=(' '+str(item.get('title',''))+' '+str(item.get('snippet',''))+' '+str(item.get('url',''))+' ').lower()
+        return any(t in hay for t in terms)
+
     async with httpx.AsyncClient(timeout=timeout,follow_redirects=True,headers=headers) as c:
         for q in queries[:4]:
-            out=[]; source='bing_rss'
+            terms=terms_for(q); candidates=[]; used_sources=[]
 
-            # 1) Bing RSS is substantially more stable than scraping search-result HTML.
+            # 1) Bing RSS: fast and stable when it returns relevant results.
             try:
-                r=await c.get('https://www.bing.com/search?format=rss&q='+quote_plus(q)); r.raise_for_status(); xml=r.text
+                params={'format':'rss','q':q,'mkt':'en-US','setlang':'en-US'}
+                r=await c.get('https://www.bing.com/search',params=params); r.raise_for_status(); xml=r.text
                 items=re.findall(r'<item>(.*?)</item>',xml,re.I|re.S)
-                for item in items[:count]:
+                for item in items[:max(count*2,10)]:
                     mt=re.search(r'<title>(.*?)</title>',item,re.I|re.S)
                     ml=re.search(r'<link>(.*?)</link>',item,re.I|re.S)
                     md=re.search(r'<description>(.*?)</description>',item,re.I|re.S)
                     if not ml: continue
                     href=unescape(strip_html(ml.group(1))).strip()
-                    if href.startswith('http'):
-                        out.append({'title':strip_html(mt.group(1) if mt else href),'url':href,'snippet':strip_html(md.group(1) if md else '')[:500]})
+                    row={'title':strip_html(mt.group(1) if mt else href),'url':href,'snippet':strip_html(md.group(1) if md else '')[:500],'source':'bing_rss'}
+                    if href.startswith('http') and relevant(row,terms): candidates.append(row)
+                used_sources.append('bing_rss')
             except Exception as e:
                 print('SEARCH_BING_RSS_ERROR',type(e).__name__,flush=True)
 
-            # 2) DuckDuckGo HTML fallback.
-            if not out:
-                source='duckduckgo'
+            # 2) GitHub repository search: useful for software, tooling and implementation evidence.
+            if len(candidates)<count:
                 try:
-                    r=await c.get('https://html.duckduckgo.com/html/?q='+quote_plus(q)); r.raise_for_status(); html=r.text
+                    r=await c.get('https://api.github.com/search/repositories',params={'q':q,'per_page':min(count*2,20)},headers={**headers,'Accept':'application/vnd.github+json'}); r.raise_for_status(); data=r.json()
+                    for item in data.get('items',[]):
+                        row={'title':item.get('full_name') or item.get('name') or '', 'url':item.get('html_url') or '', 'snippet':str(item.get('description') or '')[:500], 'source':'github'}
+                        if relevant(row,terms): candidates.append(row)
+                    used_sources.append('github')
+                except Exception as e:
+                    print('SEARCH_GITHUB_ERROR',type(e).__name__,flush=True)
+
+            # 3) Hacker News Algolia: community/engineering discussions and real-world references.
+            if len(candidates)<count:
+                try:
+                    r=await c.get('https://hn.algolia.com/api/v1/search',params={'query':q,'tags':'story','hitsPerPage':min(count*2,20)}); r.raise_for_status(); data=r.json()
+                    for item in data.get('hits',[]):
+                        href=item.get('url') or ('https://news.ycombinator.com/item?id='+str(item.get('objectID') or ''))
+                        row={'title':item.get('title') or item.get('story_title') or '', 'url':href, 'snippet':str(item.get('_highlightResult',{}))[:500], 'source':'hackernews'}
+                        if href and relevant(row,terms): candidates.append(row)
+                    used_sources.append('hackernews')
+                except Exception as e:
+                    print('SEARCH_HN_ERROR',type(e).__name__,flush=True)
+
+            # 4) DuckDuckGo HTML fallback.
+            if len(candidates)<count:
+                try:
+                    r=await c.get('https://html.duckduckgo.com/html/',params={'q':q}); r.raise_for_status(); html=r.text
                     pairs=re.findall(r'<a[^>]+class="[^"]*result__a[^"]*"[^>]+href="([^"]+)"[^>]*>(.*?)</a>',html,re.I|re.S)
-                    for href,title in pairs[:count]:
+                    for href,title in pairs[:max(count*2,10)]:
                         href=unescape(href)
                         if 'uddg=' in href:
                             try: href=parse_qs(urlparse(href).query).get('uddg',[href])[0]
                             except Exception: pass
-                        if href.startswith('http'): out.append({'title':strip_html(title),'url':href})
+                        row={'title':strip_html(title),'url':href,'snippet':'','source':'duckduckgo'}
+                        if href.startswith('http') and relevant(row,terms): candidates.append(row)
+                    used_sources.append('duckduckgo')
                 except Exception as e:
                     print('SEARCH_DDG_ERROR',type(e).__name__,flush=True)
 
-            # 3) Bing HTML fallback.
-            if not out:
-                source='bing_html'
+            # 5) Wikipedia API: background concepts when web/community sources are sparse.
+            if len(candidates)<count:
                 try:
-                    r=await c.get('https://www.bing.com/search?q='+quote_plus(q)); r.raise_for_status(); html=r.text
-                    pairs=re.findall(r'<li[^>]+class="[^"]*b_algo[^"]*"[^>]*>.*?<h2[^>]*>\s*<a[^>]+href="(https?://[^"]+)"[^>]*>(.*?)</a>',html,re.I|re.S)
-                    for href,title in pairs[:count]: out.append({'title':strip_html(title),'url':unescape(href)})
-                except Exception as e:
-                    print('SEARCH_BING_HTML_ERROR',type(e).__name__,flush=True)
-
-            # 4) Public GitHub repository search gives a useful real-world fallback for technical research.
-            if not out:
-                source='github'
-                try:
-                    r=await c.get('https://api.github.com/search/repositories',params={'q':q,'per_page':count},headers={**headers,'Accept':'application/vnd.github+json'}); r.raise_for_status(); data=r.json()
-                    for item in data.get('items',[])[:count]:
-                        out.append({'title':item.get('full_name') or item.get('name') or '', 'url':item.get('html_url') or '', 'snippet':str(item.get('description') or '')[:500]})
-                except Exception as e:
-                    print('SEARCH_GITHUB_ERROR',type(e).__name__,flush=True)
-
-            # 5) Wikipedia API is a low-risk final fallback for background concepts.
-            if not out:
-                source='wikipedia'
-                try:
-                    r=await c.get('https://en.wikipedia.org/w/api.php',params={'action':'query','list':'search','srsearch':q,'format':'json','utf8':1,'srlimit':count}); r.raise_for_status(); data=r.json()
-                    for item in (data.get('query') or {}).get('search',[])[:count]:
+                    r=await c.get('https://en.wikipedia.org/w/api.php',params={'action':'query','list':'search','srsearch':q,'format':'json','utf8':1,'srlimit':min(count*2,20)}); r.raise_for_status(); data=r.json()
+                    for item in (data.get('query') or {}).get('search',[]):
                         title=str(item.get('title') or '').strip()
-                        if title:
-                            out.append({'title':title,'url':'https://en.wikipedia.org/wiki/'+quote_plus(title.replace(' ','_')),'snippet':strip_html(str(item.get('snippet') or ''))[:500]})
+                        if not title: continue
+                        row={'title':title,'url':'https://en.wikipedia.org/wiki/'+quote_plus(title.replace(' ','_')),'snippet':strip_html(str(item.get('snippet') or ''))[:500],'source':'wikipedia'}
+                        if relevant(row,terms): candidates.append(row)
+                    used_sources.append('wikipedia')
                 except Exception as e:
                     print('SEARCH_WIKIPEDIA_ERROR',type(e).__name__,flush=True)
 
+            # De-duplicate and strip search-engine internal pages.
             seen=set(); clean=[]
-            for item in out:
+            for item in candidates:
                 u=str(item.get('url','')).strip(); host=(urlparse(u).hostname or '').lower()
                 if not u.startswith('http') or any(x in host for x in ('bing.com','google.com','duckduckgo.com')): continue
                 if u in seen: continue
                 seen.add(u); clean.append(item)
                 if len(clean)>=count: break
-            all_results.append({'query':q,'source':source,'results':clean})
+            all_results.append({'query':q,'sources':used_sources,'results':clean})
     return {'queries':queries[:4],'batches':all_results}
 
 def normalize_tool_request(kind,payload,title='',instruction=''):
