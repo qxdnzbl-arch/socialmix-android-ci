@@ -82,3 +82,21 @@ test('refuses sender until receiver is connected', async (t) => {
   const j = await r.json();
   assert.match(j.error, /iPhone/);
 });
+
+test('generates a QR image for the direct iPhone receive link', async (t) => {
+  const { server } = startServer(0);
+  await new Promise(resolve => server.once('listening', resolve));
+  t.after(() => new Promise(resolve => server.close(resolve)));
+  const base = `http://127.0.0.1:${server.address().port}`;
+
+  const created = await (await fetch(`${base}/api/create`, {
+    method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}'
+  })).json();
+
+  const qrRes = await fetch(`${base}/api/qr/${created.code}`);
+  assert.equal(qrRes.status, 200);
+  assert.match(qrRes.headers.get('content-type'), /image\/svg\+xml/);
+  const svg = await qrRes.text();
+  assert.match(svg, /<svg/);
+  assert.ok(svg.length > 500);
+});
