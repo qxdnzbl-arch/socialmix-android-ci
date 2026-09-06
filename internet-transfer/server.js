@@ -165,6 +165,7 @@ function createApp() {
     try {
       bb = Busboy({
         headers: req.headers,
+        defParamCharset: 'utf8',
         limits: { files: 10000, fields: 20, parts: 10020 }
       });
     } catch (e) {
