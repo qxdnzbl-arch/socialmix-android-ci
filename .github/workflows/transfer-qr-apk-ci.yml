@@ -54,7 +54,7 @@ jobs:
             adb install -r transferqr/build/outputs/apk/debug/transferqr-debug.apk
             adb shell am force-stop com.qxdnzbl.transferqr || true
             adb shell monkey -p com.qxdnzbl.transferqr -c android.intent.category.LAUNCHER 1
-            sleep 2
+            sleep 6
             adb shell pidof com.qxdnzbl.transferqr
             mkdir -p preview
             adb exec-out screencap -p > preview/transfer-qr-preview.png
