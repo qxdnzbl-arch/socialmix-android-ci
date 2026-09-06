@@ -1,0 +1,11 @@
+services:
+  - type: web
+    name: phone-transfer-relay
+    runtime: node
+    plan: free
+    branch: internet-transfer-relay
+    rootDir: internet-transfer
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /health
+    autoDeployTrigger: commit
