@@ -11,7 +11,7 @@ function put(t){return new Promise(function(resolve,reject){var r=db.transaction
 function remove(id){return new Promise(function(resolve,reject){var r=db.transaction(STORE,'readwrite').objectStore(STORE).delete(id);r.onsuccess=function(){resolve()};r.onerror=function(){reject(r.error)}})}
 function makeId(){return Date.now().toString(36)+'-'+Math.random().toString(36).slice(2,9)}
 function byId(id){for(var i=0;i<tracks.length;i++)if(tracks[i].id===id)return tracks[i];return null}
-function safeText(s){return String(s).replace(/[&<>"']/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot',"'":'&#39;'}[c]})}
+function safeText(s){return String(s).replace(/[&<>"']/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]})}
 function baseName(name){return String(name||'').replace(/\.[^.]+$/,'')||'未命名歌曲'}
 function readBuffer(blob){return new Promise(function(resolve,reject){var fr=new FileReader();fr.onload=function(){resolve(fr.result)};fr.onerror=function(){reject(fr.error||new Error('文件读取失败'))};fr.readAsArrayBuffer(blob)})}
 function decode(bytes,enc){try{return new TextDecoder(enc||'utf-8').decode(bytes).replace(/\u0000/g,'').trim()}catch(e){return''}}
