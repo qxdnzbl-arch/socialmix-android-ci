@@ -8,6 +8,7 @@ const path = require('path');
 
 const SESSION_TTL_MS = 15 * 60 * 1000;
 const CLEANUP_INTERVAL_MS = 60 * 1000;
+const INSTANT_ID_RE = /^[a-f0-9]{32}$/i;
 
 function randomCode(existing) {
   for (let i = 0; i < 30; i++) {
@@ -35,6 +36,23 @@ function safeName(name, usedNames) {
   return candidate;
 }
 
+function newSession(code, senderToken = null) {
+  return {
+    code,
+    senderToken,
+    createdAt: Date.now(),
+    lastActivity: Date.now(),
+    receiverRes: null,
+    receiverClosed: false,
+    senderActive: false,
+    senderFinished: false,
+    archive: null,
+    senderReq: null,
+    totalFiles: 0,
+    usedNames: new Set()
+  };
+}
+
 function createApp() {
   const app = express();
   const sessions = new Map();
@@ -44,80 +62,25 @@ function createApp() {
   app.use(express.json({ limit: '32kb' }));
   app.use(express.static(path.join(__dirname, 'public'), { maxAge: 0, etag: false }));
 
-  app.post('/api/create', (req, res) => {
-    try {
-      const code = randomCode(sessions);
-      const senderToken = crypto.randomBytes(24).toString('hex');
-      sessions.set(code, {
-        code,
-        senderToken,
-        createdAt: Date.now(),
-        lastActivity: Date.now(),
-        receiverRes: null,
-        receiverClosed: false,
-        senderActive: false,
-        senderFinished: false,
-        archive: null,
-        senderReq: null,
-        totalFiles: 0,
-        usedNames: new Set()
-      });
-      res.json({ code, senderToken, expiresInSeconds: Math.floor(SESSION_TTL_MS / 1000) });
-    } catch (e) {
-      res.status(500).json({ error: e.message || '创建失败' });
-    }
-  });
+  function isExpired(session) {
+    return !session.senderActive && Date.now() - session.lastActivity > SESSION_TTL_MS;
+  }
 
-  app.get('/api/qr/:code', async (req, res) => {
-    const session = sessions.get(req.params.code);
-    if (!session || Date.now() - session.lastActivity > SESSION_TTL_MS) {
-      return res.status(404).send('取件码不存在或已过期');
-    }
-    session.lastActivity = Date.now();
-    try {
-      const origin = `${req.protocol}://${req.get('host')}`;
-      const receiveUrl = `${origin}/receive/${encodeURIComponent(session.code)}`;
-      const svg = await QRCode.toString(receiveUrl, {
-        type: 'svg',
-        errorCorrectionLevel: 'M',
-        margin: 2,
-        width: 420
-      });
-      res.set({
-        'Content-Type': 'image/svg+xml; charset=utf-8',
-        'Cache-Control': 'no-store, no-cache, must-revalidate'
-      });
-      res.send(svg);
-    } catch (e) {
-      res.status(500).send('二维码生成失败');
-    }
-  });
-
-  app.get('/api/status/:code', (req, res) => {
-    const session = sessions.get(req.params.code);
-    if (!session || Date.now() - session.lastActivity > SESSION_TTL_MS) {
-      return res.status(404).json({ error: '取件码不存在或已过期' });
-    }
-    session.lastActivity = Date.now();
-    res.set('Cache-Control', 'no-store');
-    res.json({
+  function statusPayload(session) {
+    return {
       receiverReady: !!session.receiverRes && !session.receiverClosed,
       senderActive: session.senderActive,
       senderFinished: session.senderFinished,
       totalFiles: session.totalFiles
-    });
-  });
+    };
+  }
 
-  app.get('/receive/:code', (req, res) => {
-    const session = sessions.get(req.params.code);
-    if (!session || Date.now() - session.lastActivity > SESSION_TTL_MS) {
-      return res.status(404).send('取件码不存在或已过期');
-    }
+  function openReceiver(session, res) {
     if (session.receiverRes && !session.receiverClosed) {
-      return res.status(409).send('这个取件码已经有接收设备连接');
+      return res.status(409).send('这个接收链接已经有设备连接');
     }
     if (session.senderFinished) {
-      return res.status(410).send('这次传输已经结束，请重新创建取件码');
+      return res.status(410).send('这次传输已经结束，请重新扫码');
     }
 
     session.lastActivity = Date.now();
@@ -146,14 +109,17 @@ function createApp() {
         try { session.senderReq.destroy(new Error('接收端已断开')); } catch (_) {}
       }
     });
-  });
+  }
 
-  app.post('/send/:code', (req, res) => {
-    const session = sessions.get(req.params.code);
-    if (!session || Date.now() - session.lastActivity > SESSION_TTL_MS) {
-      return res.status(404).json({ error: '取件码不存在或已过期' });
+  function sendToReceiver(session, req, res, allowTokenClaim) {
+    const suppliedToken = req.get('x-sender-token') || '';
+    if (!suppliedToken) {
+      return res.status(403).json({ error: '发送端验证失败' });
     }
-    if (req.get('x-sender-token') !== session.senderToken) {
+    if (allowTokenClaim && !session.senderToken) {
+      session.senderToken = suppliedToken;
+    }
+    if (suppliedToken !== session.senderToken) {
       return res.status(403).json({ error: '发送端验证失败' });
     }
     if (!session.receiverRes || session.receiverClosed) {
@@ -210,6 +176,9 @@ function createApp() {
       session.lastActivity = Date.now();
       const filename = safeName(info && info.filename, session.usedNames);
       archive.append(file, { name: filename, store: true });
+      file.on('data', () => {
+        session.lastActivity = Date.now();
+      });
       file.on('error', (err) => {
         failed = true;
         console.error('upload file stream error', err);
@@ -261,6 +230,107 @@ function createApp() {
     });
 
     req.pipe(bb);
+  }
+
+  app.post('/api/create', (req, res) => {
+    try {
+      const code = randomCode(sessions);
+      const senderToken = crypto.randomBytes(24).toString('hex');
+      sessions.set(code, newSession(code, senderToken));
+      res.json({ code, senderToken, expiresInSeconds: Math.floor(SESSION_TTL_MS / 1000) });
+    } catch (e) {
+      res.status(500).json({ error: e.message || '创建失败' });
+    }
+  });
+
+  app.get('/api/qr/:code', async (req, res) => {
+    const session = sessions.get(req.params.code);
+    if (!session || isExpired(session)) {
+      return res.status(404).send('取件码不存在或已过期');
+    }
+    session.lastActivity = Date.now();
+    try {
+      const origin = `${req.protocol}://${req.get('host')}`;
+      const receiveUrl = `${origin}/receive/${encodeURIComponent(session.code)}`;
+      const svg = await QRCode.toString(receiveUrl, {
+        type: 'svg',
+        errorCorrectionLevel: 'M',
+        margin: 2,
+        width: 420
+      });
+      res.set({
+        'Content-Type': 'image/svg+xml; charset=utf-8',
+        'Cache-Control': 'no-store, no-cache, must-revalidate'
+      });
+      res.send(svg);
+    } catch (e) {
+      res.status(500).send('二维码生成失败');
+    }
+  });
+
+  app.get('/api/status/:code', (req, res) => {
+    const session = sessions.get(req.params.code);
+    if (!session || isExpired(session)) {
+      return res.status(404).json({ error: '取件码不存在或已过期' });
+    }
+    session.lastActivity = Date.now();
+    res.set('Cache-Control', 'no-store');
+    res.json(statusPayload(session));
+  });
+
+  app.get('/receive/:code', (req, res) => {
+    const session = sessions.get(req.params.code);
+    if (!session || isExpired(session)) {
+      return res.status(404).send('取件码不存在或已过期');
+    }
+    return openReceiver(session, res);
+  });
+
+  app.post('/send/:code', (req, res) => {
+    const session = sessions.get(req.params.code);
+    if (!session || isExpired(session)) {
+      return res.status(404).json({ error: '取件码不存在或已过期' });
+    }
+    return sendToReceiver(session, req, res, false);
+  });
+
+  app.get('/api/instant/status/:id', (req, res) => {
+    const id = req.params.id;
+    if (!INSTANT_ID_RE.test(id)) {
+      return res.status(400).json({ error: '无效的二维码' });
+    }
+    const session = sessions.get(id);
+    if (!session || isExpired(session)) {
+      return res.status(404).json({ error: '等待接收设备' });
+    }
+    session.lastActivity = Date.now();
+    res.set('Cache-Control', 'no-store');
+    res.json(statusPayload(session));
+  });
+
+  app.get('/instant/receive/:id', (req, res) => {
+    const id = req.params.id;
+    if (!INSTANT_ID_RE.test(id)) {
+      return res.status(400).send('二维码无效');
+    }
+    let session = sessions.get(id);
+    if (!session || isExpired(session)) {
+      session = newSession(id, null);
+      sessions.set(id, session);
+    }
+    return openReceiver(session, res);
+  });
+
+  app.post('/instant/send/:id', (req, res) => {
+    const id = req.params.id;
+    if (!INSTANT_ID_RE.test(id)) {
+      return res.status(400).json({ error: '二维码无效' });
+    }
+    const session = sessions.get(id);
+    if (!session || isExpired(session)) {
+      return res.status(409).json({ error: '请先让 iPhone 扫二维码并打开接收链接' });
+    }
+    return sendToReceiver(session, req, res, true);
   });
 
   app.get('/health', (req, res) => {
@@ -270,7 +340,7 @@ function createApp() {
   const cleanupTimer = setInterval(() => {
     const now = Date.now();
     for (const [code, session] of sessions) {
-      if (now - session.lastActivity > SESSION_TTL_MS) {
+      if (!session.senderActive && now - session.lastActivity > SESSION_TTL_MS) {
         if (session.receiverRes) {
           try { session.receiverRes.end(); } catch (_) {}
         }
