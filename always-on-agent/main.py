@@ -1,5 +1,5 @@
 from __future__ import annotations
-import asyncio, json, os, re, time, traceback
+import asyncio, hashlib, json, os, re, time, traceback
 from datetime import datetime, timezone
 from html import unescape
 from urllib.parse import quote_plus, urlparse, parse_qs
@@ -45,7 +45,7 @@ Schema: {"action_type":"...","title":"...","instruction":"...","payload":{},"ris
 Risk flags when applicable: uncertain_fact, spend_money, use_owner_identity, make_formal_commitment, upload_private_data, destructive_action, change_credentials.
 '''
 
-DEFAULT_STATE = {'goals': [], 'tasks': [], 'approvals': [], 'events': [], 'memories': {}, 'budget': {'day':'','planner_calls':0,'last_call_at':0.0,'day_start_balance_cny':None,'last_balance_cny':None,'last_usage':{},'input_tokens_today':0,'output_tokens_today':0,'paused':False,'pause_reason':''}, 'next_ids': {'goal': 1, 'task': 1, 'approval': 1, 'event': 1}}
+DEFAULT_STATE = {'goals': [], 'tasks': [], 'approvals': [], 'events': [], 'memories': {}, 'audit': {'last_run_at':'','last_daily':'','last_event_id':0,'last_result':{},'runs':0}, 'checkpoints': [], 'system_guard': {'paused':False,'reason':'','issues':[],'updated_at':''}, 'budget': {'day':'','planner_calls':0,'last_call_at':0.0,'day_start_balance_cny':None,'last_balance_cny':None,'last_usage':{},'input_tokens_today':0,'output_tokens_today':0,'paused':False,'pause_reason':''}, 'next_ids': {'goal': 1, 'task': 1, 'approval': 1, 'event': 1}}
 state_lock = asyncio.Lock()
 stop_event = asyncio.Event()
 
@@ -81,6 +81,87 @@ def add_event(s, event_type, goal_id=None, task_id=None, data=None):
     s['events'].append({'id':i,'type':event_type,'goal_id':goal_id,'task_id':task_id,'data':data or {},'at':now()})
     if len(s['events'])>500: s['events']=s['events'][-500:]
 
+
+RISK_FLAG_TO_CATEGORY={'uncertain_fact':'uncertainty','spend_money':'spending','use_owner_identity':'identity','make_formal_commitment':'formal_commitment','upload_private_data':'private_upload','destructive_action':'destructive','change_credentials':'credential_change'}
+
+def _checkpoint_core(s):
+    return {
+        'goals':[{'id':g.get('id'),'status':g.get('status'),'priority':g.get('priority')} for g in s.get('goals',[])],
+        'tasks':[{'id':t.get('id'),'goal_id':t.get('goal_id'),'kind':t.get('kind'),'status':t.get('status'),'requires_approval':bool(t.get('requires_approval'))} for t in s.get('tasks',[])],
+        'approvals':[{'id':a.get('id'),'task_id':a.get('task_id'),'status':a.get('status'),'category':a.get('category')} for a in s.get('approvals',[])],
+        'next_ids':dict(s.get('next_ids') or {}),
+        'guard':dict(s.get('system_guard') or {}),
+    }
+
+def record_checkpoint(s, reason, goal_id=None, task_id=None):
+    core=_checkpoint_core(s)
+    digest=hashlib.sha256(json.dumps(core,sort_keys=True,separators=(',',':'),ensure_ascii=False).encode('utf-8')).hexdigest()
+    cp={'at':now(),'reason':reason,'goal_id':goal_id,'task_id':task_id,'digest':digest,'counts':{'goals':len(s.get('goals',[])),'tasks':len(s.get('tasks',[])),'approvals':len(s.get('approvals',[])),'events':len(s.get('events',[]))},'next_ids':dict(s.get('next_ids') or {})}
+    arr=s.setdefault('checkpoints',[]); arr.append(cp)
+    if len(arr)>50: s['checkpoints']=arr[-50:]
+    return cp
+
+def self_audit(s, trigger='periodic', goal_id=None, task_id=None):
+    issues=[]; repairs=[]
+
+    # 1) IDs must be unique. next_ids can be repaired deterministically.
+    for plural,singular in [('goals','goal'),('tasks','task'),('approvals','approval'),('events','event')]:
+        vals=[x.get('id') for x in s.get(plural,[]) if isinstance(x,dict) and isinstance(x.get('id'),int)]
+        if len(vals)!=len(set(vals)):
+            issues.append({'severity':'critical','code':'duplicate_ids','resource':plural})
+        max_id=max(vals,default=0)
+        nxt=int((s.get('next_ids') or {}).get(singular,1) or 1)
+        if nxt<=max_id:
+            s.setdefault('next_ids',{})[singular]=max_id+1
+            repairs.append({'code':'next_id_advanced','resource':plural,'from':nxt,'to':max_id+1})
+
+    approvals_by_task={}
+    for a in s.get('approvals',[]):
+        approvals_by_task.setdefault(a.get('task_id'),[]).append(a)
+
+    # 2) Executor requests must never fall into the local tool runner.
+    for t in s.get('tasks',[]):
+        if t.get('kind')=='executor_request' and t.get('status')=='pending' and not t.get('requires_approval'):
+            t['status']='waiting_executor'
+            repairs.append({'code':'executor_rerouted','task_id':t.get('id')})
+        if t.get('status')=='waiting_executor' and t.get('requires_approval'):
+            t['requires_approval']=False
+            repairs.append({'code':'executor_approval_flag_cleared','task_id':t.get('id')})
+
+        # 3) A task waiting for approval must actually have a pending approval record.
+        if t.get('status')=='waiting_approval':
+            aps=approvals_by_task.get(t.get('id'),[])
+            if not any(a.get('status')=='pending' for a in aps):
+                issues.append({'severity':'critical','code':'missing_pending_approval','task_id':t.get('id')})
+
+        # 4) Risky actions may only complete if there is explicit approval evidence.
+        flags=[f for f in (t.get('risk_flags') or []) if f in RISK_FLAG_TO_CATEGORY]
+        if t.get('status')=='completed' and flags:
+            aps=approvals_by_task.get(t.get('id'),[])
+            if not any(a.get('status')=='approved' for a in aps):
+                issues.append({'severity':'critical','code':'risky_task_completed_without_approval','task_id':t.get('id'),'flags':flags})
+
+    # 5) Running tasks are allowed, but impossible status/kind combinations are not.
+    valid_status={'pending','running','completed','waiting_approval','waiting_executor','rejected','failed'}
+    for t in s.get('tasks',[]):
+        if t.get('status') not in valid_status:
+            issues.append({'severity':'critical','code':'invalid_task_status','task_id':t.get('id'),'status':t.get('status')})
+        if t.get('kind')=='executor_request' and t.get('status')=='running':
+            issues.append({'severity':'critical','code':'executor_running_locally','task_id':t.get('id')})
+
+    critical=[x for x in issues if x.get('severity')=='critical']
+    guard=s.setdefault('system_guard',{})
+    guard.update({'paused':bool(critical),'reason':critical[0]['code'] if critical else '', 'issues':critical[:20], 'updated_at':now()})
+
+    audit=s.setdefault('audit',{})
+    audit['last_run_at']=now(); audit['runs']=int(audit.get('runs') or 0)+1
+    audit['last_result']={'ok':not critical,'trigger':trigger,'issues':issues[:30],'repairs':repairs[:30]}
+
+    add_event(s,'self_audit',goal_id,task_id,{'ok':not critical,'trigger':trigger,'issues':issues[:20],'repairs':repairs[:20]})
+    audit['last_event_id']=int((s.get('events') or [{}])[-1].get('id') or 0)
+    cp=record_checkpoint(s,'self_audit:'+trigger,goal_id,task_id)
+    audit['last_checkpoint_digest']=cp['digest']
+    return audit['last_result']
 
 def policy(action):
     flags=list(action.get('risk_flags') or [])
@@ -367,6 +448,17 @@ async def run_tool(kind,payload):
 async def tick_once():
     async with state_lock:
         s=await store_get()
+        audit=s.setdefault('audit',{})
+        latest_event_id=int((s.get('events') or [{}])[-1].get('id') or 0)
+        today=datetime.now(timezone.utc).strftime('%Y-%m-%d')
+        need_daily=audit.get('last_daily') != today
+        need_change=latest_event_id > int(audit.get('last_event_id') or 0)
+        if need_daily or need_change:
+            self_audit(s,'daily' if need_daily else 'state_change')
+            if need_daily: s['audit']['last_daily']=today
+            await store_set(s)
+        if (s.get('system_guard') or {}).get('paused'):
+            return {'status':'guard_paused','reason':(s.get('system_guard') or {}).get('reason'),'issues':(s.get('system_guard') or {}).get('issues',[])[:5]}
         # One-time recovery: the owner has now configured the real reasoning model.
         if LLM_MODE == 'openai_compatible' and LLM_API_KEY:
             bootstrap_ids=set()
@@ -410,6 +502,7 @@ async def tick_once():
                     add_event(s,'task_escalated_to_executor',pending['goal_id'],pending['id'],{'error':str(e),'capability':'runtime_debug_and_repair'})
                 else: pending['status']='pending'
                 add_event(s,'task_failed',pending['goal_id'],pending['id'],{'error':str(e),'trace':traceback.format_exc(limit=2)})
+            self_audit(s,'task_execution',pending.get('goal_id'),pending.get('id'))
             await store_set(s); return {'status':pending['status'],'task_id':pending['id']}
         goal=next((g for g in sorted(s['goals'],key=lambda x:(-x['priority'],x['id'])) if g['status']=='active'),None)
         if not goal: return {'status':'idle'}
@@ -442,12 +535,13 @@ async def tick_once():
         allowed,cat=policy(action); tid=s['next_ids']['task']; s['next_ids']['task']+=1
         task_kind=action.get('action_type','note')
         task_status=('waiting_executor' if allowed and task_kind=='executor_request' else ('pending' if allowed else 'waiting_approval'))
-        task={'id':tid,'goal_id':goal['id'],'title':str(action.get('title') or 'Next action'),'instruction':str(action.get('instruction') or ''),'kind':task_kind,'status':task_status,'payload':action.get('payload') or {},'result':{},'requires_approval':not allowed,'attempts':0}
+        task={'id':tid,'goal_id':goal['id'],'title':str(action.get('title') or 'Next action'),'instruction':str(action.get('instruction') or ''),'kind':task_kind,'status':task_status,'payload':action.get('payload') or {},'result':{},'risk_flags':action.get('risk_flags') or [],'requires_approval':not allowed,'attempts':0}
         s['tasks'].append(task); add_event(s,'task_planned',goal['id'],tid,action)
         if not allowed:
             aid=s['next_ids']['approval']; s['next_ids']['approval']+=1
             q=(action.get('payload') or {}).get('question') or action.get('instruction') or 'Owner approval required.'
             s['approvals'].append({'id':aid,'task_id':tid,'category':cat or 'uncertainty','summary':str(q),'status':'pending','decision_note':''}); add_event(s,'approval_requested',goal['id'],tid,{'category':cat,'summary':q})
+        self_audit(s,'task_planning',goal.get('id'),tid)
         await store_set(s); return {'status':task['status'],'goal_id':goal['id'],'task_id':tid}
 
 async def worker_loop():
@@ -457,7 +551,7 @@ async def worker_loop():
         try: await asyncio.wait_for(stop_event.wait(),timeout=WORKER_INTERVAL)
         except asyncio.TimeoutError: pass
 
-app=FastAPI(title='Always-On Owner Agent',version='0.4.0')
+app=FastAPI(title='Always-On Owner Agent',version='0.5.0')
 
 @app.on_event('startup')
 async def start():
@@ -473,7 +567,9 @@ async def health():
     try:
         s=await store_get(); ok=isinstance(s,dict); detail='supabase' if STORE_URL else 'memory-only'
     except Exception as e: detail=str(e)
-    return {'ok':ok,'version':'0.4.0','store':detail,'llm_mode':LLM_MODE,'llm_provider':LLM_PROVIDER,'budget_guard':True}
+    guard=(s.get('system_guard') or {}) if ok else {}
+    audit=(s.get('audit') or {}) if ok else {}
+    return {'ok':ok and not bool(guard.get('paused')),'version':'0.5.0','store':detail,'llm_mode':LLM_MODE,'llm_provider':LLM_PROVIDER,'budget_guard':True,'system_guard':guard,'audit':{'last_run_at':audit.get('last_run_at'),'last_result':audit.get('last_result'),'runs':audit.get('runs',0)}}
 
 @app.get('/state')
 async def get_state(authorization:str|None=Header(default=None)):
@@ -498,12 +594,11 @@ async def decide(approval_id:int,body:ApprovalIn,authorization:str|None=Header(d
             task['requires_approval']=False
             if task['kind']=='clarify':
                 task['status']='completed'; task['result']={'owner_answer':body.note}; add_event(s,'task_completed',task['goal_id'],task['id'],task['result'])
-            elif task['kind']=='executor_request':
-                task['status']='waiting_executor'
+            elif task['kind']=='executor_request': task['status']='waiting_executor'
             else:
                 task['status']='pending'
         else: task['status']='rejected'
-        add_event(s,'approval_decided',task['goal_id'],task['id'],{'approved':body.approve,'note':body.note}); await store_set(s); return {'ok':True,'task_status':task['status']}
+        add_event(s,'approval_decided',task['goal_id'],task['id'],{'approved':body.approve,'note':body.note}); self_audit(s,'approval_decision',task.get('goal_id'),task.get('id')); await store_set(s); return {'ok':True,'task_status':task['status']}
 
 @app.post('/tick')
 async def tick(authorization:str|None=Header(default=None)):
@@ -511,4 +606,4 @@ async def tick(authorization:str|None=Header(default=None)):
 
 @app.get('/dashboard',response_class=HTMLResponse)
 async def dashboard():
-    return '''<!doctype html><meta name=viewport content="width=device-width,initial-scale=1"><title>Always-On Agent</title><style>body{font:15px system-ui;max-width:760px;margin:35px auto;padding:0 16px;color:#171717}input,textarea,button{font:inherit;padding:10px;border:1px solid #ccc;border-radius:10px}textarea{width:100%;min-height:100px;box-sizing:border-box}button{cursor:pointer;background:#111;color:#fff}.card{border:1px solid #e5e5e5;border-radius:14px;padding:14px;margin:12px 0}small{color:#666}</style><h1>Always-On Agent v0.2</h1><div class=card><b>Admin token</b><p><input id=t style="width:100%;box-sizing:border-box"></p></div><div class=card><b>New goal</b><p><input id=title placeholder="Goal title" style="width:100%;box-sizing:border-box"></p><textarea id=brief placeholder="Exact goal and confirmed facts"></textarea><p><button onclick=add()>Create goal</button></p></div><div id=out></div><script>const H=()=>({'Authorization':'Bearer '+t.value,'Content-Type':'application/json'});async function load(){let r=await fetch('/state',{headers:H()});if(!r.ok){out.innerHTML='<p>Enter admin token.</p>';return}let s=await r.json();out.innerHTML='<h2>Goals</h2>'+s.goals.map(g=>`<div class=card><b>${g.title}</b><br><small>${g.status}</small><p>${g.brief}</p></div>`).join('')+'<h2>Approvals</h2>'+s.approvals.map(a=>`<div class=card><b>${a.category}</b><p>${a.summary}</p><small>${a.status}</small>${a.status==='pending'?`<p><input id=n${a.id} placeholder="Answer / approval note" style="width:100%;box-sizing:border-box"><br><br><button onclick=dec(${a.id},true)>Approve / answer</button> <button onclick=dec(${a.id},false)>Reject</button></p>`:''}</div>`).join('')+'<h2>Tasks</h2>'+s.tasks.slice().reverse().map(x=>`<div class=card><b>${x.title}</b><br><small>${x.kind} · ${x.status} · attempts ${x.attempts}</small></div>`).join('')}async function add(){await fetch('/goals',{method:'POST',headers:H(),body:JSON.stringify({title:title.value,brief:brief.value,priority:50})});load()}async function dec(id,approve){let n=document.querySelector('#n'+id);await fetch('/approvals/'+id,{method:'POST',headers:H(),body:JSON.stringify({approve,note:n?n.value:''})});load()}setInterval(load,4000)</script>'''
+    return '''<!doctype html><meta name=viewport content="width=device-width,initial-scale=1"><title>Always-On Agent</title><style>body{font:15px system-ui;max-width:760px;margin:35px auto;padding:0 16px;color:#171717}input,textarea,button{font:inherit;padding:10px;border:1px solid #ccc;border-radius:10px}textarea{width:100%;min-height:100px;box-sizing:border-box}button{cursor:pointer;background:#111;color:#fff}.card{border:1px solid #e5e5e5;border-radius:14px;padding:14px;margin:12px 0}small{color:#666}</style><h1>Always-On Agent v0.5</h1><div class=card><b>Admin token</b><p><input id=t style="width:100%;box-sizing:border-box"></p></div><div class=card><b>New goal</b><p><input id=title placeholder="Goal title" style="width:100%;box-sizing:border-box"></p><textarea id=brief placeholder="Exact goal and confirmed facts"></textarea><p><button onclick=add()>Create goal</button></p></div><div id=out></div><script>const H=()=>({'Authorization':'Bearer '+t.value,'Content-Type':'application/json'});async function load(){let r=await fetch('/state',{headers:H()});if(!r.ok){out.innerHTML='<p>Enter admin token.</p>';return}let s=await r.json();out.innerHTML='<h2>Goals</h2>'+s.goals.map(g=>`<div class=card><b>${g.title}</b><br><small>${g.status}</small><p>${g.brief}</p></div>`).join('')+'<h2>Approvals</h2>'+s.approvals.map(a=>`<div class=card><b>${a.category}</b><p>${a.summary}</p><small>${a.status}</small>${a.status==='pending'?`<p><input id=n${a.id} placeholder="Answer / approval note" style="width:100%;box-sizing:border-box"><br><br><button onclick=dec(${a.id},true)>Approve / answer</button> <button onclick=dec(${a.id},false)>Reject</button></p>`:''}</div>`).join('')+'<h2>Tasks</h2>'+s.tasks.slice().reverse().map(x=>`<div class=card><b>${x.title}</b><br><small>${x.kind} · ${x.status} · attempts ${x.attempts}</small></div>`).join('')}async function add(){await fetch('/goals',{method:'POST',headers:H(),body:JSON.stringify({title:title.value,brief:brief.value,priority:50})});load()}async function dec(id,approve){let n=document.querySelector('#n'+id);await fetch('/approvals/'+id,{method:'POST',headers:H(),body:JSON.stringify({approve,note:n?n.value:''})});load()}setInterval(load,4000)</script>'''
