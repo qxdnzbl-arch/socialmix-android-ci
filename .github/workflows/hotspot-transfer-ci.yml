@@ -48,25 +48,27 @@ jobs:
             gradle --no-daemon :transferapp:connectedDebugAndroidTest
             adb install -r transferapp/build/outputs/apk/debug/transferapp-debug.apk
             adb shell am force-stop com.qxdnzbl.hotspotshare || true
-            adb shell am start -W -n com.qxdnzbl.hotspotshare/.MainActivity
+            adb shell am start -W -n com.qxdnzbl.hotspotshare/.QrMainActivity
             sleep 2
             adb shell pidof com.qxdnzbl.hotspotshare
             adb shell uiautomator dump /sdcard/window.xml
             adb shell cat /sdcard/window.xml | grep '热点传文件'
             adb shell cat /sdcard/window.xml | grep '选择要传的文件'
+            adb shell cat /sdcard/window.xml | grep 'iPhone 用相机扫二维码'
+            adb shell cat /sdcard/window.xml | grep 'iPhone 扫码二维码'
 
       - name: Prepare verified APK
         if: success()
         run: |
           mkdir -p deliverable
-          cp transferapp/build/outputs/apk/debug/transferapp-debug.apk deliverable/Hotspot-File-Transfer.apk
-          sha256sum deliverable/Hotspot-File-Transfer.apk | tee deliverable/SHA256.txt
+          cp transferapp/build/outputs/apk/debug/transferapp-debug.apk deliverable/Hotspot-File-Transfer-QR.apk
+          sha256sum deliverable/Hotspot-File-Transfer-QR.apk | tee deliverable/SHA256.txt
 
       - name: Upload verified APK
         if: success()
         uses: actions/upload-artifact@v4
         with:
-          name: Hotspot-File-Transfer-Verified
+          name: Hotspot-File-Transfer-QR-Verified
           path: deliverable/
           if-no-files-found: error
           retention-days: 14
