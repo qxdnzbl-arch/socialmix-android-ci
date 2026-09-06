@@ -29,6 +29,9 @@ SYSTEM_RULES = '''You are the planning brain of a persistent owner's agent.
 Hard rules:
 1. Never invent facts the owner has not confirmed. If an essential fact is uncertain, request clarification.
 2. Spending, owner identity use, formal external commitments, private uploads, destructive actions, or credential changes must wait for approval.
+2a. Internal, reversible code/config/deploy/database maintenance on the owner's already-confirmed projects is NOT a formal external commitment and must not be flagged make_formal_commitment. Only commitments to external parties (for example sending an application, quote, bid, contract, purchase, payment, or signed promise) use that flag.
+2b. Internal technical failures are not owner blockers. Repair, change path, or emit executor_request for connected-tool repair; do not ask the owner to approve ordinary debugging, CI fixes, deployment fixes, search fixes, or reversible project maintenance.
+2c. If the owner has asked for a result, keep the goal active until a verified deliverable exists or a genuinely owner-only action is required. Do not treat progress notes as completion.
 3. Prefer verified real-world evidence, low-cost tests, reversible actions, and resources that have real-world proof.
 4. After each result, choose one best next action. Avoid pointless repeated searches.
 4a. Optimize for result quality, not minimum spend. Use paid reasoning when it materially improves the result, but never spend tokens repeating unchanged analysis or retrying the same failed path without new evidence. Prefer deterministic/free execution tools when they can do the job, and verify outputs before another paid reasoning call.
@@ -80,8 +83,20 @@ def add_event(s, event_type, goal_id=None, task_id=None, data=None):
 
 
 def policy(action):
+    flags=list(action.get('risk_flags') or [])
+    if action.get('action_type')=='executor_request':
+        p=action.get('payload') or {}
+        cap=str(p.get('capability') or '').strip().lower()
+        internal_caps={
+            'deployment_and_code_change','runtime_debug_and_repair','github_code_change',
+            'render_deploy','supabase_maintenance','internal_project_change',
+            'code_change','deployment','database_maintenance'
+        }
+        if cap in internal_caps and 'make_formal_commitment' in flags:
+            flags=[f for f in flags if f!='make_formal_commitment']
+            action['risk_flags']=flags
     m={'uncertain_fact':'uncertainty','spend_money':'spending','use_owner_identity':'identity','make_formal_commitment':'formal_commitment','upload_private_data':'private_upload','destructive_action':'destructive','change_credentials':'credential_change'}
-    for f in action.get('risk_flags') or []:
+    for f in flags:
         if f in m: return False, m[f]
     return True, None
 
@@ -378,9 +393,21 @@ async def tick_once():
             except Exception as e:
                 pending['result']={'error':str(e)}
                 if pending['attempts']>=MAX_ATTEMPTS:
-                    pending['status']='waiting_approval'; pending['requires_approval']=True
-                    aid=s['next_ids']['approval']; s['next_ids']['approval']+=1
-                    s['approvals'].append({'id':aid,'task_id':pending['id'],'category':'failure','summary':f"Task failed {pending['attempts']} times: {e}",'status':'pending','decision_note':''})
+                    original_kind=pending.get('kind')
+                    original_payload=pending.get('payload') or {}
+                    pending['kind']='executor_request'
+                    pending['status']='waiting_executor'; pending['requires_approval']=False
+                    pending['payload']={
+                        'capability':'runtime_debug_and_repair',
+                        'objective':f"Repair the internal execution failure and continue the original task: {pending.get('title','task')}",
+                        'params':{
+                            'original_kind':original_kind,
+                            'original_payload':original_payload,
+                            'last_error':str(e),
+                            'attempts':pending['attempts']
+                        }
+                    }
+                    add_event(s,'task_escalated_to_executor',pending['goal_id'],pending['id'],{'error':str(e),'capability':'runtime_debug_and_repair'})
                 else: pending['status']='pending'
                 add_event(s,'task_failed',pending['goal_id'],pending['id'],{'error':str(e),'trace':traceback.format_exc(limit=2)})
             await store_set(s); return {'status':pending['status'],'task_id':pending['id']}
@@ -469,8 +496,12 @@ async def decide(approval_id:int,body:ApprovalIn,authorization:str|None=Header(d
         task=next(t for t in s['tasks'] if t['id']==ap['task_id']); ap['status']='approved' if body.approve else 'rejected'; ap['decision_note']=body.note; ap['decided_at']=now()
         if body.approve:
             task['requires_approval']=False
-            if task['kind']=='clarify': task['status']='completed'; task['result']={'owner_answer':body.note}; add_event(s,'task_completed',task['goal_id'],task['id'],task['result'])
-            else: task['status']='pending'
+            if task['kind']=='clarify':
+                task['status']='completed'; task['result']={'owner_answer':body.note}; add_event(s,'task_completed',task['goal_id'],task['id'],task['result'])
+            elif task['kind']=='executor_request':
+                task['status']='waiting_executor'
+            else:
+                task['status']='pending'
         else: task['status']='rejected'
         add_event(s,'approval_decided',task['goal_id'],task['id'],{'approved':body.approve,'note':body.note}); await store_set(s); return {'ok':True,'task_status':task['status']}
 
