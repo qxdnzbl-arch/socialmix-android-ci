@@ -56,6 +56,9 @@ jobs:
             adb shell monkey -p com.qxdnzbl.transferqr -c android.intent.category.LAUNCHER 1
             sleep 6
             adb shell pidof com.qxdnzbl.transferqr
+            # Headless Pixel Launcher can occasionally show its own ANR dialog; dismiss "Wait".
+            adb shell input tap 300 1350 || true
+            sleep 1
             mkdir -p preview
             adb exec-out screencap -p > preview/transfer-qr-preview.png
             test -s preview/transfer-qr-preview.png
