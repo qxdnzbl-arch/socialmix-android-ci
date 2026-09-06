@@ -1,0 +1,11 @@
+{
+  "name":"沉浸音乐",
+  "short_name":"沉浸音乐",
+  "description":"极简沉浸式本地音乐播放器",
+  "start_url":"./",
+  "scope":"./",
+  "display":"standalone",
+  "background_color":"#2c263b",
+  "theme_color":"#2c263b",
+  "icons":[{"src":"./icon.svg","sizes":"any","type":"image/svg+xml","purpose":"any"}]
+}
