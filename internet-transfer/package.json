@@ -14,7 +14,8 @@
   "dependencies": {
     "archiver": "^7.0.1",
     "busboy": "^1.6.0",
-    "express": "^5.1.0"
+    "express": "^5.1.0",
+    "qrcode": "^1.5.4"
   },
   "devDependencies": {
     "unzipper": "^0.12.3"
