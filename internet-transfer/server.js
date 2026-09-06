@@ -1,6 +1,7 @@
 const express = require('express');
 const Busboy = require('busboy');
 const archiver = require('archiver');
+const QRCode = require('qrcode');
 const crypto = require('crypto');
 const http = require('http');
 const path = require('path');
@@ -38,6 +39,7 @@ function createApp() {
   const app = express();
   const sessions = new Map();
 
+  app.set('trust proxy', 1);
   app.disable('x-powered-by');
   app.use(express.json({ limit: '32kb' }));
   app.use(express.static(path.join(__dirname, 'public'), { maxAge: 0, etag: false }));
@@ -63,6 +65,31 @@ function createApp() {
       res.json({ code, senderToken, expiresInSeconds: Math.floor(SESSION_TTL_MS / 1000) });
     } catch (e) {
       res.status(500).json({ error: e.message || '创建失败' });
+    }
+  });
+
+  app.get('/api/qr/:code', async (req, res) => {
+    const session = sessions.get(req.params.code);
+    if (!session || Date.now() - session.lastActivity > SESSION_TTL_MS) {
+      return res.status(404).send('取件码不存在或已过期');
+    }
+    session.lastActivity = Date.now();
+    try {
+      const origin = `${req.protocol}://${req.get('host')}`;
+      const receiveUrl = `${origin}/receive/${encodeURIComponent(session.code)}`;
+      const svg = await QRCode.toString(receiveUrl, {
+        type: 'svg',
+        errorCorrectionLevel: 'M',
+        margin: 2,
+        width: 420
+      });
+      res.set({
+        'Content-Type': 'image/svg+xml; charset=utf-8',
+        'Cache-Control': 'no-store, no-cache, must-revalidate'
+      });
+      res.send(svg);
+    } catch (e) {
+      res.status(500).send('二维码生成失败');
     }
   });
 
@@ -130,7 +157,7 @@ function createApp() {
       return res.status(403).json({ error: '发送端验证失败' });
     }
     if (!session.receiverRes || session.receiverClosed) {
-      return res.status(409).json({ error: '请先在 iPhone 上输入取件码并点“准备接收”' });
+      return res.status(409).json({ error: '请先让 iPhone 扫二维码并打开接收链接' });
     }
     if (session.senderActive || session.senderFinished) {
       return res.status(409).json({ error: '这次传输已经开始或结束' });
