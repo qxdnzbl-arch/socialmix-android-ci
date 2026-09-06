@@ -1,0 +1,41 @@
+name: Add agent runtime diagnostics
+
+on:
+  push:
+    branches: [always-on-agent-v0]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: always-on-agent-v0
+      - name: Add safe diagnostics
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('always-on-agent/main.py')
+          s=p.read_text()
+          old="        try: action=await planner_decide(goal,hist)\n        except Exception as e:\n            add_event(s,'planner_error',goal['id'],data={'error':str(e)}); await store_set(s); return {'status':'planner_error','error':str(e)}"
+          new="        try:\n            action=await planner_decide(goal,hist)\n            print('PLANNER_ACTION', action.get('action_type'), action.get('title'), flush=True)\n        except Exception as e:\n            print('PLANNER_ERROR', str(e), flush=True)\n            add_event(s,'planner_error',goal['id'],data={'error':str(e)}); await store_set(s); return {'status':'planner_error','error':str(e)}"
+          if old in s:
+              s=s.replace(old,new,1)
+          p.write_text(s)
+          PY
+          python -m py_compile always-on-agent/main.py
+      - name: Commit diagnostics
+        run: |
+          if git diff --quiet -- always-on-agent/main.py; then
+            echo "No patch needed"
+            exit 0
+          fi
+          git config user.name "always-on-agent-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add always-on-agent/main.py
+          git commit -m "Add safe planner diagnostics"
+          git push origin HEAD:always-on-agent-v0
