@@ -1,4 +1,4 @@
-name: Immersive Music iPhone PWA CI
+name: Immersive Music iPhone 7 CI
 
 on:
   push:
@@ -14,7 +14,7 @@ jobs:
     timeout-minutes: 12
     defaults:
       run:
-        working-directory: ios-pwa
+        working-directory: ios-iphone7
     steps:
       - name: Checkout
         uses: actions/checkout@v4
