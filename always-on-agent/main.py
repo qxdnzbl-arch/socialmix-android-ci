@@ -215,6 +215,11 @@ async def tick_once():
         blocked=next((t for t in s['tasks'] if t['goal_id']==goal['id'] and t['status'] in ('pending','waiting_approval','running')),None)
         if blocked: return {'status':'waiting','goal_id':goal['id'],'task_id':blocked['id']}
         hist=[e for e in s['events'] if e.get('goal_id')==goal['id']]
+        # A system_context_updated event supersedes obsolete connection/rate-limit history.
+        for i in range(len(hist)-1,-1,-1):
+            if hist[i].get('type')=='system_context_updated':
+                hist=hist[i:]
+                break
         try:
             if LLM_MODE == 'openai_compatible':
                 gate=await budget_preflight(s)
