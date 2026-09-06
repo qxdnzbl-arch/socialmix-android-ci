@@ -158,8 +158,11 @@ async def tick_once():
         blocked=next((t for t in s['tasks'] if t['goal_id']==goal['id'] and t['status'] in ('pending','waiting_approval','running')),None)
         if blocked: return {'status':'waiting','goal_id':goal['id'],'task_id':blocked['id']}
         hist=[e for e in s['events'] if e.get('goal_id')==goal['id']]
-        try: action=await planner_decide(goal,hist)
+        try:
+            action=await planner_decide(goal,hist)
+            print('PLANNER_ACTION', action.get('action_type'), action.get('title'), flush=True)
         except Exception as e:
+            print('PLANNER_ERROR', str(e), flush=True)
             add_event(s,'planner_error',goal['id'],data={'error':str(e)}); await store_set(s); return {'status':'planner_error','error':str(e)}
         if action.get('action_type')=='complete':
             goal['status']='completed'; add_event(s,'goal_completed',goal['id'],data=action); await store_set(s); return {'status':'completed','goal_id':goal['id']}
