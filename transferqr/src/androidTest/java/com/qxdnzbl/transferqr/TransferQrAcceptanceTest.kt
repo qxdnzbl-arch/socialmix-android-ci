@@ -85,11 +85,16 @@ class TransferQrAcceptanceTest {
             assertTrue(page.body?.string().orEmpty().contains("发送到 Android"))
         }
 
-        val fileName = "iphone-to-android-${System.currentTimeMillis()}.txt"
-        val expected = "reverse-transfer-ok"
+        val suffix = System.currentTimeMillis()
+        val firstName = "iphone-to-android-$suffix.txt"
+        val secondName = "苹果回传-$suffix.txt"
+        val firstExpected = "reverse-transfer-ok"
+        val secondExpected = "来自 iPhone 的中文内容"
+        val text = "text/plain".toMediaType()
         val multipart = MultipartBody.Builder()
             .setType(MultipartBody.FORM)
-            .addFormDataPart("files", fileName, expected.toRequestBody("text/plain".toMediaType()))
+            .addFormDataPart("files", firstName, firstExpected.toRequestBody(text))
+            .addFormDataPart("files", secondName, secondExpected.toRequestBody(text))
             .build()
         val sendRequest = Request.Builder()
             .url("$base/instant/send/$id")
@@ -106,13 +111,23 @@ class TransferQrAcceptanceTest {
             Thread.sleep(100)
         }
         assertEquals(vm.ui.message, Phase.DONE, vm.ui.phase)
+        assertEquals(2, vm.ui.selectedCount)
         assertTrue(vm.ui.message.contains("下载/手机互传"))
 
+        val first = findDownload(app, firstName)
+        val second = findDownload(app, secondName)
+        assertEquals(firstExpected, app.contentResolver.openInputStream(first)?.use { String(it.readBytes(), Charsets.UTF_8) })
+        assertEquals(secondExpected, app.contentResolver.openInputStream(second)?.use { String(it.readBytes(), Charsets.UTF_8) })
+        app.contentResolver.delete(first, null, null)
+        app.contentResolver.delete(second, null, null)
+    }
+
+    private fun findDownload(app: Application, fileName: String): Uri {
         val resolver = app.contentResolver
         val projection = arrayOf(MediaStore.MediaColumns._ID)
         val selection = MediaStore.MediaColumns.DISPLAY_NAME + "=?"
         val args = arrayOf(fileName)
-        val foundUri = resolver.query(
+        return resolver.query(
             MediaStore.Downloads.EXTERNAL_CONTENT_URI,
             projection,
             selection,
@@ -124,11 +139,7 @@ class TransferQrAcceptanceTest {
                 MediaStore.Downloads.EXTERNAL_CONTENT_URI,
                 cursor.getLong(cursor.getColumnIndexOrThrow(MediaStore.MediaColumns._ID))
             )
-        } ?: error("received file was not saved to Android Downloads")
-
-        val actual = resolver.openInputStream(foundUri)?.use { String(it.readBytes(), Charsets.UTF_8) }
-        assertEquals(expected, actual)
-        resolver.delete(foundUri, null, null)
+        } ?: error("received file was not saved to Android Downloads: $fileName")
     }
 
     private fun waitForReceiver(client: OkHttpClient, base: String, id: String): Boolean {
