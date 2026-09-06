@@ -40,7 +40,7 @@ jobs:
         run: |
           if [ -e /dev/kvm ]; then sudo chmod 666 /dev/kvm; fi
 
-      - name: Android emulator acceptance
+      - name: Android emulator acceptance and preview
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 35
@@ -54,14 +54,18 @@ jobs:
             adb install -r transferqr/build/outputs/apk/debug/transferqr-debug.apk
             adb shell am force-stop com.qxdnzbl.transferqr || true
             adb shell monkey -p com.qxdnzbl.transferqr -c android.intent.category.LAUNCHER 1
-            sleep 5
+            sleep 2
             adb shell pidof com.qxdnzbl.transferqr
+            mkdir -p preview
+            adb exec-out screencap -p > preview/transfer-qr-preview.png
+            test -s preview/transfer-qr-preview.png
 
       - name: Prepare verified APK
         if: success()
         run: |
           mkdir -p deliverable
           cp transferqr/build/outputs/apk/debug/transferqr-debug.apk deliverable/Phone-Transfer-QR.apk
+          cp preview/transfer-qr-preview.png deliverable/transfer-qr-preview.png
           sha256sum deliverable/Phone-Transfer-QR.apk | tee deliverable/SHA256.txt
 
       - name: Upload verified APK
