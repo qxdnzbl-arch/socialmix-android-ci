@@ -30,12 +30,14 @@ jobs:
           python always-on-agent/patch_self_audit_compat.py
           python always-on-agent/patch_self_audit.py
           python always-on-agent/patch_verifier_retry.py
+          python always-on-agent/patch_task_dedup.py
           python -m py_compile always-on-agent/main.py
           python -m pip install -r always-on-agent/requirements.txt
           cd always-on-agent
           python test_self_audit.py
           python test_execution_continuity.py
           python test_verifier_retry.py
+          python test_task_dedup.py
       - name: Commit patch
         run: |
           if git diff --quiet -- always-on-agent/main.py; then
@@ -45,5 +47,5 @@ jobs:
           git config user.name "always-on-agent-bot"
           git config user.email "actions@users.noreply.github.com"
           git add always-on-agent/main.py
-          git commit -m "Enforce deterministic verification and durable retry"
+          git commit -m "Enforce deterministic duplicate-action suppression"
           git push origin HEAD:always-on-agent-v0
