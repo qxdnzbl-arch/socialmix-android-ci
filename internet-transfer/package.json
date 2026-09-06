@@ -1,0 +1,22 @@
+{
+  "name": "internet-transfer-relay",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Streaming OPPO to iPhone internet relay. No file persistence.",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node --test test/*.test.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "archiver": "^7.0.1",
+    "busboy": "^1.6.0",
+    "express": "^5.1.0"
+  },
+  "devDependencies": {
+    "unzipper": "^0.12.3"
+  }
+}
