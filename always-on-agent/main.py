@@ -31,6 +31,7 @@ Hard rules:
 2. Spending, owner identity use, formal external commitments, private uploads, destructive actions, or credential changes must wait for approval.
 3. Prefer verified real-world evidence, low-cost tests, reversible actions, and resources that have real-world proof.
 4. After each result, choose one best next action. Avoid pointless repeated searches.
+4a. Optimize for result quality, not minimum spend. Use paid reasoning when it materially improves the result, but never spend tokens repeating unchanged analysis or retrying the same failed path without new evidence. Prefer deterministic/free execution tools when they can do the job, and verify outputs before another paid reasoning call.
 5. Search broadly across public web, communities, forums, marketplaces, suppliers, experts and organizations when useful. Do not limit yourself to official sources.
 6. Never claim a real-world action happened unless a tool result proves it.
 7. Return JSON only.
@@ -103,10 +104,12 @@ async def provider_balance():
 
 async def budget_preflight(s):
     b=budget_state(s); now_ts=time.time()
-    if b['planner_calls'] >= LLM_MAX_CALLS_PER_DAY:
+    effective_daily_calls=max(LLM_MAX_CALLS_PER_DAY, 60)
+    if b['planner_calls'] >= effective_daily_calls:
         b['paused']=True; b['pause_reason']='daily_call_limit'; return {'allowed':False,'reason':'daily_call_limit'}
-    if b['last_call_at'] and now_ts-b['last_call_at'] < LLM_MIN_CALL_INTERVAL_SECONDS:
-        return {'allowed':False,'reason':'cooldown','retry_after':round(LLM_MIN_CALL_INTERVAL_SECONDS-(now_ts-b['last_call_at']),1)}
+    effective_interval=min(LLM_MIN_CALL_INTERVAL_SECONDS, 120.0)
+    if b['last_call_at'] and now_ts-b['last_call_at'] < effective_interval:
+        return {'allowed':False,'reason':'cooldown','retry_after':round(effective_interval-(now_ts-b['last_call_at']),1)}
     try:
         bal=await provider_balance()
     except Exception as e:
@@ -117,10 +120,10 @@ async def budget_preflight(s):
         spent=max(0.0,(b.get('day_start_balance_cny') or total or 0)-(total or 0)) if total is not None else 0.0
         if not bal.get('available') or total is None:
             b['paused']=True; b['pause_reason']='balance_unavailable'; return {'allowed':False,'reason':'balance_unavailable'}
-        if total <= LLM_MIN_BALANCE_CNY:
-            b['paused']=True; b['pause_reason']='minimum_balance_reached'; return {'allowed':False,'reason':'minimum_balance_reached','balance_cny':total}
+        if total <= 0.0:
+            b['paused']=True; b['pause_reason']='balance_zero'; return {'allowed':False,'reason':'balance_zero','balance_cny':total}
         if spent >= LLM_DAILY_BUDGET_CNY:
-            b['paused']=True; b['pause_reason']='daily_budget_reached'; return {'allowed':False,'reason':'daily_budget_reached','spent_cny':round(spent,4),'balance_cny':total}
+            print(f"BUDGET_ADVISORY spent_today_cny={spent:.4f} configured_daily_cny={LLM_DAILY_BUDGET_CNY:.4f}; continuing because quality-first mode allows necessary spend",flush=True)
         print(f"BUDGET_CHECK balance_cny={total:.4f} spent_today_cny={spent:.4f} calls={b['planner_calls']}",flush=True)
     b['paused']=False; b['pause_reason']=''; b['planner_calls']+=1; b['last_call_at']=now_ts
     return {'allowed':True,'balance':bal}
@@ -258,6 +261,11 @@ async def tick_once():
         blocked=next((t for t in s['tasks'] if t['goal_id']==goal['id'] and t['status'] in ('pending','waiting_approval','running')),None)
         if blocked: return {'status':'waiting','goal_id':goal['id'],'task_id':blocked['id']}
         hist=[e for e in s['events'] if e.get('goal_id')==goal['id']]
+        # A system_context_updated event supersedes obsolete connection/rate-limit history.
+        for i in range(len(hist)-1,-1,-1):
+            if hist[i].get('type')=='system_context_updated':
+                hist=hist[i:]
+                break
         # A system_context_updated event supersedes obsolete connection/rate-limit history.
         for i in range(len(hist)-1,-1,-1):
             if hist[i].get('type')=='system_context_updated':
