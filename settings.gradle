@@ -16,3 +16,4 @@ dependencyResolutionManagement {
 
 rootProject.name = 'SocialMixAndroidCI'
 include ':app'
+include ':transferapp'
