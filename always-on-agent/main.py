@@ -241,6 +241,11 @@ async def tick_once():
             if hist[i].get('type')=='system_context_updated':
                 hist=hist[i:]
                 break
+        # A system_context_updated event supersedes obsolete connection/rate-limit history.
+        for i in range(len(hist)-1,-1,-1):
+            if hist[i].get('type')=='system_context_updated':
+                hist=hist[i:]
+                break
         try:
             if LLM_MODE == 'openai_compatible':
                 gate=await budget_preflight(s)
