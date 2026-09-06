@@ -112,7 +112,7 @@ private data class TransferUiState(
 private data class Session(val code: String, val token: String)
 private data class PickedFile(val uri: android.net.Uri, val name: String, val size: Long, val mime: String?)
 
-private class TransferViewModel(application: Application) : AndroidViewModel(application) {
+internal class TransferViewModel(application: Application) : AndroidViewModel(application) {
     private val client = OkHttpClient.Builder()
         .connectTimeout(60, TimeUnit.SECONDS)
         .readTimeout(0, TimeUnit.SECONDS)
