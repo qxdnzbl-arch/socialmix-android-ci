@@ -159,20 +159,31 @@ async def tool_web_get(payload):
         return {'url':str(r.url),'status':r.status_code,'text':strip_html(r.text)[:16000]}
 
 async def tool_web_search(payload):
-    q=str(payload.get('query','')).strip(); count=max(1,min(int(payload.get('count',8)),12))
-    if not q: raise RuntimeError('web_search requires query')
-    url='https://html.duckduckgo.com/html/?q='+quote_plus(q)
+    one=str(payload.get('query','')).strip()
+    raw_many=payload.get('queries') or []
+    if one:
+        queries=[one]
+    elif isinstance(raw_many,list):
+        queries=[str(x).strip() for x in raw_many if str(x).strip()]
+    else:
+        queries=[]
+    if not queries: raise RuntimeError('web_search requires query or queries')
+    count=max(1,min(int(payload.get('count',8)),12))
+    all_results=[]
     async with httpx.AsyncClient(timeout=35,follow_redirects=True,headers={'User-Agent':'Mozilla/5.0 OwnerAgent/0.2'}) as c:
-        r=await c.get(url); r.raise_for_status(); html=r.text
-    pairs=re.findall(r'<a[^>]+class="result__a"[^>]+href="([^"]+)"[^>]*>(.*?)</a>',html,re.I|re.S)
-    out=[]
-    for href,title in pairs[:count]:
-        href=unescape(href)
-        if 'uddg=' in href:
-            try: href=parse_qs(urlparse(href).query).get('uddg',[href])[0]
-            except Exception: pass
-        out.append({'title':strip_html(title),'url':href})
-    return {'query':q,'results':out}
+        for q in queries[:4]:
+            url='https://html.duckduckgo.com/html/?q='+quote_plus(q)
+            r=await c.get(url); r.raise_for_status(); html=r.text
+            pairs=re.findall(r'<a[^>]+class="result__a"[^>]+href="([^"]+)"[^>]*>(.*?)</a>',html,re.I|re.S)
+            out=[]
+            for href,title in pairs[:count]:
+                href=unescape(href)
+                if 'uddg=' in href:
+                    try: href=parse_qs(urlparse(href).query).get('uddg',[href])[0]
+                    except Exception: pass
+                out.append({'title':strip_html(title),'url':href})
+            all_results.append({'query':q,'results':out})
+    return {'queries':queries[:4],'batches':all_results}
 
 async def run_tool(kind,payload):
     if kind=='note': return {'text':str(payload.get('text',''))}
@@ -215,6 +226,11 @@ async def tick_once():
         blocked=next((t for t in s['tasks'] if t['goal_id']==goal['id'] and t['status'] in ('pending','waiting_approval','running')),None)
         if blocked: return {'status':'waiting','goal_id':goal['id'],'task_id':blocked['id']}
         hist=[e for e in s['events'] if e.get('goal_id')==goal['id']]
+        # A system_context_updated event supersedes obsolete connection/rate-limit history.
+        for i in range(len(hist)-1,-1,-1):
+            if hist[i].get('type')=='system_context_updated':
+                hist=hist[i:]
+                break
         # A system_context_updated event supersedes obsolete connection/rate-limit history.
         for i in range(len(hist)-1,-1,-1):
             if hist[i].get('type')=='system_context_updated':
