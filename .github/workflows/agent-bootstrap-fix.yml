@@ -29,6 +29,7 @@ jobs:
           python always-on-agent/patch_self_audit_compat.py
           python always-on-agent/patch_self_audit.py
           python -m py_compile always-on-agent/main.py
+          python -m pip install -r always-on-agent/requirements.txt
           cd always-on-agent
           python test_self_audit.py
       - name: Commit patch
