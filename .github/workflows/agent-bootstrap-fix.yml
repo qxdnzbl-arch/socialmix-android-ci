@@ -1,0 +1,51 @@
+name: Patch always-on agent bootstrap
+
+on:
+  push:
+    branches: [always-on-agent-v0]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: always-on-agent-v0
+      - name: Patch runtime
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          p = Path('always-on-agent/main.py')
+          s = p.read_text()
+
+          old = "    body={'model':LLM_MODEL,'messages':[{'role':'system','content':SYSTEM_RULES},{'role':'user','content':json.dumps({'goal':goal,'recent_history':history[-30:]},ensure_ascii=False)}],'temperature':0.2,'response_format':{'type':'json_object'}}"
+          new = "    body={'model':LLM_MODEL,'messages':[{'role':'system','content':SYSTEM_RULES},{'role':'user','content':json.dumps({'goal':goal,'recent_history':history[-30:]},ensure_ascii=False)}],'reasoning_effort':'low','max_completion_tokens':1200,'response_format':{'type':'json_object'}}"
+          if old in s:
+              s = s.replace(old, new, 1)
+
+          marker = "        s=await store_get()\n        pending=next((t for t in s['tasks'] if t['status']=='pending' and not t.get('requires_approval')),None)"
+          replacement = """        s=await store_get()\n        # One-time recovery: the owner has now configured the real reasoning model.\n        if LLM_MODE == 'openai_compatible' and LLM_API_KEY:\n            bootstrap_ids=set()\n            changed=False\n            for t in s.get('tasks',[]):\n                if t.get('title')=='Connect reasoning model' and t.get('kind')=='clarify' and t.get('status')=='waiting_approval':\n                    t['status']='completed'; t['requires_approval']=False; t['result']={'system':'reasoning model configured'}\n                    bootstrap_ids.add(t.get('id')); add_event(s,'task_completed',t.get('goal_id'),t.get('id'),t['result']); changed=True\n            for a in s.get('approvals',[]):\n                if a.get('task_id') in bootstrap_ids and a.get('status')=='pending':\n                    a['status']='approved'; a['decision_note']='Automatically resolved after live model configuration.'; a['decided_at']=now(); changed=True\n            if changed: await store_set(s)\n        pending=next((t for t in s['tasks'] if t['status']=='pending' and not t.get('requires_approval')),None)"""
+          if marker in s:
+              s = s.replace(marker, replacement, 1)
+
+          s = s.replace("version='0.2.0'", "version='0.3.0'", 1)
+          s = s.replace("'version':'0.2.0'", "'version':'0.3.0'", 1)
+          p.write_text(s)
+          PY
+          python -m py_compile always-on-agent/main.py
+      - name: Commit patch
+        run: |
+          if git diff --quiet -- always-on-agent/main.py; then
+            echo "No patch needed"
+            exit 0
+          fi
+          git config user.name "always-on-agent-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add always-on-agent/main.py
+          git commit -m "Fix live model bootstrap and planner settings"
+          git push origin HEAD:always-on-agent-v0
