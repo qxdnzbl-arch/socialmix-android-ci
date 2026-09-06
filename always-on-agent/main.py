@@ -34,10 +34,12 @@ Hard rules:
 4a. Optimize for result quality, not minimum spend. Use paid reasoning when it materially improves the result, but never spend tokens repeating unchanged analysis or retrying the same failed path without new evidence. Prefer deterministic/free execution tools when they can do the job, and verify outputs before another paid reasoning call.
 4a. Optimize for result quality, not minimum spend. Use paid reasoning when it materially improves the result, but never spend tokens repeating unchanged analysis or retrying the same failed path without new evidence. Prefer deterministic/free execution tools when they can do the job, and verify outputs before another paid reasoning call.
 4a. Optimize for result quality, not minimum spend. Use paid reasoning when it materially improves the result, but never spend tokens repeating unchanged analysis or retrying the same failed path without new evidence. Prefer deterministic/free execution tools when they can do the job, and verify outputs before another paid reasoning call.
+4a. Optimize for result quality, not minimum spend. Use paid reasoning when it materially improves the result, but never spend tokens repeating unchanged analysis or retrying the same failed path without new evidence. Prefer deterministic/free execution tools when they can do the job, and verify outputs before another paid reasoning call.
 5. Search broadly across public web, communities, forums, marketplaces, suppliers, experts and organizations when useful. Do not limit yourself to official sources.
 6. Never claim a real-world action happened unless a tool result proves it.
 7. Return JSON only.
 Allowed action types: web_search, web_get, note, clarify, complete.
+Payload contracts: web_search requires payload.query or payload.queries; web_get requires payload.url and must only be used when a concrete URL is already known; note uses payload.text; clarify uses payload.question. If you need a source but do not yet have a concrete URL, use web_search first.
 Schema: {"action_type":"...","title":"...","instruction":"...","payload":{},"risk_flags":[],"why":"..."}
 Risk flags when applicable: uncertain_fact, spend_money, use_owner_identity, make_formal_commitment, upload_private_data, destructive_action, change_credentials.
 '''
@@ -222,6 +224,41 @@ async def tool_web_search(payload):
             all_results.append({'query':q,'source':source,'results':clean})
     return {'queries':queries[:4],'batches':all_results}
 
+def normalize_tool_request(kind,payload,title='',instruction=''):
+    kind=str(kind or '').strip()
+    aliases={'search':'web_search','websearch':'web_search','web-search':'web_search','fetch':'web_get','browse':'web_get','read_url':'web_get','get_url':'web_get'}
+    kind=aliases.get(kind,kind)
+    p=dict(payload or {}) if isinstance(payload,dict) else {}
+    fallback=(str(title or '').strip()+' '+str(instruction or '').strip()).strip()
+    if kind=='web_get':
+        url=str(p.get('url','')).strip()
+        if url.startswith(('http://','https://')):
+            p={'url':url}
+        else:
+            q=str(p.get('query','')).strip() or fallback
+            if not q:
+                q='persistent autonomous cloud agent architecture state scheduling self-healing'
+            kind='web_search'; p={'query':q,'count':6}
+    elif kind=='web_search':
+        one=str(p.get('query','')).strip()
+        many=p.get('queries') if isinstance(p.get('queries'),list) else []
+        many=[str(x).strip() for x in many if str(x).strip()]
+        if one:
+            p={'query':one,'count':max(1,min(int(p.get('count',8)),12))}
+        elif many:
+            p={'queries':many[:4],'count':max(1,min(int(p.get('count',8)),12))}
+        else:
+            p={'query':fallback or 'persistent autonomous cloud agent architecture state scheduling self-healing','count':6}
+    elif kind=='note':
+        text=str(p.get('text') or p.get('message') or p.get('status') or instruction or title or '').strip()
+        p={'text':text}
+    elif kind=='clarify':
+        q=str(p.get('question') or instruction or title or 'Owner clarification required.').strip()
+        p={'question':q}
+    elif kind not in {'complete'}:
+        kind='note'; p={'text':fallback or f'Unsupported action normalized from {kind}.'}
+    return kind,p
+
 async def run_tool(kind,payload):
     if kind=='note': return {'text':str(payload.get('text',''))}
     if kind=='web_get': return await tool_web_get(payload)
@@ -247,6 +284,11 @@ async def tick_once():
         if pending:
             pending['status']='running'; pending['attempts']=pending.get('attempts',0)+1; await store_set(s)
             try:
+                repaired_kind,repaired_payload=normalize_tool_request(pending.get('kind'),pending.get('payload') or {},pending.get('title',''),pending.get('instruction',''))
+                if repaired_kind != pending.get('kind') or repaired_payload != (pending.get('payload') or {}):
+                    pending['kind']=repaired_kind; pending['payload']=repaired_payload
+                    add_event(s,'task_repaired',pending.get('goal_id'),pending.get('id'),{'kind':repaired_kind,'payload':repaired_payload})
+                    await store_set(s)
                 result=await run_tool(pending['kind'],pending.get('payload') or {})
                 pending['result']=result; pending['status']='completed'; add_event(s,'task_completed',pending['goal_id'],pending['id'],result)
             except Exception as e:
@@ -282,6 +324,10 @@ async def tick_once():
             add_event(s,'planner_error',goal['id'],data={'error':str(e)}); await store_set(s); return {'status':'planner_error','error':str(e)}
         if action.get('action_type')=='complete':
             goal['status']='completed'; add_event(s,'goal_completed',goal['id'],data=action); await store_set(s); return {'status':'completed','goal_id':goal['id']}
+        normalized_kind,normalized_payload=normalize_tool_request(action.get('action_type'),action.get('payload') or {},action.get('title',''),action.get('instruction',''))
+        if normalized_kind != action.get('action_type') or normalized_payload != (action.get('payload') or {}):
+            action=dict(action); action['action_type']=normalized_kind; action['payload']=normalized_payload
+            add_event(s,'planner_action_repaired',goal['id'],data={'action_type':normalized_kind,'payload':normalized_payload})
         allowed,cat=policy(action); tid=s['next_ids']['task']; s['next_ids']['task']+=1
         task={'id':tid,'goal_id':goal['id'],'title':str(action.get('title') or 'Next action'),'instruction':str(action.get('instruction') or ''),'kind':action.get('action_type','note'),'status':'pending' if allowed else 'waiting_approval','payload':action.get('payload') or {},'result':{},'requires_approval':not allowed,'attempts':0}
         s['tasks'].append(task); add_event(s,'task_planned',goal['id'],tid,action)
