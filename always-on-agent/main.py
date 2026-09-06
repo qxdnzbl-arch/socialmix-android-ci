@@ -15,6 +15,9 @@ STORE_KEY = os.getenv('SUPABASE_PUBLISHABLE_KEY', '')
 STORE_SECRET = os.getenv('AGENT_STORE_SECRET', '')
 WORKER_INTERVAL = float(os.getenv('WORKER_INTERVAL_SECONDS', '5'))
 MAX_ATTEMPTS = int(os.getenv('MAX_TASK_ATTEMPTS', '3'))
+RETRY_BASE_SECONDS = float(os.getenv('TASK_RETRY_BASE_SECONDS', '60'))
+RETRY_MAX_SECONDS = float(os.getenv('TASK_RETRY_MAX_SECONDS', '3600'))
+RUNNING_STALE_SECONDS = float(os.getenv('TASK_RUNNING_STALE_SECONDS', '1800'))
 LLM_MODE = os.getenv('LLM_MODE', 'mock')
 LLM_BASE_URL = os.getenv('LLM_BASE_URL', '').rstrip('/')
 LLM_API_KEY = os.getenv('LLM_API_KEY', '')
@@ -493,6 +496,61 @@ def normalize_tool_request(kind,payload,title='',instruction=''):
         kind='note'; p={'text':fallback or f'Unsupported action normalized from {kind}.'}
     return kind,p
 
+def verify_tool_result(kind, result):
+    """Deterministic postcondition checks. A tool call is not success merely because it returned."""
+    if not isinstance(result,dict):
+        return {'ok':False,'reason':'result_not_object'}
+    if result.get('error'):
+        return {'ok':False,'reason':'tool_error','detail':str(result.get('error'))[:300]}
+    if kind=='web_get':
+        status=int(result.get('status') or 0)
+        text=str(result.get('text') or '').strip()
+        if status < 200 or status >= 400: return {'ok':False,'reason':'http_status','status':status}
+        if len(text) < 80: return {'ok':False,'reason':'empty_or_too_short_content','chars':len(text)}
+        return {'ok':True,'reason':'http_content_verified','status':status,'chars':len(text)}
+    if kind=='web_search':
+        batches=result.get('batches') if isinstance(result.get('batches'),list) else []
+        count=sum(len(b.get('results') or []) for b in batches if isinstance(b,dict))
+        if count < 1: return {'ok':False,'reason':'empty_search_results','result_count':0}
+        return {'ok':True,'reason':'search_results_verified','result_count':count}
+    if kind=='note':
+        text=str(result.get('text') or '').strip()
+        return {'ok':bool(text),'reason':'note_recorded' if text else 'empty_note'}
+    return {'ok':True,'reason':'no_special_postcondition'}
+
+
+def failure_signature(kind, error):
+    raw=f'{kind}:{str(error).strip().lower()}'
+    raw=re.sub(r'\d{2,}', '#', raw)
+    return hashlib.sha256(raw[:600].encode('utf-8')).hexdigest()[:16]
+
+
+def retry_delay_seconds(attempts):
+    n=max(1,int(attempts or 1))
+    return min(RETRY_MAX_SECONDS, RETRY_BASE_SECONDS*(2**(n-1)))
+
+
+def retry_due(task, at=None):
+    at=time.time() if at is None else float(at)
+    due=task.get('retry_at_epoch')
+    return due is None or float(due) <= at
+
+
+def recover_stale_running_tasks(state, at=None):
+    """A process crash must not leave a local task permanently blocking the parent goal."""
+    at=time.time() if at is None else float(at)
+    recovered=[]
+    for t in state.get('tasks',[]):
+        if t.get('status')!='running' or t.get('kind')=='executor_request': continue
+        started=float(t.get('started_at_epoch') or 0)
+        if started and at-started >= RUNNING_STALE_SECONDS:
+            t['status']='pending'
+            t['retry_at_epoch']=at
+            t['last_error']='stale_running_recovered'
+            t.pop('started_at_epoch',None)
+            recovered.append(t.get('id'))
+    return recovered
+
 async def run_tool(kind,payload):
     if kind=='note': return {'text':str(payload.get('text',''))}
     if kind=='web_get': return await tool_web_get(payload)
@@ -502,6 +560,11 @@ async def run_tool(kind,payload):
 async def tick_once():
     async with state_lock:
         s=await store_get()
+        recovered_stale=recover_stale_running_tasks(s)
+        if recovered_stale:
+            for task_id in recovered_stale:
+                add_event(s,'stale_running_recovered',task_id=task_id,data={'retry':'immediate'})
+            await store_set(s)
         audit=s.setdefault('audit',{})
         latest_event_id=int((s.get('events') or [{}])[-1].get('id') or 0)
         today=datetime.now(timezone.utc).strftime('%Y-%m-%d')
@@ -525,9 +588,9 @@ async def tick_once():
                 if a.get('task_id') in bootstrap_ids and a.get('status')=='pending':
                     a['status']='approved'; a['decision_note']='Automatically resolved after live model configuration.'; a['decided_at']=now(); changed=True
             if changed: await store_set(s)
-        pending=next((t for t in s['tasks'] if t['status']=='pending' and not t.get('requires_approval')),None)
+        pending=next((t for t in s['tasks'] if t['status']=='pending' and not t.get('requires_approval') and retry_due(t)),None)
         if pending:
-            pending['status']='running'; pending['attempts']=pending.get('attempts',0)+1; await store_set(s)
+            pending['status']='running'; pending['attempts']=pending.get('attempts',0)+1; pending['started_at_epoch']=time.time(); await store_set(s)
             try:
                 repaired_kind,repaired_payload=normalize_tool_request(pending.get('kind'),pending.get('payload') or {},pending.get('title',''),pending.get('instruction',''))
                 if repaired_kind != pending.get('kind') or repaired_payload != (pending.get('payload') or {}):
@@ -535,27 +598,40 @@ async def tick_once():
                     add_event(s,'task_repaired',pending.get('goal_id'),pending.get('id'),{'kind':repaired_kind,'payload':repaired_payload})
                     await store_set(s)
                 result=await run_tool(pending['kind'],pending.get('payload') or {})
-                pending['result']=result; pending['status']='completed'; add_event(s,'task_completed',pending['goal_id'],pending['id'],result)
+                verification=verify_tool_result(pending['kind'],result)
+                pending['verification']=verification
+                if not verification.get('ok'):
+                    raise RuntimeError('postcondition_failed:'+str(verification.get('reason')))
+                pending['result']=result; pending['status']='completed'; pending.pop('retry_at_epoch',None); pending.pop('started_at_epoch',None); pending.pop('last_error',None); add_event(s,'task_completed',pending['goal_id'],pending['id'],{'result':result,'verification':verification})
             except Exception as e:
-                pending['result']={'error':str(e)}
-                if pending['attempts']>=MAX_ATTEMPTS:
+                err=str(e); sig=failure_signature(pending.get('kind'),err)
+                history=pending.setdefault('failure_signatures',[]); history.append(sig); history[:]=history[-6:]
+                same_count=sum(1 for x in history[-2:] if x==sig)
+                pending['result']={'error':err}; pending['last_error']=err; pending['last_error_signature']=sig; pending.pop('started_at_epoch',None)
+                must_change_path=(same_count>=2 or pending['attempts']>=MAX_ATTEMPTS)
+                if must_change_path:
                     original_kind=pending.get('kind')
                     original_payload=pending.get('payload') or {}
                     pending['kind']='executor_request'
-                    pending['status']='waiting_executor'; pending['requires_approval']=False
+                    pending['status']='waiting_executor'; pending['requires_approval']=False; pending.pop('retry_at_epoch',None)
                     pending['payload']={
                         'capability':'runtime_debug_and_repair',
-                        'objective':f"Repair the internal execution failure and continue the original task: {pending.get('title','task')}",
+                        'objective':f"Change path, repair the verified internal execution failure, and continue the original task: {pending.get('title','task')}",
                         'params':{
                             'original_kind':original_kind,
                             'original_payload':original_payload,
-                            'last_error':str(e),
-                            'attempts':pending['attempts']
+                            'last_error':err,
+                            'error_signature':sig,
+                            'attempts':pending['attempts'],
+                            'same_root_repeated':same_count>=2
                         }
                     }
-                    add_event(s,'task_escalated_to_executor',pending['goal_id'],pending['id'],{'error':str(e),'capability':'runtime_debug_and_repair'})
-                else: pending['status']='pending'
-                add_event(s,'task_failed',pending['goal_id'],pending['id'],{'error':str(e),'trace':traceback.format_exc(limit=2)})
+                    add_event(s,'task_escalated_to_executor',pending['goal_id'],pending['id'],{'error':err,'error_signature':sig,'capability':'runtime_debug_and_repair','reason':'same_root_twice' if same_count>=2 else 'max_attempts'})
+                else:
+                    delay=retry_delay_seconds(pending['attempts'])
+                    pending['status']='pending'; pending['retry_at_epoch']=time.time()+delay
+                    add_event(s,'task_retry_scheduled',pending['goal_id'],pending['id'],{'delay_seconds':delay,'error_signature':sig})
+                add_event(s,'task_failed',pending['goal_id'],pending['id'],{'error':err,'error_signature':sig,'trace':traceback.format_exc(limit=2)})
             self_audit(s,'task_execution',pending.get('goal_id'),pending.get('id'))
             await store_set(s); return {'status':pending['status'],'task_id':pending['id']}
         goal=next((g for g in sorted(s['goals'],key=lambda x:(-x['priority'],x['id'])) if g['status']=='active'),None)
