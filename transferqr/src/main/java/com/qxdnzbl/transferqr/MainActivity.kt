@@ -96,11 +96,11 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-private enum class Phase {
+internal enum class Phase {
     PREPARING, WAITING, CONNECTED, SENDING, DONE, ERROR
 }
 
-private data class TransferUiState(
+internal data class TransferUiState(
     val phase: Phase = Phase.PREPARING,
     val qrBitmap: Bitmap? = null,
     val progress: Float = 0f,
@@ -195,7 +195,6 @@ internal class TransferViewModel(application: Application) : AndroidViewModel(ap
                         }
                     }
                 } catch (_: Throwable) {
-                    // A short status failure should not destroy the current QR session.
                 }
                 delay(1000)
             }
@@ -326,9 +325,7 @@ private class ContentUriRequestBody(
 
     override fun writeTo(sink: BufferedSink) {
         val input = resolver.openInputStream(file.uri) ?: error("无法读取 ${file.name}")
-        input.use { stream ->
-            sink.writeAll(stream.source())
-        }
+        input.use { stream -> sink.writeAll(stream.source()) }
     }
 }
 
@@ -367,65 +364,33 @@ private fun TransferScreen(vm: TransferViewModel) {
         if (uris.isNotEmpty()) vm.sendFiles(uris)
     }
 
-    Surface(
-        modifier = Modifier.fillMaxSize(),
-        color = AppBg
-    ) {
+    Surface(modifier = Modifier.fillMaxSize(), color = AppBg) {
         Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .statusBarsPadding()
-                .navigationBarsPadding()
-                .padding(horizontal = 22.dp, vertical = 18.dp),
+            modifier = Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().padding(horizontal = 22.dp, vertical = 18.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Header()
             Spacer(Modifier.height(28.dp))
             QrCard(state)
             Spacer(Modifier.weight(1f))
-            BottomAction(
-                state = state,
-                onPick = { launcher.launch(arrayOf("*/*")) },
-                onReset = vm::newSession
-            )
+            BottomAction(state, { launcher.launch(arrayOf("*/*")) }, vm::newSession)
         }
     }
 }
 
 @Composable
 private fun Header() {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
+    Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         Box(
-            modifier = Modifier
-                .size(46.dp)
-                .clip(RoundedCornerShape(14.dp))
-                .background(Primary),
+            modifier = Modifier.size(46.dp).clip(RoundedCornerShape(14.dp)).background(Primary),
             contentAlignment = Alignment.Center
         ) {
-            Icon(
-                Icons.Rounded.SwapHoriz,
-                contentDescription = null,
-                tint = Color.White,
-                modifier = Modifier.size(27.dp)
-            )
+            Icon(Icons.Rounded.SwapHoriz, null, tint = Color.White, modifier = Modifier.size(27.dp))
         }
         Spacer(Modifier.size(13.dp))
         Column {
-            Text(
-                "手机互传",
-                fontSize = 20.sp,
-                fontWeight = FontWeight.SemiBold,
-                color = Ink
-            )
-            Text(
-                "扫码即可接收",
-                fontSize = 13.sp,
-                color = Muted,
-                modifier = Modifier.padding(top = 2.dp)
-            )
+            Text("手机互传", fontSize = 20.sp, fontWeight = FontWeight.SemiBold, color = Ink)
+            Text("扫码即可接收", fontSize = 13.sp, color = Muted, modifier = Modifier.padding(top = 2.dp))
         }
     }
 }
@@ -433,53 +398,33 @@ private fun Header() {
 @Composable
 private fun QrCard(state: TransferUiState) {
     Column(
-        modifier = Modifier
-            .fillMaxWidth()
+        modifier = Modifier.fillMaxWidth()
             .shadow(10.dp, RoundedCornerShape(28.dp), ambientColor = Color(0x15000000), spotColor = Color(0x10000000))
-            .clip(RoundedCornerShape(28.dp))
-            .background(Color.White)
-            .border(1.dp, Border, RoundedCornerShape(28.dp))
-            .padding(horizontal = 24.dp, vertical = 28.dp),
+            .clip(RoundedCornerShape(28.dp)).background(Color.White)
+            .border(1.dp, Border, RoundedCornerShape(28.dp)).padding(horizontal = 24.dp, vertical = 28.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         StatusPill(state)
         Spacer(Modifier.height(24.dp))
-
         Box(
-            modifier = Modifier
-                .size(252.dp)
-                .clip(RoundedCornerShape(22.dp))
-                .background(Color.White)
-                .border(1.dp, Color(0xFFE7ECE9), RoundedCornerShape(22.dp))
-                .padding(14.dp),
+            modifier = Modifier.size(252.dp).clip(RoundedCornerShape(22.dp)).background(Color.White)
+                .border(1.dp, Color(0xFFE7ECE9), RoundedCornerShape(22.dp)).padding(14.dp),
             contentAlignment = Alignment.Center
         ) {
             val qr = state.qrBitmap
             if (qr != null) {
-                Image(
-                    bitmap = qr.asImageBitmap(),
-                    contentDescription = "接收二维码",
-                    modifier = Modifier.fillMaxSize()
-                )
+                Image(bitmap = qr.asImageBitmap(), contentDescription = "接收二维码", modifier = Modifier.fillMaxSize())
             } else {
-                CircularProgressIndicator(
-                    color = Primary,
-                    strokeWidth = 3.dp,
-                    modifier = Modifier.size(34.dp)
-                )
+                CircularProgressIndicator(color = Primary, strokeWidth = 3.dp, modifier = Modifier.size(34.dp))
             }
         }
-
         Spacer(Modifier.height(22.dp))
         Text(
             when (state.phase) {
                 Phase.CONNECTED, Phase.SENDING, Phase.DONE -> "iPhone 已连接"
                 else -> "用 iPhone 相机扫码接收"
             },
-            fontSize = 17.sp,
-            fontWeight = FontWeight.SemiBold,
-            color = Ink,
-            textAlign = TextAlign.Center
+            fontSize = 17.sp, fontWeight = FontWeight.SemiBold, color = Ink, textAlign = TextAlign.Center
         )
         Text(
             when (state.phase) {
@@ -490,36 +435,31 @@ private fun QrCard(state: TransferUiState) {
                 Phase.DONE -> fileSummary(state)
                 Phase.ERROR -> state.message
             },
-            fontSize = 13.sp,
-            lineHeight = 20.sp,
+            fontSize = 13.sp, lineHeight = 20.sp,
             color = if (state.phase == Phase.ERROR) Error else Muted,
-            textAlign = TextAlign.Center,
-            modifier = Modifier.padding(top = 7.dp)
+            textAlign = TextAlign.Center, modifier = Modifier.padding(top = 7.dp)
         )
-
         if (state.phase == Phase.SENDING) {
             Spacer(Modifier.height(22.dp))
             LinearProgressIndicator(
                 progress = { state.progress },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(7.dp)
-                    .clip(CircleShape),
-                color = Primary,
-                trackColor = SoftGreen
+                modifier = Modifier.fillMaxWidth().height(7.dp).clip(CircleShape),
+                color = Primary, trackColor = SoftGreen
             )
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 9.dp),
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
+            Row(modifier = Modifier.fillMaxWidth().padding(top = 9.dp), horizontalArrangement = Arrangement.SpaceBetween) {
                 Text("正在发送", fontSize = 12.sp, color = Muted)
                 Text("${(state.progress * 100).toInt()}%", fontSize = 12.sp, fontWeight = FontWeight.Medium, color = Ink)
             }
         }
     }
 }
+
+private data class StatusVisual(
+    val icon: androidx.compose.ui.graphics.vector.ImageVector,
+    val text: String,
+    val bg: Color,
+    val fg: Color
+)
 
 @Composable
 private fun StatusPill(state: TransferUiState) {
@@ -532,10 +472,7 @@ private fun StatusPill(state: TransferUiState) {
         Phase.ERROR -> StatusVisual(Icons.Rounded.Refresh, "需要重试", Color(0xFFFFEEEB), Error)
     }
     Row(
-        modifier = Modifier
-            .clip(CircleShape)
-            .background(bg)
-            .padding(horizontal = 13.dp, vertical = 8.dp),
+        modifier = Modifier.clip(CircleShape).background(bg).padding(horizontal = 13.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Icon(icon, null, tint = fg, modifier = Modifier.size(16.dp))
@@ -544,19 +481,8 @@ private fun StatusPill(state: TransferUiState) {
     }
 }
 
-private data class StatusVisual(
-    val icon: androidx.compose.ui.graphics.vector.ImageVector,
-    val text: String,
-    val bg: Color,
-    val fg: Color
-)
-
 @Composable
-private fun BottomAction(
-    state: TransferUiState,
-    onPick: () -> Unit,
-    onReset: () -> Unit
-) {
+private fun BottomAction(state: TransferUiState, onPick: () -> Unit, onReset: () -> Unit) {
     val enabled = state.phase == Phase.CONNECTED || state.phase == Phase.DONE || state.phase == Phase.ERROR
     val label = when (state.phase) {
         Phase.PREPARING -> "正在准备…"
@@ -577,24 +503,16 @@ private fun BottomAction(
                 }
             },
             enabled = enabled,
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(58.dp),
+            modifier = Modifier.fillMaxWidth().height(58.dp),
             shape = RoundedCornerShape(18.dp),
             colors = ButtonDefaults.buttonColors(
-                containerColor = Primary,
-                contentColor = Color.White,
-                disabledContainerColor = Color(0xFFE6EAE7),
-                disabledContentColor = Color(0xFF8A9691)
+                containerColor = Primary, contentColor = Color.White,
+                disabledContainerColor = Color(0xFFE6EAE7), disabledContentColor = Color(0xFF8A9691)
             )
         ) {
             Icon(
-                when (state.phase) {
-                    Phase.DONE, Phase.ERROR -> Icons.Rounded.Refresh
-                    else -> Icons.Rounded.CloudUpload
-                },
-                contentDescription = null,
-                modifier = Modifier.size(20.dp)
+                if (state.phase == Phase.DONE || state.phase == Phase.ERROR) Icons.Rounded.Refresh else Icons.Rounded.CloudUpload,
+                null, modifier = Modifier.size(20.dp)
             )
             Spacer(Modifier.size(9.dp))
             Text(current, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
@@ -603,9 +521,7 @@ private fun BottomAction(
     Spacer(Modifier.height(10.dp))
     Text(
         "文件只用于本次实时传输，不在 App 内长期保存",
-        fontSize = 11.sp,
-        color = Color(0xFF8C9692),
-        textAlign = TextAlign.Center,
+        fontSize = 11.sp, color = Color(0xFF8C9692), textAlign = TextAlign.Center,
         modifier = Modifier.padding(bottom = 2.dp)
     )
 }
@@ -638,10 +554,7 @@ private val Error = Color(0xFFB54738)
 private fun TransferTheme(content: @Composable () -> Unit) {
     MaterialTheme(
         colorScheme = MaterialTheme.colorScheme.copy(
-            primary = Primary,
-            background = AppBg,
-            surface = Color.White,
-            onSurface = Ink
+            primary = Primary, background = AppBg, surface = Color.White, onSurface = Ink
         ),
         content = content
     )
