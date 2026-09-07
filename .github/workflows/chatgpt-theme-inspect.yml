@@ -13,20 +13,14 @@ jobs:
         run: |
           set -euxo pipefail
           curl -L --fail --retry 3 --retry-delay 2 'https://d.apkpure.net/b/XAPK/com.openai.chatgpt?nc=arm64-v8a&sv=29&versionCode=2623716' -o chatgpt.xapk
-          sha1sum chatgpt.xapk
-          ls -lh chatgpt.xapk
-      - name: Inspect bundle
-        shell: bash
-        run: |
-          set -euxo pipefail
+          echo '7b0c10ea7486a83b7d319e37d28cc5dd012be94c  chatgpt.xapk' | sha1sum -c -
           mkdir xapk
           unzip -q chatgpt.xapk -d xapk
-          find xapk -maxdepth 2 -type f -printf '%P %s bytes\n' | sort
-          echo '--- APK badging ---'
-          AAPT=$(find "$ANDROID_HOME/build-tools" -name aapt2 -type f | sort -V | tail -1)
-          echo "AAPT=$AAPT"
-          for f in xapk/*.apk; do
-            echo "### $f"
-            "$AAPT" dump badging "$f" | head -30 || true
-            unzip -l "$f" | grep -E '(^|/)(lib/|resources.arsc|AndroidManifest.xml)' | head -80 || true
-          done
+          find xapk -maxdepth 1 -type f -printf '%f %s bytes\n' | sort
+      - name: Upload exact bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: chatgpt-1.2026.237-arm64-xapk
+          path: chatgpt.xapk
+          if-no-files-found: error
+          compression-level: 0
