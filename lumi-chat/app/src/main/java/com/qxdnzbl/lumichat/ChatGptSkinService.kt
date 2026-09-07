@@ -24,9 +24,10 @@ class ChatGptSkinService : AccessibilityService() {
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
         if (!::overlay.isInitialized || event == null) return
-        val packageName = event.packageName?.toString().orEmpty()
+        val eventPackage = event.packageName?.toString().orEmpty()
 
-        if (packageName != TARGET_PACKAGE) {
+        if (eventPackage == applicationContext.packageName) return
+        if (eventPackage != TARGET_PACKAGE) {
             overlay.hideAll()
             return
         }
@@ -52,16 +53,20 @@ class ChatGptSkinService : AccessibilityService() {
         }, 90L)
     }
 
-    private fun refreshFromRoot() {
-        val root = rootInActiveWindow ?: run {
-            overlay.hideAll()
-            return
+    private fun findTargetRoot(): AccessibilityNodeInfo? {
+        windows.forEach { window ->
+            val root = window.root ?: return@forEach
+            if (root.packageName?.toString() == TARGET_PACKAGE) return root
         }
-        if (root.packageName?.toString() != TARGET_PACKAGE) {
-            overlay.hideAll()
-            return
-        }
+        val active = rootInActiveWindow
+        return active?.takeIf { it.packageName?.toString() == TARGET_PACKAGE }
+    }
 
+    private fun refreshFromRoot() {
+        val root = findTargetRoot() ?: run {
+            overlay.hideAll()
+            return
+        }
         val snapshot = ChatUiSnapshot.from(root)
         if (!snapshot.looksLikeChat) {
             overlay.hideAll()
@@ -73,8 +78,7 @@ class ChatGptSkinService : AccessibilityService() {
     private fun sendMessageToChatGpt(text: String): Boolean {
         val clean = text.trim()
         if (clean.isEmpty()) return false
-        val root = rootInActiveWindow ?: return false
-        if (root.packageName?.toString() != TARGET_PACKAGE) return false
+        val root = findTargetRoot() ?: return false
 
         val editable = findFirst(root) { it.isEditable && it.isVisibleToUser } ?: return false
         val setTextArgs = Bundle().apply {
@@ -103,9 +107,7 @@ class ChatGptSkinService : AccessibilityService() {
         val sent = sendButton?.performAction(AccessibilityNodeInfo.ACTION_CLICK) == true ||
             editable.performAction(AccessibilityNodeInfo.AccessibilityAction.ACTION_IME_ENTER.id)
 
-        if (sent) {
-            mainHandler.postDelayed({ scheduleRefresh() }, 250L)
-        }
+        if (sent) mainHandler.postDelayed({ scheduleRefresh() }, 250L)
         return sent
     }
 
@@ -163,10 +165,11 @@ data class ChatUiSnapshot(
             }
 
             val input = editable.maxByOrNull { it.second.top }
-            if (input == null) return ChatUiSnapshot(emptyList(), false)
+                ?: return ChatUiSnapshot(emptyList(), false)
             val inputRect = input.second
-            val screenWidth = root.let { Rect().also(root::getBoundsInScreen).width() }.coerceAtLeast(1)
-            val topCutoff = (root.let { Rect().also(root::getBoundsInScreen).height() } * 0.07f).toInt()
+            val rootRect = Rect().also { root.getBoundsInScreen(it) }
+            val screenWidth = rootRect.width().coerceAtLeast(1)
+            val topCutoff = (rootRect.height() * 0.07f).toInt()
 
             val cleaned = textNodes
                 .asSequence()
