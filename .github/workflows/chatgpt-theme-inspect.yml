@@ -28,7 +28,7 @@ jobs:
           set -euxo pipefail
           python3 - <<'PY'
           from pathlib import Path
-          import zipfile, subprocess, hashlib, struct
+          import zipfile, subprocess, hashlib
 
           base=Path('splits/com.openai.chatgpt.apk')
           work=Path('theme_work'); work.mkdir(exist_ok=True)
@@ -81,8 +81,8 @@ jobs:
           c=bytearray(raw_files['chatgpt_conversation'].read_bytes())
           assert c[59310:59313]==b'86%'
           c[59310:59313]=b'82%'
-          assert c[166132:166139]==b'#0D0D0D'
-          c[166132:166139]=b'#B57AA6'
+          assert c[166131:166138]==b'#0D0D0D'
+          c[166131:166138]=b'#B57AA6'
           raw_files['chatgpt_conversation'].write_bytes(c)
 
           assert hashlib.sha256(raw_files['oai_core'].read_bytes()).hexdigest()=='af20b98dc83cf445c98ee06eee07c73c7351ce86b3b6d32e82847990cd44364d'
@@ -91,8 +91,6 @@ jobs:
           for n in ['oai_core','chatgpt_conversation']:
               subprocess.run(['zstd','--ultra','-22','-q','-f',str(raw_files[n]),'-o',str(work/f'{n}.new.zst')],check=True)
 
-          # Rebuild just the base APK contents; old signature is intentionally discarded because
-          # APKEditor will merge/sanitize the split set and the final package is signed afterward.
           patched=Path('splits/base-themed.apk')
           with zipfile.ZipFile(base,'r') as zin, zipfile.ZipFile(patched,'w') as zout:
               for item in zin.infolist():
