@@ -2,6 +2,7 @@ package com.qxdnzbl.lumichat
 
 import android.accessibilityservice.AccessibilityService
 import android.graphics.Rect
+import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -104,8 +105,13 @@ class ChatGptSkinService : AccessibilityService() {
             r.top >= inputRect.top - 40 && r.left > inputRect.centerX() && r.width() in 24..180 && r.height() in 24..180
         }
 
-        val sent = sendButton?.performAction(AccessibilityNodeInfo.ACTION_CLICK) == true ||
+        val sentByButton = sendButton?.performAction(AccessibilityNodeInfo.ACTION_CLICK) == true
+        val sentByIme = if (!sentByButton && Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             editable.performAction(AccessibilityNodeInfo.AccessibilityAction.ACTION_IME_ENTER.id)
+        } else {
+            false
+        }
+        val sent = sentByButton || sentByIme
 
         if (sent) mainHandler.postDelayed({ scheduleRefresh() }, 250L)
         return sent
