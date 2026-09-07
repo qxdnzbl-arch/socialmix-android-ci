@@ -280,7 +280,7 @@ class SkinOverlayController(
     }
 
     private fun roundedSolid(fill: Int, radiusDp: Float, stroke: Int): GradientDrawable = GradientDrawable().apply {
-        color = android.content.res.ColorStateList.valueOf(fill)
+        setColor(fill)
         cornerRadius = dp(radiusDp.toInt()).toFloat()
         setStroke(dp(1), stroke)
     }
