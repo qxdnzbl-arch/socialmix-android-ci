@@ -3,6 +3,8 @@ name: Build Lumi Chat APK
 on:
   push:
     branches: [ lumi-chat-app ]
+  pull_request:
+    branches: [ main ]
   workflow_dispatch:
 
 jobs:
