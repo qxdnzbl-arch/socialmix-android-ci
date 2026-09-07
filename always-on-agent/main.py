@@ -9,7 +9,7 @@ from fastapi import FastAPI, Header, HTTPException
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel, Field
 
-ADMIN_TOKEN = os.getenv('AGENT_ADMIN_TOKEN', 'dev-token')
+ADMIN_TOKEN = os.getenv('AGENT_ADMIN_TOKEN', '')
 STORE_URL = os.getenv('SUPABASE_URL', '').rstrip('/')
 STORE_KEY = os.getenv('SUPABASE_PUBLISHABLE_KEY', '')
 STORE_SECRET = os.getenv('AGENT_STORE_SECRET', '')
@@ -53,12 +53,16 @@ Risk flags when applicable: uncertain_fact, spend_money, use_owner_identity, mak
 DEFAULT_STATE = {'goals': [], 'tasks': [], 'approvals': [], 'events': [], 'memories': {}, 'audit': {'last_run_at':'','last_daily':'','last_event_id':0,'last_result':{},'runs':0}, 'checkpoints': [], 'system_guard': {'paused':False,'reason':'','issues':[],'updated_at':''}, 'budget': {'day':'','planner_calls':0,'last_call_at':0.0,'day_start_balance_cny':None,'last_balance_cny':None,'last_usage':{},'input_tokens_today':0,'output_tokens_today':0,'paused':False,'pause_reason':''}, 'next_ids': {'goal': 1, 'task': 1, 'approval': 1, 'event': 1}}
 state_lock = asyncio.Lock()
 stop_event = asyncio.Event()
+worker_status = {'started_at': None, 'last_tick_at': None, 'last_result': {}, 'last_error': None}
+
+class StateConflict(RuntimeError):
+    """Another executor changed the durable state; reload instead of overwriting it."""
 
 
 def now(): return datetime.now(timezone.utc).isoformat()
 
 def auth(authorization: str | None):
-    if authorization != f'Bearer {ADMIN_TOKEN}':
+    if not ADMIN_TOKEN or authorization != f'Bearer {ADMIN_TOKEN}':
         raise HTTPException(401, 'invalid admin token')
 
 def store_headers():
@@ -66,7 +70,7 @@ def store_headers():
 
 async def store_get():
     if not (STORE_URL and STORE_KEY and STORE_SECRET):
-        return json.loads(json.dumps(DEFAULT_STATE))
+        raise RuntimeError('persistent_store_not_configured')
     async with httpx.AsyncClient(timeout=30) as c:
         r = await c.post(f'{STORE_URL}/rest/v1/rpc/agent_state_get', headers=store_headers(), json={'p_secret': STORE_SECRET, 'p_id': 'runtime'})
         r.raise_for_status(); data = r.json()
@@ -75,10 +79,15 @@ async def store_get():
         return data
 
 async def store_set(state):
-    if not (STORE_URL and STORE_KEY and STORE_SECRET): return
+    if not (STORE_URL and STORE_KEY and STORE_SECRET):
+        raise RuntimeError('persistent_store_not_configured')
     async with httpx.AsyncClient(timeout=30) as c:
         r = await c.post(f'{STORE_URL}/rest/v1/rpc/agent_state_set', headers=store_headers(), json={'p_secret': STORE_SECRET, 'p_id': 'runtime', 'p_value': state})
+        if r.status_code == 409:
+            raise StateConflict('state_changed_reload_required')
         r.raise_for_status()
+        if '_store_revision' in state:
+            state['_store_revision'] += 1
 
 
 def add_event(s, event_type, goal_id=None, task_id=None, data=None):
@@ -130,8 +139,13 @@ def self_audit(s, trigger='periodic', goal_id=None, task_id=None):
             t['status']='waiting_executor'
             repairs.append({'code':'executor_rerouted','task_id':t.get('id')})
         if t.get('status')=='waiting_executor' and t.get('requires_approval'):
-            t['requires_approval']=False
-            repairs.append({'code':'executor_approval_flag_cleared','task_id':t.get('id')})
+            # Never turn an unresolved risk into permission just to unblock a worker.
+            aps=approvals_by_task.get(t.get('id'),[])
+            if any(a.get('status')=='approved' for a in aps) and not any(a.get('status')=='pending' for a in aps):
+                t['requires_approval']=False
+                repairs.append({'code':'approved_executor_released','task_id':t.get('id')})
+            else:
+                issues.append({'severity':'critical','code':'executor_missing_approval','task_id':t.get('id')})
 
         # 3) A task waiting for approval must actually have a pending approval record.
         if t.get('status')=='waiting_approval':
@@ -153,6 +167,15 @@ def self_audit(s, trigger='periodic', goal_id=None, task_id=None):
             issues.append({'severity':'critical','code':'invalid_task_status','task_id':t.get('id'),'status':t.get('status')})
         if t.get('kind')=='executor_request' and t.get('status')=='running':
             issues.append({'severity':'critical','code':'executor_running_locally','task_id':t.get('id')})
+
+    # A completed label must not hide unfinished work belonging to that goal.
+    open_states={'pending','running','waiting_approval','waiting_executor'}
+    for g in s.get('goals',[]):
+        open_ids=[t.get('id') for t in s.get('tasks',[]) if t.get('goal_id')==g.get('id') and t.get('status') in open_states]
+        if g.get('status')=='completed' and open_ids:
+            g['status']='active'
+            g['previous_completion']={'at':g.pop('completed_at',None),'note':g.pop('completion_note',None)}
+            repairs.append({'code':'premature_goal_completion_reopened','goal_id':g.get('id'),'open_task_ids':open_ids})
 
     critical=[x for x in issues if x.get('severity')=='critical']
     guard=s.setdefault('system_guard',{})
@@ -221,7 +244,7 @@ def repair_continuity_action(action, state):
     return repaired, True
 
 def _dedup_text(value):
-    return re.sub(r'[^a-z0-9]+',' ',str(value or '').lower()).strip()
+    return re.sub(r'[^\w]+',' ',str(value or '').lower(),flags=re.UNICODE).strip()
 
 
 def action_dedup_key(action):
@@ -282,6 +305,10 @@ def policy(action):
     if action.get('action_type')=='executor_request':
         p=action.get('payload') or {}
         cap=str(p.get('capability') or '').strip().lower()
+        explicit_external_caps={'upwork_application','submit_proposal','send_message','send_email','send_external_message','purchase','payment','sign_contract'}
+        if cap in explicit_external_caps and 'make_formal_commitment' not in flags:
+            flags.append('make_formal_commitment')
+            action['risk_flags']=flags
         internal_caps={
             'deployment_and_code_change','runtime_debug_and_repair','github_code_change',
             'render_deploy','supabase_maintenance','internal_project_change',
@@ -614,6 +641,42 @@ async def run_tool(kind,payload):
     if kind=='web_search': return await tool_web_search(payload)
     raise RuntimeError(f'No tool for {kind}')
 
+OPEN_TASK_STATES={'pending','running','waiting_approval','waiting_executor'}
+
+def select_unblocked_goal(state):
+    """An approval for one goal must not stop independent authorized goals."""
+    goals=sorted(state.get('goals',[]),key=lambda g:(-g.get('priority',50),g['id']))
+    blocked={t.get('goal_id') for t in state.get('tasks',[]) if t.get('status') in OPEN_TASK_STATES}
+    return next((g for g in goals if g.get('status')=='active' and g['id'] not in blocked),None)
+
+def completion_is_verified(goal,state):
+    if any(t.get('goal_id')==goal['id'] and t.get('status') in OPEN_TASK_STATES for t in state.get('tasks',[])):
+        return False
+    verification=goal.get('verification') or {}
+    return verification.get('status')=='passed' and bool(verification.get('evidence')) and bool(verification.get('reviewed_at'))
+
+def contract_for_goal(goal,state):
+    shared=state.get('work_contract') or {}
+    return shared if shared.get('goal_id',goal['id'])==goal['id'] else (goal.get('work_contract') or {})
+
+def execution_summary(state):
+    counts={k:sum(t.get('status')==k for t in state.get('tasks',[])) for k in OPEN_TASK_STATES}
+    if (state.get('system_guard') or {}).get('paused'):
+        status='guard_paused'
+    elif counts['running']:
+        status='executing'
+    elif counts['pending']:
+        status='queued'
+    elif counts['waiting_executor']:
+        status='waiting_executor'
+    elif select_unblocked_goal(state):
+        status='planning'
+    elif counts['waiting_approval']:
+        status='waiting_approval'
+    else:
+        status='idle'
+    return {'status':status,'counts':counts,'active_goals':sum(g.get('status')=='active' for g in state.get('goals',[]))}
+
 async def tick_once():
     async with state_lock:
         s=await store_get()
@@ -691,10 +754,8 @@ async def tick_once():
                 add_event(s,'task_failed',pending['goal_id'],pending['id'],{'error':err,'error_signature':sig,'trace':traceback.format_exc(limit=2)})
             self_audit(s,'task_execution',pending.get('goal_id'),pending.get('id'))
             await store_set(s); return {'status':pending['status'],'task_id':pending['id']}
-        goal=next((g for g in sorted(s['goals'],key=lambda x:(-x['priority'],x['id'])) if g['status']=='active'),None)
-        if not goal: return {'status':'idle'}
-        blocked=next((t for t in s['tasks'] if t['goal_id']==goal['id'] and t['status'] in ('pending','waiting_approval','waiting_executor','running')),None)
-        if blocked: return {'status':'waiting','goal_id':goal['id'],'task_id':blocked['id']}
+        goal=select_unblocked_goal(s)
+        if not goal: return execution_summary(s)
         hist=[e for e in s['events'] if e.get('goal_id')==goal['id']]
         # A system_context_updated event supersedes obsolete connection/rate-limit history.
         for i in range(len(hist)-1,-1,-1):
@@ -708,8 +769,12 @@ async def tick_once():
                     reason=gate.get('reason','budget_guard')
                     if reason != 'cooldown': print('BUDGET_PAUSE', reason, {k:v for k,v in gate.items() if k != 'allowed'}, flush=True)
                     await store_set(s); return {'status':'budget_wait' if reason=='cooldown' else 'budget_paused','reason':reason}
-            action=await planner_decide(goal,hist,s)
-            action,continuity_repaired=repair_continuity_action(action,s)
+                # Persist the call reservation before sending a paid request.
+                await store_set(s)
+            planner_state=dict(s,work_contract=contract_for_goal(goal,s))
+            action=await planner_decide(goal,hist,planner_state)
+            # planner records token usage in its shared budget object.
+            action,continuity_repaired=repair_continuity_action(action,planner_state)
             if continuity_repaired:
                 add_event(s,'continuity_action_repaired',goal.get('id'),data={'action_type':action.get('action_type'),'title':action.get('title'),'reason':'passive_wait_or_premature_complete'})
             action,duplicate_repaired,duplicate_task_id=repair_duplicate_action(action,s)
@@ -720,7 +785,12 @@ async def tick_once():
             print('PLANNER_ERROR', str(e), flush=True)
             add_event(s,'planner_error',goal['id'],data={'error':str(e)}); await store_set(s); return {'status':'planner_error','error':str(e)}
         if action.get('action_type')=='complete':
-            goal['status']='completed'; add_event(s,'goal_completed',goal['id'],data=action); await store_set(s); return {'status':'completed','goal_id':goal['id']}
+            if completion_is_verified(goal,s):
+                goal['status']='completed'; goal['completed_at']=now(); add_event(s,'goal_completed',goal['id'],data=action); await store_set(s); return {'status':'completed','goal_id':goal['id']}
+            action={'action_type':'executor_request','title':'Verify the actual goal deliverable',
+                'instruction':'Inspect the final deliverable against the owner requirements. Record goal.verification status=passed, evidence, and reviewed_at only after actual inspection. Repair or continue work if any acceptance condition is missing.',
+                'payload':{'capability':'verify_deliverable','objective':goal.get('brief',''),'params':{'goal_id':goal['id']}},'risk_flags':[]}
+            add_event(s,'unverified_completion_blocked',goal['id'])
         normalized_kind,normalized_payload=normalize_tool_request(action.get('action_type'),action.get('payload') or {},action.get('title',''),action.get('instruction',''))
         if normalized_kind != action.get('action_type') or normalized_payload != (action.get('payload') or {}):
             action=dict(action); action['action_type']=normalized_kind; action['payload']=normalized_payload
@@ -738,13 +808,21 @@ async def tick_once():
         await store_set(s); return {'status':task['status'],'goal_id':goal['id'],'task_id':tid}
 
 async def worker_loop():
+    worker_status['started_at']=now()
     while not stop_event.is_set():
-        try: await tick_once()
-        except Exception: traceback.print_exc()
+        try:
+            worker_status['last_result']=await tick_once()
+            worker_status['last_error']=None
+        except StateConflict:
+            worker_status['last_result']={'status':'state_conflict_retry'}
+        except Exception as exc:
+            worker_status['last_error']=type(exc).__name__
+            traceback.print_exc()
+        worker_status['last_tick_at']=now()
         try: await asyncio.wait_for(stop_event.wait(),timeout=WORKER_INTERVAL)
         except asyncio.TimeoutError: pass
 
-app=FastAPI(title='Always-On Owner Agent',version='0.5.0')
+app=FastAPI(title='Always-On Owner Agent',version='0.6.0')
 
 @app.on_event('startup')
 async def start():
@@ -756,13 +834,15 @@ class ApprovalIn(BaseModel): approve:bool; note:str=''
 
 @app.get('/health')
 async def health():
-    ok=False; detail='memory-only'
+    ok=False; detail='unavailable'; s={}
     try:
         s=await store_get(); ok=isinstance(s,dict); detail='supabase' if STORE_URL else 'memory-only'
-    except Exception as e: detail=str(e)
+    except Exception: detail='storage_unavailable'
     guard=(s.get('system_guard') or {}) if ok else {}
     audit=(s.get('audit') or {}) if ok else {}
-    return {'ok':ok and not bool(guard.get('paused')),'version':'0.5.0','store':detail,'llm_mode':LLM_MODE,'llm_provider':LLM_PROVIDER,'budget_guard':True,'system_guard':guard,'audit':{'last_run_at':audit.get('last_run_at'),'last_result':audit.get('last_result'),'runs':audit.get('runs',0)}}
+    worker_public={k:worker_status[k] for k in ('started_at','last_tick_at','last_error')}
+    worker_public['last_result']={k:v for k,v in worker_status['last_result'].items() if k in ('status','goal_id','task_id','reason')}
+    return {'ok':ok and not bool(guard.get('paused')),'version':'0.6.0','store':detail,'llm_mode':LLM_MODE,'llm_provider':LLM_PROVIDER,'budget_guard':True,'system_guard':{'paused':bool(guard.get('paused'))},'execution':execution_summary(s),'worker':worker_public,'audit':{'last_run_at':audit.get('last_run_at'),'runs':audit.get('runs',0)}}
 
 @app.get('/state')
 async def get_state(authorization:str|None=Header(default=None)):
