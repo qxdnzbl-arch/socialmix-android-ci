@@ -46,6 +46,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -74,6 +75,7 @@ fun ChatScreen(
     var status by remember { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
     val listState = rememberLazyListState()
+    val context = LocalContext.current
 
     LaunchedEffect(messages.size, sending) {
         if (messages.isNotEmpty()) listState.animateScrollToItem(messages.lastIndex)
@@ -143,7 +145,7 @@ fun ChatScreen(
                     sending = true
 
                     scope.launch {
-                        val result = withContext(Dispatchers.IO) { runCatching { ChatApi.send(messages) } }
+                        val result = withContext(Dispatchers.IO) { runCatching { ChatApi.send(context, messages) } }
                         sending = false
                         result.onSuccess { reply ->
                             messages.add(ChatMessage("assistant", reply))
@@ -187,7 +189,7 @@ private fun TopBar(onMenu: () -> Unit, onClear: () -> Unit) {
         Spacer(Modifier.width(12.dp))
         Column {
             Text("微光", color = Ink, fontWeight = FontWeight.SemiBold, fontSize = 18.sp)
-            Text("GPT-5.6 Sol", color = Muted, fontSize = 11.sp)
+            Text("DeepSeek V4 Flash", color = Muted, fontSize = 11.sp)
         }
         Spacer(Modifier.weight(1f))
         IconButton(onClick = onClear) {
