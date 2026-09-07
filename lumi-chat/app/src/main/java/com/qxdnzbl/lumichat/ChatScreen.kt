@@ -51,9 +51,7 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 
 private val Ink = Color(0xFF34313A)
 private val Muted = Color(0xFF817B89)
@@ -72,6 +70,7 @@ fun ChatScreen(
 ) {
     var input by remember { mutableStateOf("") }
     var sending by remember { mutableStateOf(false) }
+    var receivedFirstToken by remember { mutableStateOf(false) }
     var status by remember { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
     val listState = rememberLazyListState()
@@ -118,7 +117,7 @@ fun ChatScreen(
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     items(messages) { message -> ChatBubble(message) }
-                    if (sending) item { ThinkingBubble() }
+                    if (sending && !receivedFirstToken) item { ThinkingBubble() }
                 }
             }
 
@@ -140,18 +139,32 @@ fun ChatScreen(
                     if (text.isEmpty() || sending) return@Composer
                     input = ""
                     status = null
+                    receivedFirstToken = false
                     messages.add(ChatMessage("user", text))
                     onMessagesChanged()
                     sending = true
+                    val history = messages.toList()
 
                     scope.launch {
-                        val result = withContext(Dispatchers.IO) { runCatching { ChatApi.send(context, messages) } }
-                        sending = false
-                        result.onSuccess { reply ->
-                            messages.add(ChatMessage("assistant", reply))
-                            onMessagesChanged()
-                        }.onFailure { error ->
+                        var fullReply = ""
+                        var assistantIndex = -1
+                        try {
+                            ChatApi.stream(context, history).collect { delta ->
+                                if (!receivedFirstToken) receivedFirstToken = true
+                                fullReply += delta
+                                if (assistantIndex < 0) {
+                                    messages.add(ChatMessage("assistant", fullReply))
+                                    assistantIndex = messages.lastIndex
+                                } else {
+                                    messages[assistantIndex] = ChatMessage("assistant", fullReply)
+                                }
+                            }
+                            if (fullReply.isNotBlank()) onMessagesChanged()
+                        } catch (error: Throwable) {
+                            if (fullReply.isNotBlank()) onMessagesChanged()
                             status = error.message ?: "连接失败"
+                        } finally {
+                            sending = false
                         }
                     }
                 }
