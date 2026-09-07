@@ -1,10 +1,8 @@
-name: Build Lumi Chat APK
+name: Build ChatGPT Skin Layer APK
 
 on:
   push:
-    branches: [ lumi-chat-app ]
-  pull_request:
-    branches: [ main ]
+    branches: [ chatgpt-skin-layer ]
   workflow_dispatch:
 
 jobs:
@@ -25,9 +23,9 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.9'
-      - name: Build debug APK
-        run: gradle :app:assembleDebug --stacktrace
+      - name: Check and build APK
+        run: gradle :app:lintDebug :app:testDebugUnitTest :app:assembleDebug --stacktrace
       - uses: actions/upload-artifact@v4
         with:
-          name: lumi-chat-debug-apk
+          name: chatgpt-skin-layer-apk
           path: lumi-chat/app/build/outputs/apk/debug/app-debug.apk
