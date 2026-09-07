@@ -1,3 +1,5 @@
 <resources>
     <string name="app_name">微光</string>
+    <string name="skin_service_name">微光 · ChatGPT 美化层</string>
+    <string name="skin_service_description">仅在官方 ChatGPT 前台时读取界面结构，用于把文字聊天镜像成自定义皮肤并把你输入的文字发送回官方 ChatGPT。不会调用 DeepSeek，也不会把聊天上传到微光服务器。</string>
 </resources>
