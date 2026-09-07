@@ -96,3 +96,21 @@ def test_conflicting_save_never_claims_success(monkeypatch):
     s={'_store_revision':2}
     with pytest.raises(main.StateConflict): asyncio.run(main.store_set(s))
     assert s['_store_revision']==2
+
+
+def test_goal_contract_does_not_leak_into_another_project():
+    state={'work_contract':{'goal_id':2,'status':'running','deliverable':'First income'}}
+    assert main.contract_for_goal({'id':1},state)=={}
+    assert main.contract_for_goal({'id':2},state)['deliverable']=='First income'
+
+
+def test_external_event_counter_drift_does_not_create_duplicate_history():
+    state=copy.deepcopy(main.DEFAULT_STATE)
+    state['events']=[{'id':4,'type':'external_evidence'}]
+    main.add_event(state,'task_planned')
+    assert [e['id'] for e in state['events']]==[4,5]
+    assert main.self_audit(state)['ok']
+
+
+def test_clarification_never_runs_as_a_local_tool():
+    assert main.policy({'action_type':'clarify','risk_flags':[]})==(False,'uncertainty')

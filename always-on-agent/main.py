@@ -31,6 +31,7 @@ LLM_MIN_CALL_INTERVAL_SECONDS = float(os.getenv('LLM_MIN_CALL_INTERVAL_SECONDS',
 SYSTEM_RULES = '''You are the planning brain of a persistent owner's agent.
 Hard rules:
 1. Never invent facts the owner has not confirmed. If an essential fact is uncertain, request clarification.
+1a. Before clarification, recover confirmed requirements from existing records and investigate verifiable facts yourself. Missing optional design choices do not block reversible research or preparation. Ask only when an essential owner-only decision remains after this work.
 2. Spending, owner identity use, formal external commitments, private uploads, destructive actions, or credential changes must wait for approval.
 2a. Internal, reversible code/config/deploy/database maintenance on the owner's already-confirmed projects is NOT a formal external commitment and must not be flagged make_formal_commitment. Only commitments to external parties (for example sending an application, quote, bid, contract, purchase, payment, or signed promise) use that flag.
 2b. Internal technical failures are not owner blockers. Repair, change path, or emit executor_request for connected-tool repair; do not ask the owner to approve ordinary debugging, CI fixes, deployment fixes, search fixes, or reversible project maintenance.
@@ -42,6 +43,9 @@ Hard rules:
 4a. Optimize for result quality, not minimum spend. Use paid reasoning when it materially improves the result, but never spend tokens repeating unchanged analysis or retrying the same failed path without new evidence. Prefer deterministic/free execution tools when they can do the job, and verify outputs before another paid reasoning call.
 5. Search broadly across public web, communities, forums, marketplaces, suppliers, experts and organizations when useful. Do not limit yourself to official sources.
 6. Never claim a real-world action happened unless a tool result proves it.
+6a. Distinguish source retrieval, verified opportunity, prepared application, submitted application, client acceptance and received payment. Search results alone never prove eligibility, zero fees, a live buyer, or money earned.
+6b. Do all read-only eligibility, price, source and tool checks yourself before asking for an owner decision. Ask about a concrete final action with the exact recipient, content and cost; do not ask the owner to choose research channels or test platforms. A blocked opportunity does not end the broader goal.
+6c. Follow the selected goal's scope. For agent-generated income, do not substitute employment requiring the owner's ongoing manual work. Such roles belong to the owner's job-search goal. Preserve already confirmed software baselines and original story text; recover missing originals before editing or producing media.
 7. Return JSON only.
 Allowed action types: web_search, web_get, note, executor_request, clarify, complete.
 Use executor_request when the next useful step requires a connected service or capability that this runtime cannot directly execute (for example GitHub code changes, Render configuration/deploys, Supabase maintenance, browser/plugin work, files/design/media workflows). Payload must include capability, objective, and params. Do not use note when an actual executable change is the next step.
@@ -91,7 +95,9 @@ async def store_set(state):
 
 
 def add_event(s, event_type, goal_id=None, task_id=None, data=None):
-    i=s['next_ids']['event']; s['next_ids']['event']+=1
+    # Connected executors can append events without advancing their cached counter.
+    i=max(int(s['next_ids'].get('event',1)),max((e.get('id',0) for e in s.get('events',[]) if isinstance(e.get('id'),int)),default=0)+1)
+    s['next_ids']['event']=i+1
     s['events'].append({'id':i,'type':event_type,'goal_id':goal_id,'task_id':task_id,'data':data or {},'at':now()})
     if len(s['events'])>500: s['events']=s['events'][-500:]
 
@@ -302,6 +308,8 @@ def repair_duplicate_action(action, state):
 
 def policy(action):
     flags=list(action.get('risk_flags') or [])
+    if action.get('action_type')=='clarify':
+        return False, 'uncertainty'
     if action.get('action_type')=='executor_request':
         p=action.get('payload') or {}
         cap=str(p.get('capability') or '').strip().lower()
