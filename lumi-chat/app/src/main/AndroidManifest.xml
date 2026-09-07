@@ -1,5 +1,8 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-    <uses-permission android:name="android.permission.INTERNET" />
+
+    <queries>
+        <package android:name="com.openai.chatgpt" />
+    </queries>
 
     <application
         android:allowBackup="true"
@@ -7,6 +10,7 @@
         android:label="@string/app_name"
         android:supportsRtl="true"
         android:theme="@style/Theme.LumiChat">
+
         <activity
             android:name=".MainActivity"
             android:exported="true"
@@ -16,5 +20,18 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <service
+            android:name=".ChatGptSkinService"
+            android:label="@string/skin_service_name"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.accessibilityservice.AccessibilityService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.accessibilityservice"
+                android:resource="@xml/chatgpt_skin_service" />
+        </service>
     </application>
 </manifest>
