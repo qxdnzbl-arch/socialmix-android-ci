@@ -17,6 +17,19 @@ class ChatGptSkinService : AccessibilityService() {
     private val mainHandler = Handler(Looper.getMainLooper())
     private lateinit var overlay: SkinOverlayController
     private var refreshScheduled = false
+    private var hideScheduled = false
+
+    private val hideRunnable = Runnable {
+        hideScheduled = false
+        if (!::overlay.isInitialized) return@Runnable
+
+        val targetRoot = findTargetRoot()
+        if (targetRoot == null) {
+            overlay.hideAll()
+        } else {
+            scheduleRefresh()
+        }
+    }
 
     override fun onServiceConnected() {
         super.onServiceConnected()
@@ -27,20 +40,42 @@ class ChatGptSkinService : AccessibilityService() {
         if (!::overlay.isInitialized || event == null) return
         val eventPackage = event.packageName?.toString().orEmpty()
 
+        // Events produced by our own accessibility overlay must never make the skin disappear.
         if (eventPackage == applicationContext.packageName) return
-        if (eventPackage != TARGET_PACKAGE) {
-            overlay.hideAll()
+
+        // A real ChatGPT event means the target is definitely still active.
+        if (eventPackage == TARGET_PACKAGE) {
+            cancelPendingHide()
+            scheduleRefresh()
             return
         }
 
-        scheduleRefresh()
+        // Keyboard, System UI, permission dialogs and accessibility overlays can emit events
+        // while ChatGPT is still the foreground app. If the ChatGPT window still exists,
+        // keep the skin stable instead of hiding it for a single foreign-package event.
+        if (findTargetRoot() != null) {
+            cancelPendingHide()
+            scheduleRefresh()
+            return
+        }
+
+        // Only consider hiding after a real window transition, and debounce it. This avoids
+        // the skin <-> official ChatGPT flashing loop caused by transient System UI events.
+        if (
+            event.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED ||
+            event.eventType == AccessibilityEvent.TYPE_WINDOWS_CHANGED
+        ) {
+            scheduleHideCheck()
+        }
     }
 
     override fun onInterrupt() {
+        cancelPendingHide()
         if (::overlay.isInitialized) overlay.hideAll()
     }
 
     override fun onDestroy() {
+        cancelPendingHide()
         if (::overlay.isInitialized) overlay.destroy()
         super.onDestroy()
     }
@@ -51,7 +86,19 @@ class ChatGptSkinService : AccessibilityService() {
         mainHandler.postDelayed({
             refreshScheduled = false
             refreshFromRoot()
-        }, 90L)
+        }, 110L)
+    }
+
+    private fun scheduleHideCheck() {
+        if (hideScheduled) return
+        hideScheduled = true
+        mainHandler.postDelayed(hideRunnable, 650L)
+    }
+
+    private fun cancelPendingHide() {
+        if (!hideScheduled) return
+        mainHandler.removeCallbacks(hideRunnable)
+        hideScheduled = false
     }
 
     private fun findTargetRoot(): AccessibilityNodeInfo? {
@@ -64,15 +111,20 @@ class ChatGptSkinService : AccessibilityService() {
     }
 
     private fun refreshFromRoot() {
-        val root = findTargetRoot() ?: run {
-            overlay.hideAll()
+        val root = findTargetRoot()
+        if (root == null) {
+            scheduleHideCheck()
             return
         }
+
+        cancelPendingHide()
         val snapshot = ChatUiSnapshot.from(root)
-        if (!snapshot.looksLikeChat) {
-            overlay.hideAll()
-            return
-        }
+
+        // During composition, keyboard transitions or ChatGPT's own transient surfaces,
+        // the editable node can disappear for a frame. Keep the existing overlay instead
+        // of tearing it down and recreating it, which is visible as flashing.
+        if (!snapshot.looksLikeChat) return
+
         overlay.show(snapshot)
     }
 
