@@ -11,9 +11,12 @@ import androidx.compose.material3.ModalDrawerSheet
 import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
@@ -34,6 +37,8 @@ private fun LumiApp(context: Context) {
         }
         val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
         val scope = rememberCoroutineScope()
+        var isAiConfigured by remember { mutableStateOf(SecureConfigStore.hasApiKey(context)) }
+        var showAiSettings by remember { mutableStateOf(!isAiConfigured) }
 
         ModalNavigationDrawer(
             drawerState = drawerState,
@@ -48,7 +53,12 @@ private fun LumiApp(context: Context) {
                             messages.clear()
                             saveMessages(context, messages)
                             scope.launch { drawerState.close() }
-                        }
+                        },
+                        onAiSettings = {
+                            showAiSettings = true
+                            scope.launch { drawerState.close() }
+                        },
+                        isAiConfigured = isAiConfigured
                     )
                 }
             }
@@ -61,6 +71,20 @@ private fun LumiApp(context: Context) {
                     saveMessages(context, messages)
                 },
                 onMessagesChanged = { saveMessages(context, messages) }
+            )
+        }
+
+        if (showAiSettings) {
+            AiConnectionDialog(
+                context = context,
+                onSaved = {
+                    isAiConfigured = SecureConfigStore.hasApiKey(context)
+                    showAiSettings = false
+                },
+                onDismiss = {
+                    isAiConfigured = SecureConfigStore.hasApiKey(context)
+                    showAiSettings = false
+                }
             )
         }
     }
