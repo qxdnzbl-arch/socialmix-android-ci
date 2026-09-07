@@ -1,0 +1,32 @@
+name: ChatGPT theme bundle inspect
+on:
+  push:
+    branches: [chatgpt-theme-build-20260907]
+  workflow_dispatch:
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download exact arm64 XAPK
+        shell: bash
+        run: |
+          set -euxo pipefail
+          curl -L --fail --retry 3 --retry-delay 2 'https://d.apkpure.net/b/XAPK/com.openai.chatgpt?nc=arm64-v8a&sv=29&versionCode=2623716' -o chatgpt.xapk
+          sha1sum chatgpt.xapk
+          ls -lh chatgpt.xapk
+      - name: Inspect bundle
+        shell: bash
+        run: |
+          set -euxo pipefail
+          mkdir xapk
+          unzip -q chatgpt.xapk -d xapk
+          find xapk -maxdepth 2 -type f -printf '%P %s bytes\n' | sort
+          echo '--- APK badging ---'
+          AAPT=$(find "$ANDROID_HOME/build-tools" -name aapt2 -type f | sort -V | tail -1)
+          echo "AAPT=$AAPT"
+          for f in xapk/*.apk; do
+            echo "### $f"
+            "$AAPT" dump badging "$f" | head -30 || true
+            unzip -l "$f" | grep -E '(^|/)(lib/|resources.arsc|AndroidManifest.xml)' | head -80 || true
+          done
