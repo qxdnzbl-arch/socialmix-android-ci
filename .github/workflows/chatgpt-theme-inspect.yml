@@ -1,26 +1,177 @@
-name: ChatGPT theme bundle inspect
+name: ChatGPT iridescent standalone build
 on:
   push:
     branches: [chatgpt-theme-build-20260907]
   workflow_dispatch:
 
 jobs:
-  inspect:
+  build:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
-      - name: Download exact arm64 XAPK
+      - name: Download exact arm64 split bundle and APKEditor
         shell: bash
         run: |
           set -euxo pipefail
           curl -L --fail --retry 3 --retry-delay 2 'https://d.apkpure.net/b/XAPK/com.openai.chatgpt?nc=arm64-v8a&sv=29&versionCode=2623716' -o chatgpt.xapk
           echo '7b0c10ea7486a83b7d319e37d28cc5dd012be94c  chatgpt.xapk' | sha1sum -c -
-          mkdir xapk
-          unzip -q chatgpt.xapk -d xapk
-          find xapk -maxdepth 1 -type f -printf '%f %s bytes\n' | sort
-      - name: Upload exact bundle
+          curl -L --fail --retry 3 'https://github.com/REAndroid/APKEditor/releases/download/V1.4.9/APKEditor-1.4.9.jar' -o APKEditor.jar
+          echo 'a9cd40df818845456be6d696de6110c89edf4b0a0580cb83438ed6b25a366e67  APKEditor.jar' | sha256sum -c -
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq zstd
+          mkdir splits
+          unzip -q chatgpt.xapk -d splits
+
+      - name: Patch only the approved visual modules
+        shell: bash
+        run: |
+          set -euxo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import zipfile, subprocess, hashlib, struct
+
+          base=Path('splits/com.openai.chatgpt.apk')
+          work=Path('theme_work'); work.mkdir(exist_ok=True)
+          names=['assets/oai_core.valdimodule','assets/chatgpt_conversation.valdimodule']
+          with zipfile.ZipFile(base,'r') as z:
+              for name in names:
+                  (work/Path(name).name).write_bytes(z.read(name))
+
+          raw_files={}
+          for n in ['oai_core','chatgpt_conversation']:
+              zst=work/f'{n}.valdimodule'; raw=work/f'{n}.raw'
+              subprocess.run(['zstd','-q','-d','-f',str(zst),'-o',str(raw)],check=True)
+              raw_files[n]=raw
+
+          expected={
+            'oai_core':'195d6d32305d2088f681c75aee65afae50b1bdf14a0ca9d31a99765a9534e3b5',
+            'chatgpt_conversation':'6c6f4542e54619ae6367f884087baa5dd2db50d3b346a8cde6b7763d1a30b9e3'
+          }
+          for n,p in raw_files.items():
+              h=hashlib.sha256(p.read_bytes()).hexdigest()
+              assert h==expected[n], (n,h)
+
+          o=bytearray(raw_files['oai_core'].read_bytes())
+          replacements=[
+            (b'#FFFFFF',b'#FFF9FC',1),
+            (b'#F9F9F9',b'#FFF9FC',1),
+            (b'#E8E8E8',b'#F4ECF8',1),
+            (b'#F3F3F3',b'#F4ECF8',1),
+            (b'#E3E3E380',b'#F0DDF0D9',1),
+            (b'#F2F2F7',b'#F4ECF8',1),
+            (b'#0D0D0D1A',b'#FFFFFF1A',1),
+            (b'#0D0D0D26',b'#FFFFFF26',1),
+            (b'#0D0D0D0D',b'#FFFFFF8C',1),
+            (b'#0285FF',b'#B57AA6',1),
+            (b'#CDCDCD',b'#E8DDE8',1),
+            (b'#0169CC',b'#B57AA6',1),
+            (b'#339CFF',b'#B57AA6',1),
+            (b'#E5F3FF',b'#F4ECF8',1),
+            (b'#AD7BF9',b'#B57AA6',1),
+            (b'#EFE5FE',b'#F4ECF8',1),
+            (b'#8046D9',b'#B57AA6',1),
+            (b'#00000024',b'#7E5A7124',1),
+          ]
+          for old,new,count in replacements:
+              actual=o.count(old)
+              assert actual>=count,(old,actual)
+              o=o.replace(old,new,count)
+          raw_files['oai_core'].write_bytes(o)
+
+          c=bytearray(raw_files['chatgpt_conversation'].read_bytes())
+          assert c[59310:59313]==b'86%'
+          c[59310:59313]=b'82%'
+          assert c[166132:166139]==b'#0D0D0D'
+          c[166132:166139]=b'#B57AA6'
+          raw_files['chatgpt_conversation'].write_bytes(c)
+
+          assert hashlib.sha256(raw_files['oai_core'].read_bytes()).hexdigest()=='af20b98dc83cf445c98ee06eee07c73c7351ce86b3b6d32e82847990cd44364d'
+          assert hashlib.sha256(raw_files['chatgpt_conversation'].read_bytes()).hexdigest()=='c2a0fbefedd981a9e23ad8da1ecc93b1567b1ac2565729ef3cc56c565d6b8b24'
+
+          for n in ['oai_core','chatgpt_conversation']:
+              subprocess.run(['zstd','--ultra','-22','-q','-f',str(raw_files[n]),'-o',str(work/f'{n}.new.zst')],check=True)
+
+          # Rebuild just the base APK contents; old signature is intentionally discarded because
+          # APKEditor will merge/sanitize the split set and the final package is signed afterward.
+          patched=Path('splits/base-themed.apk')
+          with zipfile.ZipFile(base,'r') as zin, zipfile.ZipFile(patched,'w') as zout:
+              for item in zin.infolist():
+                  if item.filename.startswith('META-INF/'):
+                      continue
+                  data=zin.read(item.filename)
+                  if item.filename=='assets/oai_core.valdimodule': data=(work/'oai_core.new.zst').read_bytes()
+                  elif item.filename=='assets/chatgpt_conversation.valdimodule': data=(work/'chatgpt_conversation.new.zst').read_bytes()
+                  ni=zipfile.ZipInfo(item.filename,date_time=item.date_time)
+                  ni.compress_type=item.compress_type; ni.external_attr=item.external_attr
+                  ni.extra=item.extra; ni.comment=item.comment; ni.create_system=item.create_system
+                  zout.writestr(ni,data)
+          base.unlink()
+          patched.rename(base)
+          PY
+
+      - name: Merge required ABI, density and language splits into one APK
+        shell: bash
+        run: |
+          set -euxo pipefail
+          java -Xmx4g -jar APKEditor.jar m -i splits -o ChatGPT-Iridescent-Merged.apk -clean-meta -validate-modules
+          test -s ChatGPT-Iridescent-Merged.apk
+
+      - name: Align and sign standalone APK
+        shell: bash
+        run: |
+          set -euxo pipefail
+          BUILD_TOOLS=$(find "$ANDROID_HOME/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -1)
+          ZIPALIGN="$BUILD_TOOLS/zipalign"
+          APKSIGNER="$BUILD_TOOLS/apksigner"
+          AAPT2="$BUILD_TOOLS/aapt2"
+          keytool -genkeypair -noprompt -keystore theme.jks -alias theme -storepass iridescent2026 -keypass iridescent2026 -dname 'CN=ChatGPT Iridescent Glass,O=Local Theme Build,C=US' -keyalg RSA -keysize 3072 -validity 10000
+          "$ZIPALIGN" -f -p 4 ChatGPT-Iridescent-Merged.apk ChatGPT-Iridescent-Aligned.apk
+          "$APKSIGNER" sign --ks theme.jks --ks-key-alias theme --ks-pass pass:iridescent2026 --key-pass pass:iridescent2026 --v1-signing-enabled true --v2-signing-enabled true --v3-signing-enabled true --out ChatGPT-Iridescent-Glass-arm64.apk ChatGPT-Iridescent-Aligned.apk
+          "$ZIPALIGN" -c -v 4 ChatGPT-Iridescent-Glass-arm64.apk >/tmp/zipalign.log
+          "$APKSIGNER" verify --verbose --print-certs ChatGPT-Iridescent-Glass-arm64.apk | tee /tmp/signature.txt
+          "$AAPT2" dump badging ChatGPT-Iridescent-Glass-arm64.apk | tee /tmp/badging.txt
+          grep -q "package: name='com.openai.chatgpt' versionCode='2623716' versionName='1.2026.237'" /tmp/badging.txt
+          grep -q "minSdkVersion:'29'" /tmp/badging.txt
+          grep -q "native-code: 'arm64-v8a'" /tmp/badging.txt
+
+      - name: Structural, resource, theme and split-removal acceptance checks
+        shell: bash
+        run: |
+          set -euxo pipefail
+          BUILD_TOOLS=$(find "$ANDROID_HOME/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -1)
+          AAPT2="$BUILD_TOOLS/aapt2"
+          unzip -l ChatGPT-Iridescent-Glass-arm64.apk > /tmp/list.txt
+          grep -q 'lib/arm64-v8a/libopenai_xplat_export.so' /tmp/list.txt
+          grep -q 'lib/arm64-v8a/libcapture.so' /tmp/list.txt
+          grep -q 'resources.arsc' /tmp/list.txt
+          "$AAPT2" dump xmltree ChatGPT-Iridescent-Glass-arm64.apk --file AndroidManifest.xml > /tmp/manifest.txt
+          ! grep -q 'requiredSplitTypes' /tmp/manifest.txt
+          ! grep -q 'isSplitRequired' /tmp/manifest.txt
+          ! grep -q 'com.android.vending.splits.required' /tmp/manifest.txt
+          python3 - <<'PY'
+          import zipfile, subprocess, pathlib, hashlib
+          apk='ChatGPT-Iridescent-Glass-arm64.apk'
+          d=pathlib.Path('verify_theme'); d.mkdir(exist_ok=True)
+          with zipfile.ZipFile(apk) as z:
+              bad=z.testzip(); assert bad is None,bad
+              for n,h in [
+                ('oai_core','af20b98dc83cf445c98ee06eee07c73c7351ce86b3b6d32e82847990cd44364d'),
+                ('chatgpt_conversation','c2a0fbefedd981a9e23ad8da1ecc93b1567b1ac2565729ef3cc56c565d6b8b24')]:
+                  zst=d/f'{n}.zst'; raw=d/f'{n}.raw'
+                  zst.write_bytes(z.read(f'assets/{n}.valdimodule'))
+                  subprocess.run(['zstd','-q','-d','-f',str(zst),'-o',str(raw)],check=True)
+                  assert hashlib.sha256(raw.read_bytes()).hexdigest()==h,n
+          print('THEME_HASHES_OK')
+          PY
+          sha256sum ChatGPT-Iridescent-Glass-arm64.apk | tee ChatGPT-Iridescent-Glass-arm64.sha256.txt
+          ls -lh ChatGPT-Iridescent-Glass-arm64.apk
+
+      - name: Upload final candidate
         uses: actions/upload-artifact@v4
         with:
-          name: chatgpt-1.2026.237-arm64-xapk
-          path: chatgpt.xapk
+          name: ChatGPT-Iridescent-Glass-arm64
+          path: |
+            ChatGPT-Iridescent-Glass-arm64.apk
+            ChatGPT-Iridescent-Glass-arm64.sha256.txt
           if-no-files-found: error
           compression-level: 0
