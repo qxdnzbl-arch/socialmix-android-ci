@@ -12,11 +12,8 @@ android {
         applicationId = "com.qxdnzbl.lumichat"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "0.1.0"
-
-        buildConfigField("String", "API_BASE_URL", "\"https://replace-me.invalid\"")
-        buildConfigField("String", "APP_ACCESS_TOKEN", "\"replace-me\"")
+        versionCode = 2
+        versionName = "0.2.0"
     }
 
     compileOptions {
@@ -26,7 +23,6 @@ android {
 
     buildFeatures {
         compose = true
-        buildConfig = true
     }
 
     packaging {
