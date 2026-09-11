@@ -1,0 +1,63 @@
+name: SocialMix Production UI Acceptance
+
+on:
+  push:
+    branches: [socialmix-chat-production-core]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  production-ui:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+
+      - name: Build app and existing acceptance tests
+        run: gradle --no-daemon :app:assembleDebug :app:assembleDebugAndroidTest
+
+      - name: Enable KVM
+        run: |
+          if [ -e /dev/kvm ]; then sudo chmod 666 /dev/kvm; fi
+
+      - name: Run API and real UI acceptance
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          target: google_apis
+          profile: pixel_6
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none
+          script: |
+            adb uninstall com.socialmix.experiment.b || true
+            gradle --no-daemon :app:connectedDebugAndroidTest
+            adb install -r app/build/outputs/apk/debug/app-debug.apk
+            python3 .github/qa/production_ui_device_acceptance.py
+            adb shell pidof com.socialmix.experiment.b
+
+      - name: Package verified APK and UI evidence
+        run: |
+          mkdir -p deliverable
+          cp app/build/outputs/apk/debug/app-debug.apk deliverable/SocialMix-Add-Friend-Chat-Verified.apk
+          sha256sum deliverable/SocialMix-Add-Friend-Chat-Verified.apk > deliverable/SHA256.txt
+          cp -R ui-acceptance deliverable/ui-acceptance
+
+      - name: Upload verified result
+        uses: actions/upload-artifact@v4
+        with:
+          name: SocialMix-Add-Friend-Chat-Final-Verified
+          path: deliverable/
+          if-no-files-found: error
+          retention-days: 14
