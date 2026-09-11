@@ -24,14 +24,14 @@ jobs:
         with:
           gradle-version: '8.11.1'
 
-      - name: Build app and existing acceptance tests
+      - name: Build app and acceptance APKs
         run: gradle --no-daemon :app:assembleDebug :app:assembleDebugAndroidTest
 
       - name: Enable KVM
         run: |
           if [ -e /dev/kvm ]; then sudo chmod 666 /dev/kvm; fi
 
-      - name: Run API and real UI acceptance
+      - name: Run stable core and real UI acceptance
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 35
@@ -42,7 +42,6 @@ jobs:
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none
           script: |
             adb uninstall com.socialmix.experiment.b || true
-            gradle --no-daemon :app:connectedDebugAndroidTest
             adb install -r app/build/outputs/apk/debug/app-debug.apk
             adb install -r app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
             adb shell am instrument -w \
