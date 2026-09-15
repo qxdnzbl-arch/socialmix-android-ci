@@ -1,9 +1,9 @@
 (()=>{
   const main=document.createElement('script');
-  main.src='/app.js?v=recovery-code-1';
+  main.src='/app.js?v=auth-normal-1';
   main.onload=()=>{
     const fix=document.createElement('script');
-    fix.src='/auth-fix.js?v=recovery-code-1';
+    fix.src='/auth-fix.js?v=auth-normal-1';
     document.body.appendChild(fix);
   };
   main.onerror=()=>{
