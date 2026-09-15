@@ -19,7 +19,12 @@ async function auth(mode){
       const {error}=await sb.auth.signInWithPassword({email,password});
       if(error){
         const msg=String(error.message||'').toLowerCase();
-        if(msg.includes('invalid login credentials')) throw new Error('这个邮箱已经注册过了，但密码不对。');
+        if(msg.includes('invalid login credentials')){
+          S.authMode='login';
+          $$('[data-auth-mode]').forEach(x=>x.classList.toggle('active',x.dataset.authMode==='login'));
+          submit.textContent='登录';
+          throw new Error('这个邮箱已经有账号。我已切到登录，请输入第一次注册时的密码。');
+        }
         throw error;
       }
     }else{
