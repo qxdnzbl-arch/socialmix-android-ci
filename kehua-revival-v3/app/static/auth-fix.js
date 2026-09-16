@@ -67,6 +67,22 @@ async function bridgeIdentity(user,password){
   return out;
 }
 
+async function startRecovery(email){
+  const r=await fetch(`${SUPABASE_URL}/functions/v1/kehua-recovery-start`,{
+    method:'POST',
+    headers:{'Content-Type':'application/json','apikey':SUPABASE_KEY},
+    body:JSON.stringify({email})
+  });
+  let out={};
+  try{out=await r.json()}catch{}
+  if(!r.ok){
+    const err=new Error(out.error||'recovery_temporarily_unavailable');
+    err.code=out.error||'recovery_temporarily_unavailable';
+    throw err;
+  }
+  return out;
+}
+
 async function migrateLegacyIfNeeded(email,password){
   const {authMod,fbauth}=await firebaseReady();
   const temp=window.supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{auth:{persistSession:false,autoRefreshToken:false,detectSessionInUrl:false}});
@@ -79,7 +95,10 @@ async function migrateLegacyIfNeeded(email,password){
     await authMod.signOut(fbauth);
     return 'verification_sent';
   }catch(e){
-    if(String(e?.code||'').includes('email-already-in-use'))return null;
+    if(String(e?.code||'').includes('email-already-in-use')){
+      await startRecovery(email);
+      return 'reset_sent';
+    }
     throw e;
   }
 }
@@ -123,6 +142,11 @@ async function productionAuth(mode){
         box.textContent='为了保护原账号，确认邮件已经发送。确认后就可以继续使用原账号。';
         return;
       }
+      if(migrated==='reset_sent'){
+        setAuthMode('login');
+        box.textContent='原账号已确认。我们发送了密码重置邮件，设置一次新密码后即可继续使用。';
+        return;
+      }
       throw e;
     }
 
@@ -141,6 +165,7 @@ async function productionAuth(mode){
   }catch(e){
     if(String(e?.message||'')==='identity_not_configured')box.textContent='登录服务正在初始化，请稍后再试。';
     else if(String(e?.code||'')==='email_conflict')box.textContent='这个邮箱已被其他账号占用，请联系客服处理。';
+    else if(String(e?.code||'')==='rate_limited')box.textContent='操作太频繁了，请稍后再试。';
     else box.textContent=authMessage(e);
     try{const {authMod,fbauth}=await firebaseReady();await authMod.signOut(fbauth)}catch{}
   }finally{submit.disabled=false}
@@ -176,13 +201,13 @@ async function installAuthFix(){
     if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){box.textContent='先填写你注册时使用的邮箱。';return}
     forgot.disabled=true;box.textContent='';
     try{
-      const {authMod,fbauth}=await firebaseReady();
-      await authMod.sendPasswordResetEmail(fbauth,email,{url:`${location.origin}/?password_recovery=1`});
+      await firebaseReady();
+      await startRecovery(email);
       box.textContent='如果这个邮箱注册过，我们已经发送了重置密码邮件。';
     }catch(e){
       if(String(e?.message||'')==='identity_not_configured')box.textContent='登录服务正在初始化，请稍后再试。';
-      else if(String(e?.code||'').includes('too-many-requests'))box.textContent='发送太频繁了，请稍后再试。';
-      else box.textContent='如果这个邮箱注册过，我们已经发送了重置密码邮件。';
+      else if(String(e?.code||'')==='rate_limited')box.textContent='发送太频繁了，请稍后再试。';
+      else box.textContent='重置邮件暂时发送失败，请稍后再试。';
     }finally{forgot.disabled=false}
   };
 
