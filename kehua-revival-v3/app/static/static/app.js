@@ -1,9 +1,9 @@
 (()=>{
   const main=document.createElement('script');
-  main.src='/app.js?v=auth-normal-2';
+  main.src='/app.js?v=firebase-prod-1';
   main.onload=()=>{
     const fix=document.createElement('script');
-    fix.src='/auth-fix.js?v=auth-normal-2';
+    fix.src='/auth-fix.js?v=firebase-prod-1';
     document.body.appendChild(fix);
   };
   main.onerror=()=>{
