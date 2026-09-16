@@ -1,9 +1,9 @@
 (()=>{
   const main=document.createElement('script');
-  main.src='/app.js?v=auth-normal-1';
+  main.src='/app.js?v=auth-normal-2';
   main.onload=()=>{
     const fix=document.createElement('script');
-    fix.src='/auth-fix.js?v=auth-normal-1';
+    fix.src='/auth-fix.js?v=auth-normal-2';
     document.body.appendChild(fix);
   };
   main.onerror=()=>{
