@@ -1,23 +1,37 @@
 let authFixInstalled=false;
-
-async function edgeCall(name,payload={}){
-  const r=await fetch(`${SUPABASE_URL}/functions/v1/${name}`,{
-    method:'POST',
-    headers:{'Content-Type':'application/json','apikey':SUPABASE_KEY,'Authorization':`Bearer ${SUPABASE_KEY}`},
-    body:JSON.stringify(payload)
-  });
-  let out={};
-  try{out=await r.json()}catch{}
-  if(!r.ok)throw new Error(out.error||'暂时无法完成，请稍后再试');
-  return out;
-}
+let confirmResendBtn=null;
 
 function setAuthMode(mode){
   S.authMode=mode;
   $$('[data-auth-mode]').forEach(x=>x.classList.toggle('active',x.dataset.authMode===mode));
   $('#authSubmit').textContent=mode==='login'?'登录':'进去';
-  const b=document.querySelector('#forgotPasswordBtn');
-  if(b)b.style.display=mode==='login'?'block':'none';
+  const forgot=document.querySelector('#forgotPasswordBtn');
+  if(forgot)forgot.style.display=mode==='login'?'block':'none';
+  if(confirmResendBtn)confirmResendBtn.style.display='none';
+  const p=$('#authPassword');
+  if(p)p.autocomplete=mode==='login'?'current-password':'new-password';
+}
+
+function authMessage(e){
+  const raw=String(e?.message||e||'').toLowerCase();
+  if(e?.code==='email_not_confirmed'||raw.includes('email not confirmed'))return '这个邮箱还没完成验证。请先打开注册邮件里的确认链接。';
+  if(raw.includes('invalid login credentials'))return '邮箱或密码不对。忘记密码可以点下面的“忘记密码？”。';
+  if(raw.includes('rate')||raw.includes('too many'))return '操作太频繁了，请稍后再试。';
+  if(raw.includes('password'))return '密码至少需要 6 位。';
+  return '暂时无法完成，请稍后再试。';
+}
+
+async function resendConfirmation(){
+  const email=$('#authUsername').value.trim().toLowerCase();
+  const box=$('#authError');
+  if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){box.textContent='先填写你注册时使用的邮箱。';return}
+  confirmResendBtn.disabled=true;box.textContent='';
+  try{
+    const {error}=await sb.auth.resend({type:'signup',email,options:{emailRedirectTo:`${location.origin}/?email_confirmed=1`}});
+    if(error)throw error;
+    box.textContent='确认邮件已重新发送。';
+  }catch(e){box.textContent=authMessage(e)}
+  finally{confirmResendBtn.disabled=false}
 }
 
 async function auth(mode){
@@ -26,30 +40,39 @@ async function auth(mode){
   const box=$('#authError');
   const submit=$('#authSubmit');
   box.textContent='';
+  if(confirmResendBtn)confirmResendBtn.style.display='none';
   if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)||password.length<6){box.textContent='请填写有效邮箱，密码至少 6 位';return}
   submit.disabled=true;
   try{
     if(mode==='register'){
-      const out=await edgeCall('kehua-register',{email,password});
-      const {error}=await sb.auth.signInWithPassword({email,password});
-      if(error){
-        const msg=String(error.message||'').toLowerCase();
-        if(msg.includes('invalid login credentials')){
-          setAuthMode('login');
-          throw new Error(out.created===false?'这个邮箱已经有账号了。请直接登录；忘记密码就点“忘记密码？”。':'注册完成，请重新输入密码登录。');
+      const {data,error}=await sb.auth.signUp({
+        email,password,
+        options:{
+          emailRedirectTo:`${location.origin}/?email_confirmed=1`,
+          data:{nickname:email.split('@')[0].slice(0,20)||'可话用户',kehua_app:'true'}
         }
-        throw error;
+      });
+      if(error)throw error;
+      if(data?.session){await boot();return}
+      if(data?.user&&Array.isArray(data.user.identities)&&data.user.identities.length===0){
+        setAuthMode('login');
+        box.textContent='这个邮箱已经有账号了。请直接登录；忘记密码可以点下面的“忘记密码？”。';
+        return;
       }
-    }else{
-      const {error}=await sb.auth.signInWithPassword({email,password});
-      if(error){
-        const m=String(error.message||'').toLowerCase();
-        if(m.includes('invalid login credentials'))throw new Error('邮箱或密码不对。忘记密码可以点下面的“忘记密码？”。');
-        throw error;
+      setAuthMode('login');
+      box.textContent='确认邮件已经发送。打开邮件里的确认链接后，再回来登录。';
+      confirmResendBtn.style.display='block';
+      return;
+    }
+    const {error}=await sb.auth.signInWithPassword({email,password});
+    if(error){
+      if(error.code==='email_not_confirmed'||String(error.message||'').toLowerCase().includes('email not confirmed')){
+        confirmResendBtn.style.display='block';
       }
+      throw error;
     }
     await boot();
-  }catch(e){box.textContent=String(e?.message||'暂时进不去').replace('Email not confirmed','账号状态异常，请重新登录')}
+  }catch(e){box.textContent=authMessage(e)}
   finally{submit.disabled=false}
 }
 
@@ -88,7 +111,7 @@ function recoveryOverlay(){
       showAuth();setAuthMode('login');
       $('#authPassword').value='';
       $('#authError').textContent='密码已经重置。现在用新密码登录。';
-    }catch(e){err.textContent=e?.message||'密码修改失败，请重新打开重置链接'}
+    }catch(e){err.textContent=authMessage(e)}
     finally{btn.disabled=false}
   };
   return el;
@@ -104,6 +127,13 @@ function installAuthFix(){
   forgot.type='button';forgot.id='forgotPasswordBtn';forgot.textContent='忘记密码？';
   forgot.style.cssText='display:none;margin:10px 0 2px auto;padding:4px 0;border:0;background:transparent;color:#777;font-size:14px;line-height:1.4;cursor:pointer;';
   passwordInput.closest('label').insertAdjacentElement('afterend',forgot);
+
+  confirmResendBtn=document.createElement('button');
+  confirmResendBtn.type='button';confirmResendBtn.id='resendConfirmBtn';confirmResendBtn.textContent='重新发送确认邮件';
+  confirmResendBtn.style.cssText='display:none;margin:8px 0 2px auto;padding:4px 0;border:0;background:transparent;color:#777;font-size:14px;line-height:1.4;cursor:pointer;';
+  forgot.insertAdjacentElement('afterend',confirmResendBtn);
+  confirmResendBtn.onclick=resendConfirmation;
+
   document.querySelectorAll('[data-auth-mode]').forEach(b=>b.addEventListener('click',()=>setTimeout(()=>setAuthMode(b.dataset.authMode),0)));
   setAuthMode(S.authMode||'register');
 
@@ -115,11 +145,9 @@ function installAuthFix(){
     try{
       const {error}=await sb.auth.resetPasswordForEmail(email,{redirectTo:`${location.origin}/?password_recovery=1`});
       if(error)throw error;
-      box.textContent='重置密码邮件已经发送，请打开邮箱里的链接设置新密码。';
-    }catch(e){
-      const m=String(e?.message||'').toLowerCase();
-      box.textContent=m.includes('rate')?'发送太频繁了，请稍后再试。':'重置邮件发送失败，请稍后再试。';
-    }finally{forgot.disabled=false}
+      box.textContent='如果这个邮箱注册过，我们已经发送了重置密码邮件。';
+    }catch(e){box.textContent=authMessage(e)}
+    finally{forgot.disabled=false}
   };
 
   const overlay=recoveryOverlay();
@@ -133,11 +161,19 @@ function installAuthFix(){
     if(typeof sb==='undefined'||!sb)return;
     clearInterval(wait);
     sb.auth.onAuthStateChange((event)=>{if(event==='PASSWORD_RECOVERY')showReset()});
-    const recoveryInUrl=location.hash.includes('type=recovery')||new URLSearchParams(location.search).get('password_recovery')==='1';
-    if(recoveryInUrl){setTimeout(async()=>{const {data}=await sb.auth.getSession();if(data?.session)showReset()},300)}
+    const q=new URLSearchParams(location.search);
+    const recoveryInUrl=location.hash.includes('type=recovery')||q.get('password_recovery')==='1';
+    if(recoveryInUrl){setTimeout(async()=>{const {data}=await sb.auth.getSession();if(data?.session)showReset();else{$('#authError').textContent='这个重置链接已经失效，请重新申请。';showAuth();setAuthMode('login')}},350)}
+    if(q.get('email_confirmed')==='1'){
+      history.replaceState({},'',location.pathname);
+      setAuthMode('login');
+      $('#authError').textContent='邮箱已经确认，可以登录了。';
+    }
   },100);
 
-  const oldBtn=document.querySelector('#recoveryCodeBtn');if(oldBtn)oldBtn.remove();
+  document.querySelector('#recoveryCodePanel')?.remove();
+  document.querySelector('#forgotRecoveryPanel')?.remove();
+  document.querySelector('#recoveryCodeBtn')?.remove();
 }
 
 installAuthFix();
