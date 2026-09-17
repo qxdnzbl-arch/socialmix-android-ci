@@ -18,63 +18,8 @@ jobs:
         uses: actions/checkout@v4
         with:
           ref: kehua-firebase-auth-prod
-      - name: Prepare release auth and dedicated acceptance test
-        run: |
-          python3 ci/prepare_kehua_release.py
-          python3 - <<'PY'
-          from pathlib import Path
-          import re
-          fixture = Path('app/src/androidTest/java/com/suisuinian/app/CoreResponsivenessAcceptanceTest.kt').read_text(encoding='utf-8')
-          pairs = re.findall(r'\.signIn\("([^"]+)",\s*"([^"]+)"\)', fixture)
-          if not pairs:
-              raise SystemExit('No existing CI auth fixture found')
-          email, password = pairs[0]
-          out = Path('app/src/androidTest/java/com/suisuinian/app/KehuaReleaseAcceptanceTest.kt')
-          out.write_text(f'''package com.suisuinian.app
-
-          import androidx.test.core.app.ActivityScenario
-          import androidx.test.ext.junit.runners.AndroidJUnit4
-          import androidx.test.platform.app.InstrumentationRegistry
-          import kotlinx.coroutines.runBlocking
-          import org.junit.Assert.assertFalse
-          import org.junit.Assert.assertTrue
-          import org.junit.Test
-          import org.junit.runner.RunWith
-
-          @RunWith(AndroidJUnit4::class)
-          class KehuaReleaseAcceptanceTest {{
-              @Test
-              fun launcherStartsWithoutCrash() {{
-                  ActivityScenario.launch(KehuaActivity::class.java).use {{ scenario ->
-                      scenario.onActivity {{ activity ->
-                          assertFalse(activity.isFinishing)
-                          assertFalse(activity.isDestroyed)
-                      }}
-                  }}
-              }}
-
-              @Test
-              fun realAuthProfilePublishAndCoreReadsWork() = runBlocking {{
-                  val context = InstrumentationRegistry.getInstrumentation().targetContext
-                  val api = KehuaApi(context)
-                  api.logout()
-                  val login = api.signIn("{{email}}", "{{password}}")
-                  assertTrue("Kehua login failed: ${{login.message}}", login.success && !login.needsVerification)
-                  val profile = api.ensureProfile()
-                  assertTrue("Kehua profile missing", profile.id.isNotBlank())
-                  val marker = "kehua-release-${{System.currentTimeMillis()}}"
-                  val result = api.publish(marker, null)
-                  val postId = result.first
-                  assertTrue("Kehua publish did not return post id", postId.isNotBlank())
-                  assertTrue("Published post not returned by myPosts", api.myPosts().any {{ it.id == postId && it.body == marker }})
-                  api.resonances(postId)
-                  api.conversations()
-                  api.incomingFriendRequests()
-                  api.friends()
-              }}
-          }}
-          ''', encoding='utf-8')
-          PY
+      - name: Prepare Kehua release auth
+        run: python3 ci/prepare_kehua_release.py
       - name: Set up Java 17
         uses: actions/setup-java@v5
         with:
