@@ -175,7 +175,7 @@ ui = ui.replace('Text("这是独立重建版本，不代表原开发团队。", 
 for required in [
     'private val KehuaBg = Color(0xFFF4F4F7)',
     'private val KehuaPink = Color(0xFFFF3E68)',
-    'Text("此刻,',
+    'Text("此刻，\\n有什么想说～"',
     'RoundedCornerShape(24.dp)',
     'Text("共鸣", color = KehuaInk, fontSize = 17.sp',
     'Text("消息", color = KehuaInk, fontSize = 17.sp',
