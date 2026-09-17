@@ -96,7 +96,6 @@ jobs:
           ipa=[x for x in candidates if x[1].startswith('iPad')]
           if not iph or not ipa:
               raise SystemExit('No compatible available iPhone/iPad simulators on runner')
-          # Prefer the newest runtime that has both families, and use runner-provisioned devices.
           runtimes=sorted(set(x[0] for x in candidates), reverse=True)
           selected=None
           for runtime in runtimes:
@@ -108,8 +107,6 @@ jobs:
               raise SystemExit('No single installed iOS runtime contains both iPhone and iPad devices')
           print('IPHONE_UDID='+selected[0][2])
           print('IPAD_UDID='+selected[1][2])
-          print('IPHONE_NAME='+selected[0][1].replace(' ','_'))
-          print('IPAD_NAME='+selected[1][1].replace(' ','_'))
           PY
           source /tmp/sim.env
           for SPEC in "iphone:$IPHONE_UDID" "ipad:$IPAD_UDID"; do
