@@ -25,6 +25,21 @@ jobs:
       - name: Install XcodeGen
         run: brew install xcodegen
 
+      - name: Enforce native interoperable source
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('Kehua/ContentView.swift')
+          s=p.read_text(encoding='utf-8')
+          s=s.replace('.task{id in url=await model.signedURL(path)}', '.task(id: path) { url = await model.signedURL(path) }')
+          p.write_text(s,encoding='utf-8')
+          assert 'WKWebView' not in s
+          assert 'kehua-revival-live.onrender.com' not in s
+          for token in ('kehua_publish','kehua_get_resonances','kehua_light','kehua_conversation_list','kehua_message_list','kehua_send_message','kehua_friend_request','kehua_block','kehua_report'):
+              assert token in s, token
+          assert 'https://nvwdtfnhsyfdopaxdylx.supabase.co' in s
+          PY
+
       - name: Generate production icon
         run: |
           python3 -m venv .icon-venv
