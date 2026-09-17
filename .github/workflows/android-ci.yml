@@ -58,14 +58,39 @@ jobs:
             sleep 4
             adb shell pidof com.qxdnzbl.kehua
 
-      - name: Prepare Kehua APK
+      - name: Build unsigned release APK
+        if: success()
+        run: gradle --no-daemon :app:assembleRelease
+
+      - name: Prepare release candidate and signing tools
+        if: success()
+        run: |
+          set -euo pipefail
+          mkdir -p release-package/signing-tools/lib
+          cp app/build/outputs/apk/release/app-release-unsigned.apk release-package/Kehua-Release-Unsigned.apk
+          BT="$(find "$ANDROID_HOME/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -1)"
+          cp "$BT/apksigner" release-package/signing-tools/apksigner
+          cp "$BT/zipalign" release-package/signing-tools/zipalign
+          cp "$BT/lib/apksigner.jar" release-package/signing-tools/lib/apksigner.jar
+          sha256sum release-package/Kehua-Release-Unsigned.apk | tee release-package/UNSIGNED-SHA256.txt
+
+      - name: Upload unsigned release package
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Kehua-Android-Release-Unsigned
+          path: release-package/
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Prepare verified debug APK
         if: success()
         run: |
           mkdir -p deliverable
           cp app/build/outputs/apk/debug/app-debug.apk deliverable/Kehua-Verified.apk
           sha256sum deliverable/Kehua-Verified.apk | tee deliverable/SHA256.txt
 
-      - name: Upload verified Kehua APK
+      - name: Upload verified debug APK
         if: success()
         uses: actions/upload-artifact@v4
         with:
