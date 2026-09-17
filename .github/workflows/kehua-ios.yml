@@ -32,6 +32,7 @@ jobs:
           p=Path('Kehua/ContentView.swift')
           s=p.read_text(encoding='utf-8')
           s=s.replace('.task{id in url=await model.signedURL(path)}', '.task(id: path) { url = await model.signedURL(path) }')
+          s=s.replace('if status == 401 && authenticated && retry && await refreshIfNeeded() { return try await requestAny(path:path, method:method, body:body, authenticated:true, extra:extra, retry:false) }', 'if status == 401 && authenticated && retry {\n            let refreshed = await refreshIfNeeded()\n            if refreshed { return try await requestAny(path:path, method:method, body:body, authenticated:true, extra:extra, retry:false) }\n        }')
           p.write_text(s,encoding='utf-8')
           assert 'WKWebView' not in s
           assert 'kehua-revival-live.onrender.com' not in s
@@ -72,7 +73,7 @@ jobs:
             -derivedDataPath build/DerivedData \
             CODE_SIGNING_ALLOWED=NO \
             clean build
-          APP_PATH=$(find build/DerivedData/Build/Products -path '*Release-iphonesimulator/Kehua.app' -print -quit)
+          APP_PATH=$(find build/DerivedData/Build/Products -path '*Release-iphonesimulator/*.app' -print -quit)
           test -n "$APP_PATH"
           echo "APP_PATH=$APP_PATH" >> "$GITHUB_ENV"
           plutil -lint "$APP_PATH/Info.plist"
