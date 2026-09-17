@@ -10,6 +10,19 @@ const port = Number(process.env.PORT || 3000);
 const MAX_JSON_BYTES = 28 * 1024 * 1024;
 const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
 const ALLOWED_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
+const WINDOW_MS = 24 * 60 * 60 * 1000;
+const PER_IP_LIMIT = Number(process.env.PER_IP_DAILY_LIMIT || 5);
+const GLOBAL_LIMIT = Number(process.env.GLOBAL_DAILY_LIMIT || 200);
+const ipAuditTimes = new Map();
+let globalAuditTimes = [];
+
+const SECURITY_HEADERS = {
+  'X-Content-Type-Options': 'nosniff',
+  'Referrer-Policy': 'no-referrer',
+  'X-Frame-Options': 'DENY',
+  'Permissions-Policy': 'camera=(), microphone=(), geolocation=()',
+  'Content-Security-Policy': "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'"
+};
 
 export const auditSchema = {
   type: 'object', additionalProperties: false,
@@ -61,6 +74,28 @@ export function validateAuditBody(body) {
   const edited = parseDataUrl(body?.edited);
   if (edited.error) return { error: edited.error === 'Image data is missing.' ? 'Upload the edited image.' : `Edited: ${edited.error}` };
   return { instruction, original, edited, pixelDiff: sanitizePixelDiff(body?.pixelDiff) };
+}
+
+function clientIp(req) {
+  const forwarded = String(req.headers['x-forwarded-for'] || '').split(',')[0].trim();
+  return forwarded || req.socket.remoteAddress || 'unknown';
+}
+
+function takeAuditSlot(req) {
+  const now = Date.now();
+  const cutoff = now - WINDOW_MS;
+  globalAuditTimes = globalAuditTimes.filter(t => t > cutoff);
+  if (globalAuditTimes.length >= GLOBAL_LIMIT) return { ok: false, message: 'The public beta has reached its daily capacity. Try again tomorrow.' };
+  const ip = clientIp(req);
+  const times = (ipAuditTimes.get(ip) || []).filter(t => t > cutoff);
+  if (times.length >= PER_IP_LIMIT) {
+    ipAuditTimes.set(ip, times);
+    return { ok: false, message: `Free beta limit reached for this connection (${PER_IP_LIMIT} checks per 24 hours). Try again tomorrow.` };
+  }
+  times.push(now);
+  ipAuditTimes.set(ip, times);
+  globalAuditTimes.push(now);
+  return { ok: true };
 }
 
 async function callDeepSeek({ instruction, original, edited }) {
@@ -135,9 +170,9 @@ export async function runAudit({ instruction, original, edited, pixelDiff = null
   throw lastError || new Error('Verification failed.');
 }
 
-function json(res, status, payload) {
+function json(res, status, payload, extraHeaders = {}) {
   const body = JSON.stringify(payload);
-  res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Content-Length': Buffer.byteLength(body), 'Cache-Control': 'no-store' });
+  res.writeHead(status, { ...SECURITY_HEADERS, ...extraHeaders, 'Content-Type': 'application/json; charset=utf-8', 'Content-Length': Buffer.byteLength(body), 'Cache-Control': 'no-store' });
   res.end(body);
 }
 
@@ -171,7 +206,7 @@ async function serveStatic(req, res) {
   try {
     const data = await readFile(filePath);
     const ext = path.extname(filePath).toLowerCase();
-    res.writeHead(200, { 'Content-Type': MIME[ext] || 'application/octet-stream', 'Content-Length': data.length, 'Cache-Control': process.env.NODE_ENV === 'production' ? 'public, max-age=3600' : 'no-cache' });
+    res.writeHead(200, { ...SECURITY_HEADERS, 'Content-Type': MIME[ext] || 'application/octet-stream', 'Content-Length': data.length, 'Cache-Control': process.env.NODE_ENV === 'production' ? 'public, max-age=300' : 'no-cache' });
     res.end(data);
     return true;
   } catch { return false; }
@@ -179,17 +214,19 @@ async function serveStatic(req, res) {
 
 export async function requestHandler(req, res) {
   const url = new URL(req.url, 'http://localhost');
-  if (req.method === 'GET' && url.pathname === '/health') return json(res, 200, { ok: true, service: 'keepexact', verifier: 'deepseek-flash', live: Boolean(process.env.DEEPSEEK_API_KEY) });
+  if (req.method === 'GET' && url.pathname === '/health') return json(res, 200, { ok: true, service: 'keepexact', verifier: 'deepseek-flash', live: Boolean(process.env.DEEPSEEK_API_KEY), beta: true });
   if (req.method === 'POST' && url.pathname === '/api/audit') {
     try {
       if (!String(req.headers['content-type'] || '').startsWith('application/json')) return json(res, 415, { error: 'Unsupported request format.' });
       const body = await readJson(req);
       const validated = validateAuditBody(body);
       if (validated.error) return json(res, 400, { error: validated.error });
+      const slot = takeAuditSlot(req);
+      if (!slot.ok) return json(res, 429, { error: slot.message }, { 'Retry-After': '3600' });
       return json(res, 200, await runAudit(validated));
     } catch (error) {
       if (error?.code === 'TOO_LARGE') return json(res, 413, { error: 'The upload is too large.' });
-      if (error?.code === 'NO_API_KEY') return json(res, 503, { error: 'Live AI verification is not configured yet.' });
+      if (error?.code === 'NO_API_KEY') return json(res, 503, { error: 'Live AI verification is temporarily unavailable.' });
       console.error('audit_failed', error?.status || '', error?.message || error);
       return json(res, 502, { error: 'Verification failed. Your selected images are still on this device; retry in a moment.' });
     }
