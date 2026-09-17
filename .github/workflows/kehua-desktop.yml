@@ -5,6 +5,7 @@ on:
     branches: [kehua-public-release]
     paths:
       - 'multiplatform/desktop/**'
+      - 'kehua-revival-v3/app/static/**'
       - '.github/workflows/kehua-desktop.yml'
   workflow_dispatch:
 
@@ -24,7 +25,7 @@ jobs:
             platform: macos
             command: npm run dist:mac
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 30
+    timeout-minutes: 35
     defaults:
       run:
         working-directory: multiplatform/desktop
@@ -44,6 +45,40 @@ jobs:
       - name: Install dependencies
         run: npm install --no-audit --no-fund
 
+      - name: Prepare bundled Kehua client
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf client
+          mkdir -p client
+          cp ../../kehua-revival-v3/app/static/index.html client/index.html
+          cp ../../kehua-revival-v3/app/static/app.js client/app.js
+          cp ../../kehua-revival-v3/app/static/style.css client/style.css
+          cp fidelity.css client/fidelity.css
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('client/index.html')
+          s=p.read_text(encoding='utf-8')
+          s=s.replace('<link rel="manifest" href="/manifest.webmanifest" />','')
+          s=s.replace('href="/static/style.css"','href="style.css"')
+          s=s.replace('<script src="/static/app.js"></script>','<script src="app.js"></script>')
+          s=s.replace('<script src="/static/auth-fix.js"></script>','')
+          s=s.replace('<title>说想说的话</title>','<title>可话</title>')
+          p.write_text(s,encoding='utf-8')
+          p=Path('client/app.js')
+          s=p.read_text(encoding='utf-8')
+          s=s.replace("style.href='/static/fidelity.css'","style.href='fidelity.css'")
+          s=s.replace("$('.home-head h1').innerHTML='此刻，说你想说的话～'","$('.home-head h1').innerHTML='此刻，<br>有什么想说～'")
+          s=s.replace("back.textContent='×';back.classList.add('close-resonance');$('#resonancePage .sub-head b').textContent=''","back.textContent='‹';back.classList.remove('close-resonance');$('#resonancePage .sub-head b').textContent='共鸣'")
+          p.write_text(s,encoding='utf-8')
+          assert 'kehua-revival-live.onrender.com' not in Path('main.js').read_text(encoding='utf-8')
+          assert 'auth-fix.js' not in Path('client/index.html').read_text(encoding='utf-8')
+          assert "sb.auth.signInWithPassword" in Path('client/app.js').read_text(encoding='utf-8')
+          assert '此刻，<br>有什么想说～' in Path('client/app.js').read_text(encoding='utf-8')
+          PY
+          node --check main.js
+          node --check client/app.js
+
       - name: Generate app icon
         shell: bash
         run: |
@@ -52,12 +87,12 @@ jobs:
           from PIL import Image, ImageDraw
           from pathlib import Path
           Path('build').mkdir(exist_ok=True)
-          img=Image.new('RGBA',(512,512),(244,243,248,255))
+          img=Image.new('RGBA',(512,512),(244,244,247,255))
           d=ImageDraw.Draw(img)
-          d.rounded_rectangle((44,44,468,468),radius=112,fill=(255,255,255,255),outline=(226,224,232,255),width=6)
-          d.rounded_rectangle((118,140,394,326),radius=72,fill=(35,35,40,255))
-          d.polygon([(290,312),(344,312),(318,370)],fill=(35,35,40,255))
-          for x in (190,256,322): d.ellipse((x-13,220,x+13,246),fill=(244,243,248,255))
+          d.rounded_rectangle((44,44,468,468),radius=112,fill=(255,255,255,255),outline=(231,231,235,255),width=6)
+          d.rounded_rectangle((118,140,394,326),radius=72,fill=(36,36,40,255))
+          d.polygon([(290,312),(344,312),(318,370)],fill=(36,36,40,255))
+          for x in (190,256,322): d.ellipse((x-13,220,x+13,246),fill=(255,62,104,255))
           img.save('build/icon.png')
           PY
 
@@ -67,8 +102,14 @@ jobs:
       - name: Verify package output
         shell: bash
         run: |
+          set -euo pipefail
           test -d dist
-          find dist -maxdepth 2 -type f -print
+          find dist -maxdepth 3 -type f -print
+          if [ "${{ matrix.platform }}" = "windows" ]; then
+            find dist -maxdepth 2 -type f -name '*.exe' | grep -q .
+          else
+            find dist -maxdepth 2 -type f \( -name '*.dmg' -o -name '*.zip' \) | grep -q .
+          fi
 
       - name: Upload client
         uses: actions/upload-artifact@v4
