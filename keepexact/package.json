@@ -1,0 +1,12 @@
+{
+  "name": "keepexact",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Instruction-aware verifier for AI image edits",
+  "type": "module",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node --test"
+  },
+  "engines": { "node": ">=20" }
+}
