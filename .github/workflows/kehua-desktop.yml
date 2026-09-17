@@ -1,0 +1,82 @@
+name: Kehua Desktop Clients
+
+on:
+  push:
+    branches: [kehua-public-release]
+    paths:
+      - 'multiplatform/desktop/**'
+      - '.github/workflows/kehua-desktop.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            platform: windows
+            command: npm run dist:win
+          - os: macos-latest
+            platform: macos
+            command: npm run dist:mac
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: multiplatform/desktop
+    env:
+      CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24.21.0'
+          cache: 'npm'
+          cache-dependency-path: multiplatform/desktop/package.json
+
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Generate app icon
+        shell: bash
+        run: |
+          python3 -m pip install --quiet 'pillow==11.3.0'
+          python3 - <<'PY'
+          from PIL import Image, ImageDraw
+          from pathlib import Path
+          Path('build').mkdir(exist_ok=True)
+          img=Image.new('RGBA',(512,512),(244,243,248,255))
+          d=ImageDraw.Draw(img)
+          d.rounded_rectangle((44,44,468,468),radius=112,fill=(255,255,255,255),outline=(226,224,232,255),width=6)
+          d.rounded_rectangle((118,140,394,326),radius=72,fill=(35,35,40,255))
+          d.polygon([(290,312),(344,312),(318,370)],fill=(35,35,40,255))
+          for x in (190,256,322): d.ellipse((x-13,220,x+13,246),fill=(244,243,248,255))
+          img.save('build/icon.png')
+          PY
+
+      - name: Build client
+        run: ${{ matrix.command }}
+
+      - name: Verify package output
+        shell: bash
+        run: |
+          test -d dist
+          find dist -maxdepth 2 -type f -print
+
+      - name: Upload client
+        uses: actions/upload-artifact@v4
+        with:
+          name: Kehua-${{ matrix.platform }}
+          path: |
+            multiplatform/desktop/dist/*.exe
+            multiplatform/desktop/dist/*.dmg
+            multiplatform/desktop/dist/*.zip
+          if-no-files-found: error
+          retention-days: 14
