@@ -18,14 +18,15 @@ async function checkLive() {
   try {
     const r = await fetch('/health', { cache:'no-store' });
     const d = await r.json();
-    if (!d.live) {
+    if (!r.ok || !d.live) {
       form.querySelectorAll('input,textarea,button[type="submit"]').forEach(el => el.disabled = true);
-      liveStatus.textContent = 'Semantic AI verification is not enabled yet. This build remains internal until it passes the benchmark.';
+      liveStatus.textContent = 'Verification is temporarily unavailable.';
     } else {
-      liveStatus.textContent = 'Semantic AI verification is enabled for internal testing.';
+      liveStatus.textContent = 'Verifier ready.';
     }
   } catch {
-    liveStatus.textContent = 'Verifier status is temporarily unavailable.';
+    form.querySelectorAll('input,textarea,button[type="submit"]').forEach(el => el.disabled = true);
+    liveStatus.textContent = 'Verification is temporarily unavailable.';
   }
 }
 checkLive();
@@ -111,6 +112,7 @@ async function samplePixels(file) {
     canvas.width = 128;
     canvas.height = 128;
     const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    if (!ctx) throw new Error('Image comparison is not supported in this browser.');
     ctx.fillStyle = '#fff';
     ctx.fillRect(0, 0, 128, 128);
     ctx.drawImage(bitmap, 0, 0, 128, 128);
@@ -165,16 +167,20 @@ form.addEventListener('submit', async event => {
     setError(error.message || 'Verification failed.');
   } finally {
     submit.disabled = false;
-    submit.textContent = 'Run internal check';
+    submit.textContent = 'Check this edit';
   }
 });
 
 document.querySelector('#copy-repair').addEventListener('click', async event => {
   const text = document.querySelector('#repair-prompt').textContent;
   if (!text) return;
-  await navigator.clipboard.writeText(text);
-  const button = event.currentTarget;
-  const old = button.textContent;
-  button.textContent = 'Copied';
-  setTimeout(() => { button.textContent = old; }, 1200);
+  try {
+    await navigator.clipboard.writeText(text);
+    const button = event.currentTarget;
+    const old = button.textContent;
+    button.textContent = 'Copied';
+    setTimeout(() => { button.textContent = old; }, 1200);
+  } catch {
+    setError('Could not copy automatically. Select the repair instruction and copy it manually.');
+  }
 });
