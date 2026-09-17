@@ -51,17 +51,19 @@ export function validateAuditBody(body) {
 }
 
 async function runAudit({ instruction, original, edited }) {
-  if (!process.env.OPENAI_API_KEY) { const error = new Error('Live AI verification is not configured yet.'); error.code = 'NO_API_KEY'; throw error; }
-  const apiResponse = await fetch('https://api.openai.com/v1/responses', {
-    method: 'POST', headers: { 'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`, 'Content-Type': 'application/json' },
+  if (!process.env.DEEPSEEK_API_KEY) { const error = new Error('Live AI verification is not configured yet.'); error.code = 'NO_API_KEY'; throw error; }
+  const apiResponse = await fetch('https://api.deepseek.com/responses', {
+    method: 'POST',
+    headers: { 'Authorization': `Bearer ${process.env.DEEPSEEK_API_KEY}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      model: process.env.OPENAI_MODEL || 'gpt-5.6-luna', reasoning: { effort: 'low' }, max_output_tokens: 1400,
+      model: process.env.DEEPSEEK_MODEL || 'deepseek-flash',
+      max_output_tokens: 1400,
       input: [{ role: 'user', content: [ { type: 'input_text', text: buildAuditPrompt(instruction) }, { type: 'input_image', image_url: original.dataUrl, detail: 'high' }, { type: 'input_image', image_url: edited.dataUrl, detail: 'high' } ] }],
-      text: { format: { type: 'json_schema', name: 'keepexact_edit_audit', strict: true, schema: auditSchema } }
+      text: { format: { type: 'json_schema', name: 'keepexact_edit_audit', schema: auditSchema } }
     })
   });
   const payload = await apiResponse.json().catch(() => ({}));
-  if (!apiResponse.ok) { const error = new Error(payload?.error?.message || `OpenAI API error ${apiResponse.status}`); error.status = apiResponse.status; throw error; }
+  if (!apiResponse.ok) { const error = new Error(payload?.error?.message || `DeepSeek API error ${apiResponse.status}`); error.status = apiResponse.status; throw error; }
   const text = payload.output?.flatMap(item => item.content || []).find(item => item.type === 'output_text')?.text;
   if (!text) throw new Error('The AI service returned an empty result.');
   return JSON.parse(text);
@@ -74,7 +76,7 @@ async function serveStatic(req, res) { const url = new URL(req.url, 'http://loca
 
 export async function requestHandler(req, res) {
   const url = new URL(req.url, 'http://localhost');
-  if (req.method === 'GET' && url.pathname === '/health') return json(res, 200, { ok: true, service: 'keepexact' });
+  if (req.method === 'GET' && url.pathname === '/health') return json(res, 200, { ok: true, service: 'keepexact', verifier: 'deepseek-flash' });
   if (req.method === 'POST' && url.pathname === '/api/audit') {
     try {
       if (!String(req.headers['content-type'] || '').startsWith('application/json')) return json(res, 415, { error: 'Unsupported request format.' });
