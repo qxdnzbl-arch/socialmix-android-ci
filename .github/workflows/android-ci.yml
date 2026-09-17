@@ -1,8 +1,8 @@
-name: SocialMix Android CI
+name: Kehua Android Acceptance
 
 on:
   push:
-    branches: [main, socialmix-chat-production-core]
+    branches: [main, socialmix-chat-production-core, kehua-firebase-auth-prod]
   workflow_dispatch:
 
 permissions:
@@ -16,15 +16,6 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
-      - name: Ensure Phase 1 auth fixtures
-        run: |
-          curl --fail-with-body -sS -X POST \
-            'https://nvwdtfnhsyfdopaxdylx.supabase.co/functions/v1/ensure-phase1-test-fixtures' \
-            -H 'Content-Type: application/json' \
-            -H 'apikey: sb_publishable_S4IE-ziO7WQ_JAK9tuQGgQ_cszwKBWB' \
-            -H 'Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im52d2R0Zm5oc3lmZG9wYXhkeWx4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODgwMTExNTcsImV4cCI6MjEwMzU4NzE1N30.wXmcZ6KIQOt-eet6ONUgl9HI1eJhJAofdf2_JPD_0Ek' \
-            -d '{}'
 
       - name: Set up Java 17
         uses: actions/setup-java@v4
@@ -62,18 +53,18 @@ jobs:
             sleep 4
             adb shell pidof com.socialmix.experiment.b
 
-      - name: Prepare deliverable APK
+      - name: Prepare Kehua APK
         if: success()
         run: |
           mkdir -p deliverable
-          cp app/build/outputs/apk/debug/app-debug.apk deliverable/SocialMix-Chat-Production-Core.apk
-          sha256sum deliverable/SocialMix-Chat-Production-Core.apk | tee deliverable/SHA256.txt
+          cp app/build/outputs/apk/debug/app-debug.apk deliverable/Kehua-Verified.apk
+          sha256sum deliverable/Kehua-Verified.apk | tee deliverable/SHA256.txt
 
-      - name: Upload verified APK
+      - name: Upload verified Kehua APK
         if: success()
         uses: actions/upload-artifact@v4
         with:
-          name: SocialMix-Chat-Production-Core-Verified
+          name: Kehua-Android-Verified
           path: deliverable/
           if-no-files-found: error
           retention-days: 14
