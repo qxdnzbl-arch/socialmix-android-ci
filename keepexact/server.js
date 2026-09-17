@@ -49,41 +49,98 @@ export function validateAuditBody(body) {
   return { instruction, original, edited };
 }
 
-async function runAudit({ instruction, original, edited }) {
-  if (!process.env.DEEPSEEK_API_KEY) { const error = new Error('Live AI verification is not configured yet.'); error.code = 'NO_API_KEY'; throw error; }
+export async function runAudit({ instruction, original, edited, includeMeta = false }) {
+  if (!process.env.DEEPSEEK_API_KEY) {
+    const error = new Error('Live AI verification is not configured yet.');
+    error.code = 'NO_API_KEY';
+    throw error;
+  }
   const apiResponse = await fetch('https://api.deepseek.com/responses', {
     method: 'POST',
     headers: { 'Authorization': `Bearer ${process.env.DEEPSEEK_API_KEY}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({
       model: process.env.DEEPSEEK_MODEL || 'deepseek-flash',
+      temperature: 0,
       max_output_tokens: 1400,
-      input: [{ role: 'user', content: [ { type: 'input_text', text: buildAuditPrompt(instruction) }, { type: 'input_image', image_url: original.dataUrl, detail: 'high' }, { type: 'input_image', image_url: edited.dataUrl, detail: 'high' } ] }],
+      input: [{ role: 'user', content: [
+        { type: 'input_text', text: buildAuditPrompt(instruction) },
+        { type: 'input_image', image_url: original.dataUrl, detail: 'high' },
+        { type: 'input_image', image_url: edited.dataUrl, detail: 'high' }
+      ] }],
       text: { format: { type: 'json_schema', name: 'keepexact_edit_audit', schema: auditSchema } }
     })
   });
   const payload = await apiResponse.json().catch(() => ({}));
-  if (!apiResponse.ok) { const error = new Error(payload?.error?.message || `DeepSeek API error ${apiResponse.status}`); error.status = apiResponse.status; throw error; }
+  if (!apiResponse.ok) {
+    const error = new Error(payload?.error?.message || `DeepSeek API error ${apiResponse.status}`);
+    error.status = apiResponse.status;
+    throw error;
+  }
   const text = payload.output?.flatMap(item => item.content || []).find(item => item.type === 'output_text')?.text;
   if (!text) throw new Error('The AI service returned an empty result.');
-  return JSON.parse(text);
+  const result = JSON.parse(text);
+  return includeMeta ? { result, usage: payload.usage || null } : result;
 }
 
-function json(res, status, payload) { const body = JSON.stringify(payload); res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Content-Length': Buffer.byteLength(body), 'Cache-Control': 'no-store' }); res.end(body); }
-async function readJson(req) { return new Promise((resolve, reject) => { let size = 0; const chunks = []; req.on('data', chunk => { size += chunk.length; if (size > MAX_JSON_BYTES) { const error = new Error('Request too large.'); error.code = 'TOO_LARGE'; reject(error); req.destroy(); return; } chunks.push(chunk); }); req.on('end', () => { try { resolve(JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}')); } catch { reject(new Error('Invalid JSON.')); } }); req.on('error', reject); }); }
+function json(res, status, payload) {
+  const body = JSON.stringify(payload);
+  res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Content-Length': Buffer.byteLength(body), 'Cache-Control': 'no-store' });
+  res.end(body);
+}
+
+async function readJson(req) {
+  return new Promise((resolve, reject) => {
+    let size = 0;
+    const chunks = [];
+    req.on('data', chunk => {
+      size += chunk.length;
+      if (size > MAX_JSON_BYTES) {
+        const error = new Error('Request too large.');
+        error.code = 'TOO_LARGE';
+        reject(error);
+        req.destroy();
+        return;
+      }
+      chunks.push(chunk);
+    });
+    req.on('end', () => {
+      try { resolve(JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}')); }
+      catch { reject(new Error('Invalid JSON.')); }
+    });
+    req.on('error', reject);
+  });
+}
+
 const MIME = { '.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.ico': 'image/x-icon' };
-async function serveStatic(req, res) { const url = new URL(req.url, 'http://localhost'); const requested = url.pathname === '/' ? '/index.html' : url.pathname; const normalized = path.normalize(requested).replace(/^(\.\.[/\\])+/, ''); const filePath = path.join(publicDir, normalized); if (!filePath.startsWith(publicDir)) return false; try { const data = await readFile(filePath); const ext = path.extname(filePath).toLowerCase(); res.writeHead(200, { 'Content-Type': MIME[ext] || 'application/octet-stream', 'Content-Length': data.length, 'Cache-Control': process.env.NODE_ENV === 'production' ? 'public, max-age=3600' : 'no-cache' }); res.end(data); return true; } catch { return false; } }
+
+async function serveStatic(req, res) {
+  const url = new URL(req.url, 'http://localhost');
+  const requested = url.pathname === '/' ? '/index.html' : url.pathname;
+  const normalized = path.normalize(requested).replace(/^(\.\.[/\\])+/, '');
+  const filePath = path.join(publicDir, normalized);
+  if (!filePath.startsWith(publicDir)) return false;
+  try {
+    const data = await readFile(filePath);
+    const ext = path.extname(filePath).toLowerCase();
+    res.writeHead(200, { 'Content-Type': MIME[ext] || 'application/octet-stream', 'Content-Length': data.length, 'Cache-Control': process.env.NODE_ENV === 'production' ? 'public, max-age=3600' : 'no-cache' });
+    res.end(data);
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 export async function requestHandler(req, res) {
   const url = new URL(req.url, 'http://localhost');
-  if (req.method === 'GET' && url.pathname === '/health') return json(res, 200, { ok: true, service: 'keepexact', verifier: 'deepseek-flash', live: Boolean(process.env.DEEPSEEK_API_KEY) });
-  if (req.method === 'POST' && url.pathname === '/api/interest') {
-    console.log('interest_signal', JSON.stringify({ at: new Date().toISOString() }));
-    return json(res, 200, { ok: true, message: 'Anonymous interest signal recorded. No payment or reservation was created.' });
+  if (req.method === 'GET' && url.pathname === '/health') {
+    return json(res, 200, { ok: true, service: 'keepexact', verifier: 'deepseek-flash', live: Boolean(process.env.DEEPSEEK_API_KEY) });
   }
   if (req.method === 'POST' && url.pathname === '/api/audit') {
     try {
       if (!String(req.headers['content-type'] || '').startsWith('application/json')) return json(res, 415, { error: 'Unsupported request format.' });
-      const body = await readJson(req); const validated = validateAuditBody(body); if (validated.error) return json(res, 400, { error: validated.error });
+      const body = await readJson(req);
+      const validated = validateAuditBody(body);
+      if (validated.error) return json(res, 400, { error: validated.error });
       return json(res, 200, await runAudit(validated));
     } catch (error) {
       if (error?.code === 'TOO_LARGE') return json(res, 413, { error: 'The upload is too large.' });
@@ -98,4 +155,16 @@ export async function requestHandler(req, res) {
 
 export const app = http.createServer(requestHandler);
 const isMain = process.argv[1] && path.resolve(process.argv[1]) === __filename;
-if (isMain) app.listen(port, '0.0.0.0', () => console.log(`KeepExact listening on http://0.0.0.0:${port}`));
+if (isMain) {
+  app.listen(port, '0.0.0.0', async () => {
+    console.log(`KeepExact listening on http://0.0.0.0:${port}`);
+    if (process.env.INTERNAL_BENCHMARK === '1') {
+      try {
+        const { runLiveBenchmark } = await import('./benchmark-live.js');
+        await runLiveBenchmark();
+      } catch (error) {
+        console.error('live_benchmark_fatal', String(error?.message || error).slice(0, 500));
+      }
+    }
+  });
+}
