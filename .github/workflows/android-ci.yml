@@ -38,7 +38,7 @@ jobs:
         run: |
           if [ -e /dev/kvm ]; then sudo chmod 666 /dev/kvm; fi
 
-      - name: Android emulator acceptance tests
+      - name: Android emulator Kehua acceptance tests
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 35
@@ -49,7 +49,7 @@ jobs:
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none
           script: |
             adb uninstall com.qxdnzbl.kehua || true
-            gradle --no-daemon :app:connectedDebugAndroidTest
+            gradle --no-daemon :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.suisuinian.app.KehuaReleaseAcceptanceTest
             adb install -r app/build/outputs/apk/debug/app-debug.apk
             adb shell am force-stop com.qxdnzbl.kehua || true
             adb shell monkey -p com.qxdnzbl.kehua -c android.intent.category.LAUNCHER 1
