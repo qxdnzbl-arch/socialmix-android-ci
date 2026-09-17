@@ -82,8 +82,14 @@ jobs:
       - name: Generate app icon
         shell: bash
         run: |
-          python3 -m pip install --quiet 'pillow==11.3.0'
-          python3 - <<'PY'
+          python3 -m venv .icon-venv
+          if [ "${{ runner.os }}" = "Windows" ]; then
+            PY=.icon-venv/Scripts/python.exe
+          else
+            PY=.icon-venv/bin/python
+          fi
+          "$PY" -m pip install --quiet 'pillow==11.3.0'
+          "$PY" - <<'PY'
           from PIL import Image, ImageDraw
           from pathlib import Path
           Path('build').mkdir(exist_ok=True)
