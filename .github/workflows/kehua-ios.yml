@@ -1,0 +1,106 @@
+name: Kehua iPhone iPad Client
+
+on:
+  push:
+    branches: [kehua-public-release]
+    paths:
+      - 'multiplatform/ios/**'
+      - '.github/workflows/kehua-ios.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-launch:
+    runs-on: macos-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: multiplatform/ios
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate production icon
+        run: |
+          python3 -m pip install --quiet 'pillow==11.3.0'
+          python3 - <<'PY'
+          from PIL import Image, ImageDraw
+          from pathlib import Path
+          p=Path('Kehua/Assets.xcassets/AppIcon.appiconset/icon-1024.png')
+          p.parent.mkdir(parents=True,exist_ok=True)
+          img=Image.new('RGB',(1024,1024),(244,243,248))
+          d=ImageDraw.Draw(img)
+          d.rounded_rectangle((88,88,936,936),radius=224,fill=(255,255,255),outline=(226,224,232),width=12)
+          d.rounded_rectangle((236,280,788,652),radius=144,fill=(35,35,40))
+          d.polygon([(580,624),(688,624),(636,740)],fill=(35,35,40))
+          for x in (380,512,644): d.ellipse((x-26,440,x+26,492),fill=(244,243,248))
+          img.save(p)
+          PY
+
+      - name: Generate Xcode project
+        run: xcodegen generate
+
+      - name: Compile universal iPhone iPad app
+        run: |
+          xcodebuild \
+            -project Kehua.xcodeproj \
+            -scheme Kehua \
+            -configuration Release \
+            -sdk iphonesimulator \
+            -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath build/DerivedData \
+            CODE_SIGNING_ALLOWED=NO \
+            clean build
+          APP_PATH=$(find build/DerivedData/Build/Products -path '*Release-iphonesimulator/Kehua.app' -print -quit)
+          test -n "$APP_PATH"
+          echo "APP_PATH=$APP_PATH" >> "$GITHUB_ENV"
+          plutil -lint "$APP_PATH/Info.plist"
+
+      - name: Launch on iPhone and iPad
+        run: |
+          mkdir -p artifacts
+          python3 - <<'PY' > /tmp/sim.env
+          import json,subprocess
+          runtimes=json.loads(subprocess.check_output(['xcrun','simctl','list','runtimes','-j']))['runtimes']
+          ios=[x for x in runtimes if x.get('isAvailable') and x['name'].startswith('iOS')]
+          runtime=ios[-1]['identifier']
+          types=json.loads(subprocess.check_output(['xcrun','simctl','list','devicetypes','-j']))['devicetypes']
+          iph=[x for x in types if x['name'].startswith('iPhone') and 'SE' not in x['name']]
+          ipa=[x for x in types if x['name'].startswith('iPad')]
+          print('RUNTIME='+runtime)
+          print('IPHONE_TYPE='+iph[-1]['identifier'])
+          print('IPAD_TYPE='+ipa[-1]['identifier'])
+          PY
+          source /tmp/sim.env
+          for SPEC in "iphone:$IPHONE_TYPE" "ipad:$IPAD_TYPE"; do
+            NAME=${SPEC%%:*}
+            TYPE=${SPEC#*:}
+            UDID=$(xcrun simctl create "Kehua-$NAME" "$TYPE" "$RUNTIME")
+            xcrun simctl boot "$UDID"
+            xcrun simctl bootstatus "$UDID" -b
+            xcrun simctl install "$UDID" "$APP_PATH"
+            xcrun simctl launch "$UDID" com.qxdnzbl.kehua | tee "artifacts/$NAME-launch.txt"
+            sleep 12
+            xcrun simctl io "$UDID" screenshot "artifacts/Kehua-$NAME.png"
+            test -s "artifacts/Kehua-$NAME.png"
+            xcrun simctl shutdown "$UDID" || true
+            xcrun simctl delete "$UDID" || true
+          done
+
+      - name: Package simulator build
+        run: |
+          ditto -c -k --sequesterRsrc --keepParent "$APP_PATH" artifacts/Kehua-iPhone-iPad-Simulator.app.zip
+          shasum -a 256 artifacts/Kehua-iPhone-iPad-Simulator.app.zip > artifacts/SHA256.txt
+
+      - name: Upload iPhone iPad verified build
+        uses: actions/upload-artifact@v4
+        with:
+          name: Kehua-iPhone-iPad-Verified
+          path: multiplatform/ios/artifacts/
+          if-no-files-found: error
+          retention-days: 14
