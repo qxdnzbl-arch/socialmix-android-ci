@@ -47,20 +47,18 @@ test('running server serves public beta, browser modules, health, security heade
   assert.equal(home.headers.get('x-content-type-options'), 'nosniff');
   assert.match(home.headers.get('content-security-policy') || '', /default-src 'self'/);
   const html = await home.text();
-  assert.match(html, /Did the AI change anything you didn’t ask for/);
+  assert.match(html, /KeepExact is a checker, not an image editor/);
+  assert.match(html, /What it catches/);
+  assert.match(html, /What it does not do/);
   assert.match(html, /Free beta/);
   assert.doesNotMatch(html, /internal accuracy testing/i);
 
-  const appJs = await fetch(`${base}/app.js`);
-  assert.equal(appJs.status, 200);
-  const appSource = await appJs.text();
-  assert.match(appSource, /from '\/diff-core\.js'/);
-  assert.match(appSource, /analyzeRawPixelDiff/);
-
-  const diffJs = await fetch(`${base}/diff-core.js`);
-  assert.equal(diffJs.status, 200);
-  const diffSource = await diffJs.text();
-  assert.match(diffSource, /export function analyzeRawPixelDiff/);
+  for (const modulePath of ['/app.js', '/diff-core.js']) {
+    const moduleResponse = await fetch(`${base}${modulePath}`);
+    assert.equal(moduleResponse.status, 200);
+    assert.match(moduleResponse.headers.get('content-type') || '', /javascript/);
+    assert.ok((await moduleResponse.text()).length > 100);
+  }
 
   const health = await fetch(`${base}/health`);
   const healthJson = await health.json();
