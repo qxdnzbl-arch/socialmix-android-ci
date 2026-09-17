@@ -1,0 +1,52 @@
+{
+  "name": "kehua-desktop",
+  "version": "1.0.0",
+  "description": "可话 Windows / macOS 正式桌面客户端",
+  "main": "main.js",
+  "author": "Kehua",
+  "license": "UNLICENSED",
+  "private": true,
+  "scripts": {
+    "start": "electron .",
+    "dist:win": "electron-builder --win nsis portable --x64",
+    "dist:mac": "electron-builder --mac dmg zip --universal"
+  },
+  "devDependencies": {
+    "electron": "44.4.1",
+    "electron-builder": "26.16.1"
+  },
+  "build": {
+    "appId": "com.qxdnzbl.kehua.desktop",
+    "productName": "可话",
+    "asar": true,
+    "files": [
+      "main.js",
+      "offline.html",
+      "package.json"
+    ],
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "win": {
+      "icon": "build/icon.png",
+      "artifactName": "Kehua-Windows-${version}-${arch}.${ext}",
+      "target": ["nsis", "portable"]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "可话"
+    },
+    "mac": {
+      "icon": "build/icon.png",
+      "category": "public.app-category.social-networking",
+      "artifactName": "Kehua-macOS-${version}-${arch}.${ext}",
+      "target": ["dmg", "zip"],
+      "hardenedRuntime": true,
+      "gatekeeperAssess": false
+    }
+  }
+}
