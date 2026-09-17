@@ -42,7 +42,16 @@ auth_block = '''    fun isFirebaseConfigured(): Boolean = true
                 saveSession(result)
                 KehuaAuthResult(true)
             } else {
-                KehuaAuthResult(true, needsVerification = true, message = "确认邮件已经发送。验证邮箱后回来登录。")
+                val user = result.optJSONObject("user")
+                val identities = user?.optJSONArray("identities")
+                when {
+                    identities != null && identities.length() == 0 ->
+                        KehuaAuthResult(false, message = "这个邮箱已经注册过了，直接登录即可")
+                    user == null || user.optString("id").isBlank() ->
+                        KehuaAuthResult(false, message = "注册没有完成，请重新提交")
+                    else ->
+                        KehuaAuthResult(true, needsVerification = true, message = "确认邮件已经发送。验证邮箱后回来登录。")
+                }
             }
         } catch (e: Exception) {
             KehuaAuthResult(false, message = authError(e))
@@ -109,6 +118,7 @@ text = text.split(tail_marker, 1)[0] + '''    private fun authError(e: Exception
             raw.contains("invalid login credentials") || raw.contains("invalid_credentials") || raw.contains("email or password") -> "邮箱或密码不对"
             raw.contains("already registered") || raw.contains("user already registered") -> "这个邮箱已经有账号了，直接登录即可"
             raw.contains("email not confirmed") -> "这个邮箱还没完成验证，请先打开确认邮件"
+            raw.contains("email address not authorized") || raw.contains("not authorized") -> "当前确认邮件服务还没配置好，暂时无法给这个邮箱发送邮件"
             raw.contains("rate") || raw.contains("too many") -> "操作太频繁了，请稍后再试"
             raw.contains("network") || raw.contains("timeout") || raw.contains("failed to connect") -> "网络连接失败，请稍后再试"
             else -> e.message?.takeIf { it.isNotBlank() } ?: "暂时无法完成，请稍后再试"
