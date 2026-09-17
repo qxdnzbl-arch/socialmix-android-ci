@@ -36,7 +36,7 @@ test('schema requires all top-level result fields', () => {
   assert.equal(auditSchema.additionalProperties, false);
 });
 
-test('running server serves internal home, health, and no-key path without spending API credit', async t => {
+test('running server serves public beta, health, security headers, and no-key path without spending API credit', async t => {
   const { app } = await import('../server.js');
   await new Promise(resolve => app.listen(0, '127.0.0.1', resolve));
   t.after(() => new Promise(resolve => app.close(resolve)));
@@ -44,15 +44,19 @@ test('running server serves internal home, health, and no-key path without spend
 
   const home = await fetch(`${base}/`);
   assert.equal(home.status, 200);
+  assert.equal(home.headers.get('x-content-type-options'), 'nosniff');
+  assert.match(home.headers.get('content-security-policy') || '', /default-src 'self'/);
   const html = await home.text();
-  assert.match(html, /Internal verification prototype/);
-  assert.match(html, /not for sale/);
+  assert.match(html, /Did the AI change anything you didn’t ask for/);
+  assert.match(html, /Free beta/);
+  assert.doesNotMatch(html, /internal accuracy testing/i);
 
   const health = await fetch(`${base}/health`);
   const healthJson = await health.json();
   assert.equal(healthJson.ok, true);
   assert.equal(healthJson.service, 'keepexact');
   assert.equal(healthJson.verifier, 'deepseek-flash');
+  assert.equal(healthJson.beta, true);
   assert.equal(typeof healthJson.live, 'boolean');
 
   const missing = await fetch(`${base}/api/audit`, {
