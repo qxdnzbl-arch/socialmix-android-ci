@@ -26,13 +26,37 @@ test('one localized requested region is not suspicious', () => {
   assert.equal(r.significantComponents, 1);
 });
 
-test('two separate regions under a one-target instruction are suspicious', () => {
+test('extra separate region under a one-target instruction is suspicious', () => {
   const a = image(), b = image();
   rect(b, 8, 8, 22, 22, [20, 80, 220]);
   rect(b, 45, 45, 55, 55, [20, 160, 60]);
   const r = analyzeRawPixelDiff(a, b, W, H, 'Change only the shirt color. Keep everything else unchanged.');
   assert.equal(r.suspicious, true);
-  assert.match(r.reasons.join(' '), /multiple separate regions/);
+  assert.match(r.reasons.join(' '), /more separate changed regions/);
+});
+
+test('move instruction allows old and new object footprints', () => {
+  const a = image(), b = image();
+  rect(a, 40, 40, 48, 48, [220, 20, 20]);
+  rect(b, 15, 40, 23, 48, [220, 20, 20]);
+  const r = analyzeRawPixelDiff(a, b, W, H, 'Move only the red cup to the left. Keep everything else unchanged.');
+  assert.equal(r.suspicious, false);
+  assert.equal(r.expectedChangedRegions, 2);
+});
+
+test('two requested edits allow two changed regions', () => {
+  const a = image(), b = image();
+  rect(b, 8, 8, 20, 20, [20, 80, 220]);
+  rect(b, 42, 42, 54, 54, [20, 160, 60]);
+  const r = analyzeRawPixelDiff(a, b, W, H, 'Change the shirt color and remove the cup. Keep everything else unchanged.');
+  assert.equal(r.suspicious, false);
+  assert.equal(r.expectedChangedRegions, 2);
+});
+
+test('broad background edit is not rejected merely for changing many pixels', () => {
+  const a = image([240, 235, 220]), b = image([200, 225, 245]);
+  const r = analyzeRawPixelDiff(a, b, W, H, 'Change only the wall background from beige to light blue. Keep everything else unchanged.');
+  assert.equal(r.suspicious, false);
 });
 
 test('no-change instruction flags any material change', () => {
