@@ -25,7 +25,7 @@ export const auditSchema = {
 };
 
 export function buildAuditPrompt(instruction) {
-  return `You are KeepExact, an independent quality-control verifier for AI image edits.\n\nThe user gave an image editor this instruction:\n\"\"\"${instruction}\"\"\"\n\nImage 1 is BEFORE (original).\nImage 2 is AFTER (edited).\n\nYour job:\n1. Decompose the user's instruction into concrete requested changes.\n2. Check whether each requested change was completed.\n3. Compare BEFORE and AFTER for material changes the user did NOT request. Check identity/face, body/pose, hairstyle, clothing, accessories, objects, text/logos/numbers, composition/crop, background structure, colors, lighting, and other visible details when relevant.\n4. Do not flag necessary local side effects that are clearly required to perform the requested edit, unless they materially alter unrelated content.\n5. Use PASS only when the requested edit is complete and you see no material unintended change. Use FAIL when a clear material unintended change exists or a requested change clearly failed. Use REVIEW when the evidence is genuinely ambiguous.\n6. The score is instruction compliance, not visual quality.\n7. The repair prompt must be directly reusable with an image editor. It must state what to fix and explicitly preserve unaffected content. If verdict is PASS, repair_prompt should say no repair is needed.\n8. Be conservative about claiming tiny details you cannot reliably see; use REVIEW rather than inventing certainty.`;
+  return `You are KeepExact, an independent quality-control verifier for AI image edits.\n\nThe user gave an image editor this instruction:\n\"\"\"${instruction}\"\"\"\n\nImage 1 is BEFORE (original).\nImage 2 is AFTER (edited).\n\nYour job:\n1. Decompose the user's instruction into concrete requested changes.\n2. Check whether each requested change was completed.\n3. Compare BEFORE and AFTER for material changes the user did NOT request. Check identity/face, body/pose, hairstyle, clothing, accessories, objects, text/logos/numbers, composition/crop, background structure, colors, lighting, and other visible details when relevant.\n4. Do not flag necessary local side effects that are clearly required to perform the requested edit, unless they materially alter unrelated content.\n5. Use PASS only when the requested edit is complete and you see no material unintended change. Use FAIL when a clear material unintended change exists or a requested change clearly failed. Use REVIEW when the evidence is genuinely ambiguous.\n6. The score is instruction compliance, not visual quality.\n7. The repair prompt must be directly reusable with an image editor. It must state what to fix and explicitly preserve unaffected content. If verdict is PASS, repair_prompt should say no repair is needed.\n8. Be conservative about claiming tiny details you cannot reliably see; use REVIEW rather than inventing certainty.\n9. Keep the JSON concise: summary <= 35 words; each evidence/change/why_it_matters <= 25 words; repair_prompt <= 70 words. Do not repeat the same point in multiple fields.`;
 }
 
 function parseDataUrl(value) {
@@ -49,19 +49,14 @@ export function validateAuditBody(body) {
   return { instruction, original, edited };
 }
 
-export async function runAudit({ instruction, original, edited, includeMeta = false }) {
-  if (!process.env.DEEPSEEK_API_KEY) {
-    const error = new Error('Live AI verification is not configured yet.');
-    error.code = 'NO_API_KEY';
-    throw error;
-  }
+async function callDeepSeek({ instruction, original, edited }) {
   const apiResponse = await fetch('https://api.deepseek.com/responses', {
     method: 'POST',
     headers: { 'Authorization': `Bearer ${process.env.DEEPSEEK_API_KEY}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({
       model: process.env.DEEPSEEK_MODEL || 'deepseek-flash',
       temperature: 0,
-      max_output_tokens: 1400,
+      max_output_tokens: 2600,
       input: [{ role: 'user', content: [
         { type: 'input_text', text: buildAuditPrompt(instruction) },
         { type: 'input_image', image_url: original.dataUrl, detail: 'high' },
@@ -77,9 +72,38 @@ export async function runAudit({ instruction, original, edited, includeMeta = fa
     throw error;
   }
   const text = payload.output?.flatMap(item => item.content || []).find(item => item.type === 'output_text')?.text;
-  if (!text) throw new Error('The AI service returned an empty result.');
-  const result = JSON.parse(text);
-  return includeMeta ? { result, usage: payload.usage || null } : result;
+  return { payload, text };
+}
+
+export async function runAudit({ instruction, original, edited, includeMeta = false }) {
+  if (!process.env.DEEPSEEK_API_KEY) {
+    const error = new Error('Live AI verification is not configured yet.');
+    error.code = 'NO_API_KEY';
+    throw error;
+  }
+
+  let lastError = null;
+  let totalInputTokens = 0;
+  let totalOutputTokens = 0;
+
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    try {
+      const { payload, text } = await callDeepSeek({ instruction, original, edited });
+      totalInputTokens += Number(payload?.usage?.input_tokens || 0);
+      totalOutputTokens += Number(payload?.usage?.output_tokens || 0);
+      if (payload?.status === 'incomplete') throw new Error(`DeepSeek response incomplete: ${payload?.incomplete_details?.reason || 'unknown reason'}`);
+      if (!text) throw new Error('The AI service returned an empty result.');
+      const result = JSON.parse(text);
+      return includeMeta
+        ? { result, usage: { input_tokens: totalInputTokens, output_tokens: totalOutputTokens, attempts: attempt } }
+        : result;
+    } catch (error) {
+      lastError = error;
+      if (error?.status && error.status >= 400 && error.status < 500 && error.status !== 408 && error.status !== 429) break;
+      if (attempt < 3) await new Promise(resolve => setTimeout(resolve, 250 * attempt));
+    }
+  }
+  throw lastError || new Error('Verification failed.');
 }
 
 function json(res, status, payload) {
