@@ -3,102 +3,43 @@ import { runAudit } from './server.js';
 import { analyzeRawPixelDiff } from './diff-core.js';
 
 const W = 256, H = 256;
+function crc32(buffer){let c=0xffffffff;for(const byte of buffer){c^=byte;for(let k=0;k<8;k++)c=(c>>>1)^(0xedb88320&-(c&1));}return(c^0xffffffff)>>>0;}
+function chunk(type,data){const t=Buffer.from(type),out=Buffer.alloc(12+data.length);out.writeUInt32BE(data.length,0);t.copy(out,4);data.copy(out,8);out.writeUInt32BE(crc32(Buffer.concat([t,data])),8+data.length);return out;}
+function makePng(drawFn){const pixels=Buffer.alloc(W*H*4,255);const set=(x,y,rgb)=>{if(x<0||y<0||x>=W||y>=H)return;const i=(y*W+x)*4;pixels[i]=rgb[0];pixels[i+1]=rgb[1];pixels[i+2]=rgb[2];pixels[i+3]=255;};const rect=(x1,y1,x2,y2,rgb)=>{for(let y=y1;y<=y2;y++)for(let x=x1;x<=x2;x++)set(x,y,rgb);};const circle=(cx,cy,r,rgb)=>{for(let y=cy-r;y<=cy+r;y++)for(let x=cx-r;x<=cx+r;x++)if((x-cx)**2+(y-cy)**2<=r**2)set(x,y,rgb);};drawFn({rect,circle,set});const raw=Buffer.alloc((W*4+1)*H);for(let y=0;y<H;y++){const row=y*(W*4+1);raw[row]=0;pixels.copy(raw,row+1,y*W*4,(y+1)*W*4);}const ihdr=Buffer.alloc(13);ihdr.writeUInt32BE(W,0);ihdr.writeUInt32BE(H,4);ihdr[8]=8;ihdr[9]=6;const png=Buffer.concat([Buffer.from([137,80,78,71,13,10,26,10]),chunk('IHDR',ihdr),chunk('IDAT',deflateSync(raw)),chunk('IEND',Buffer.alloc(0))]);return{dataUrl:`data:image/png;base64,${png.toString('base64')}`,pixels};}
 
-function crc32(buffer) {
-  let c = 0xffffffff;
-  for (const byte of buffer) {
-    c ^= byte;
-    for (let k = 0; k < 8; k++) c = (c >>> 1) ^ (0xedb88320 & -(c & 1));
-  }
-  return (c ^ 0xffffffff) >>> 0;
-}
+const C={blue:[50,110,220],white:[245,245,245],green:[40,160,80],red:[210,45,50],skin:[238,198,168],altSkin:[175,225,190],bg:[244,241,234],blueBg:[205,232,250],yellowBg:[250,235,170]};
+function scene({cup=true,cupX=132,cupColor=C.red,shirt=C.blue,face=C.skin,shift=0,bg=C.bg,plant=true,poster=true,posterColor=[40,40,40]}={}){return makePng(({rect,circle})=>{rect(0,0,255,179,bg);rect(0,180,255,255,[210,185,150]);circle(72+shift,66,30,face);circle(61+shift,59,3,[20,20,20]);circle(83+shift,59,3,[20,20,20]);rect(42+shift,96,108+shift,172,shirt);if(poster){rect(148+shift,22,235+shift,52,posterColor);rect(158+shift,30,225+shift,44,[245,245,245]);}if(plant){rect(190+shift,132,211+shift,178,[125,85,50]);circle(188+shift,124,14,[70,155,80]);circle(211+shift,122,14,[60,145,75]);}if(cup){rect(cupX+shift,144,cupX+26+shift,176,cupColor);rect(cupX-3+shift,140,cupX+29+shift,147,cupColor.map(v=>Math.min(255,v+25)));}});}
+const c=(name,expected,instruction,original,edited)=>({name,expected,instruction,original,edited});
+const cases=[
+ c('remove_cup_clean','PASS','Remove the red cup on the counter. Keep the person, face, shirt, plant, poster, composition, background, colors, and everything else unchanged.',scene({cup:true}),scene({cup:false})),
+ c('remove_cup_face_changed','FAIL','Remove the red cup on the counter. Keep the person, face, shirt, plant, poster, composition, background, colors, and everything else unchanged.',scene({cup:true}),scene({cup:false,face:C.altSkin})),
+ c('remove_cup_composition_shift','FAIL','Remove the red cup on the counter. Keep the composition and everything else unchanged.',scene({cup:true}),scene({cup:false,shift:14})),
+ c('remove_cup_background_changed','FAIL','Remove the red cup. Keep the background color, lighting and everything else unchanged.',scene({cup:true}),scene({cup:false,bg:C.blueBg})),
+ c('remove_cup_plant_removed','FAIL','Remove only the red cup. Keep the plant and everything else unchanged.',scene({cup:true,plant:true}),scene({cup:false,plant:false})),
+ c('remove_cup_not_done','FAIL','Remove the red cup on the counter and change nothing else.',scene({cup:true}),scene({cup:true})),
 
-function chunk(type, data) {
-  const t = Buffer.from(type);
-  const out = Buffer.alloc(12 + data.length);
-  out.writeUInt32BE(data.length, 0);
-  t.copy(out, 4);
-  data.copy(out, 8);
-  out.writeUInt32BE(crc32(Buffer.concat([t, data])), 8 + data.length);
-  return out;
-}
+ c('shirt_blue_to_white_clean','PASS','Change only the shirt from blue to white. Keep the face, cup, plant, poster, composition, background and everything else unchanged.',scene({shirt:C.blue}),scene({shirt:C.white})),
+ c('shirt_extra_plant_removed','FAIL','Change only the shirt from blue to white. Keep the face, cup, plant, poster, composition, background and everything else unchanged.',scene({shirt:C.blue,plant:true}),scene({shirt:C.white,plant:false})),
+ c('shirt_extra_background_changed','FAIL','Change only the shirt from blue to white. Keep the background and everything else unchanged.',scene({shirt:C.blue,bg:C.bg}),scene({shirt:C.white,bg:C.yellowBg})),
+ c('shirt_not_changed','FAIL','Change only the shirt from blue to white. Keep everything else unchanged.',scene({shirt:C.blue}),scene({shirt:C.blue})),
 
-function makePng(drawFn) {
-  const pixels = Buffer.alloc(W * H * 4, 255);
-  const set = (x, y, rgb) => {
-    if (x < 0 || y < 0 || x >= W || y >= H) return;
-    const i = (y * W + x) * 4;
-    pixels[i] = rgb[0]; pixels[i + 1] = rgb[1]; pixels[i + 2] = rgb[2]; pixels[i + 3] = 255;
-  };
-  const rect = (x1, y1, x2, y2, rgb) => { for (let y = y1; y <= y2; y++) for (let x = x1; x <= x2; x++) set(x, y, rgb); };
-  const circle = (cx, cy, r, rgb) => {
-    for (let y = cy - r; y <= cy + r; y++) for (let x = cx - r; x <= cx + r; x++) if ((x - cx) ** 2 + (y - cy) ** 2 <= r ** 2) set(x, y, rgb);
-  };
-  drawFn({ rect, circle, set });
-  const raw = Buffer.alloc((W * 4 + 1) * H);
-  for (let y = 0; y < H; y++) {
-    const row = y * (W * 4 + 1);
-    raw[row] = 0;
-    pixels.copy(raw, row + 1, y * W * 4, (y + 1) * W * 4);
-  }
-  const ihdr = Buffer.alloc(13);
-  ihdr.writeUInt32BE(W, 0); ihdr.writeUInt32BE(H, 4); ihdr[8] = 8; ihdr[9] = 6;
-  const png = Buffer.concat([Buffer.from([137,80,78,71,13,10,26,10]), chunk('IHDR', ihdr), chunk('IDAT', deflateSync(raw)), chunk('IEND', Buffer.alloc(0))]);
-  return { dataUrl: `data:image/png;base64,${png.toString('base64')}`, pixels };
-}
+ c('remove_plant_clean','PASS','Remove only the green plant on the right. Keep the person, cup, poster, background and everything else unchanged.',scene({plant:true}),scene({plant:false})),
+ c('remove_plant_extra_cup_removed','FAIL','Remove only the green plant on the right. Keep the red cup and everything else unchanged.',scene({plant:true,cup:true}),scene({plant:false,cup:false})),
+ c('remove_plant_person_shifted','FAIL','Remove the green plant. Keep the person and composition unchanged.',scene({plant:true}),scene({plant:false,shift:12})),
 
-function scene({ cup = true, shirt = [50,110,220], face = [238,198,168], shift = 0, bg = [244,241,234], plant = true } = {}) {
-  return makePng(({ rect, circle }) => {
-    rect(0, 0, 255, 179, bg); rect(0, 180, 255, 255, [210,185,150]);
-    circle(72 + shift, 66, 30, face); circle(61 + shift, 59, 3, [20,20,20]); circle(83 + shift, 59, 3, [20,20,20]);
-    rect(42 + shift, 96, 108 + shift, 172, shirt);
-    rect(148 + shift, 22, 235 + shift, 52, [40,40,40]); rect(158 + shift, 30, 225 + shift, 44, [245,245,245]);
-    if (plant) { rect(190 + shift, 132, 211 + shift, 178, [125,85,50]); circle(188 + shift, 124, 14, [70,155,80]); circle(211 + shift, 122, 14, [60,145,75]); }
-    if (cup) { rect(132 + shift, 144, 158 + shift, 176, [210,45,50]); rect(129 + shift, 140, 161 + shift, 147, [235,75,80]); }
-  });
-}
+ c('background_to_blue_clean','PASS','Change only the wall background from beige to light blue. Keep the person, shirt, cup, plant, poster and composition unchanged.',scene({bg:C.bg}),scene({bg:C.blueBg})),
+ c('background_to_blue_shirt_changed','FAIL','Change only the wall background from beige to light blue. Keep the shirt and everything else unchanged.',scene({bg:C.bg,shirt:C.blue}),scene({bg:C.blueBg,shirt:C.white})),
+ c('background_to_blue_cup_removed','FAIL','Change only the wall background from beige to light blue. Keep the red cup and everything else unchanged.',scene({bg:C.bg,cup:true}),scene({bg:C.blueBg,cup:false})),
 
-const cases = [
-  { name:'remove_cup_clean', expected:'PASS', instruction:'Remove the red cup on the counter. Keep the person, face, shirt, plant, composition, background, colors, and everything else unchanged.', original:scene({cup:true}), edited:scene({cup:false}) },
-  { name:'remove_cup_face_changed', expected:'FAIL', instruction:'Remove the red cup on the counter. Keep the person, face, shirt, plant, composition, background, colors, and everything else unchanged.', original:scene({cup:true}), edited:scene({cup:false,face:[175,225,190]}) },
-  { name:'remove_cup_composition_shift', expected:'FAIL', instruction:'Remove the red cup on the counter. Keep the composition and everything else unchanged.', original:scene({cup:true}), edited:scene({cup:false,shift:14}) },
-  { name:'shirt_blue_to_white', expected:'PASS', instruction:'Change only the shirt from blue to white. Keep the face, cup, plant, composition, background and everything else unchanged.', original:scene({shirt:[50,110,220]}), edited:scene({shirt:[245,245,245]}) },
-  { name:'shirt_extra_plant_removed', expected:'FAIL', instruction:'Change only the shirt from blue to white. Keep the face, cup, plant, composition, background and everything else unchanged.', original:scene({shirt:[50,110,220],plant:true}), edited:scene({shirt:[245,245,245],plant:false}) },
-  { name:'remove_cup_not_done', expected:'FAIL', instruction:'Remove the red cup on the counter and change nothing else.', original:scene({cup:true}), edited:scene({cup:true}) },
-  { name:'remove_cup_background_changed', expected:'FAIL', instruction:'Remove the red cup on the counter. Keep the background color, lighting and everything else unchanged.', original:scene({cup:true,bg:[244,241,234]}), edited:scene({cup:false,bg:[205,232,250]}) },
-  { name:'no_requested_change_but_plant_removed', expected:'FAIL', instruction:'Do not change the image. Keep every visible element exactly the same.', original:scene({plant:true}), edited:scene({plant:false}) }
+ c('do_nothing_clean','PASS','Do not change the image. Keep every visible element exactly the same.',scene(),scene()),
+ c('do_nothing_face_changed','FAIL','Do not change the image. Keep every visible element exactly the same.',scene({face:C.skin}),scene({face:C.altSkin})),
+ c('do_nothing_poster_removed','FAIL','Do not change the image. Keep every visible element exactly the same.',scene({poster:true}),scene({poster:false})),
+
+ c('cup_red_to_green_clean','PASS','Change only the cup color from red to green. Keep its position, size, person, plant, background and everything else unchanged.',scene({cupColor:C.red}),scene({cupColor:C.green})),
+ c('cup_red_to_green_face_changed','FAIL','Change only the cup color from red to green. Keep the face and everything else unchanged.',scene({cupColor:C.red,face:C.skin}),scene({cupColor:C.green,face:C.altSkin})),
+ c('cup_move_left_clean','PASS','Move only the red cup about 30 pixels to the left. Keep its size and all other visible elements unchanged.',scene({cupX:132}),scene({cupX:102})),
+ c('cup_move_left_plant_removed','FAIL','Move only the red cup about 30 pixels to the left. Keep the green plant and all other visible elements unchanged.',scene({cupX:132,plant:true}),scene({cupX:102,plant:false})),
+ c('two_requested_edits_clean','PASS','Change the shirt from blue to white and remove the red cup. Keep the face, plant, poster, background and composition unchanged.',scene({shirt:C.blue,cup:true}),scene({shirt:C.white,cup:false}))
 ];
 
-export async function runLiveBenchmark() {
-  const started = Date.now();
-  let exactCorrect = 0, safeCorrect = 0, unsafePasses = 0, inputTokens = 0, outputTokens = 0;
-  const rows = [];
-  console.log('live_benchmark_start', JSON.stringify({ cases: cases.length, model: process.env.DEEPSEEK_MODEL || 'deepseek-flash' }));
-  for (const item of cases) {
-    const t0 = Date.now();
-    try {
-      const pixelDiff = analyzeRawPixelDiff(item.original.pixels, item.edited.pixels, W, H, item.instruction);
-      const { result, usage } = await runAudit({
-        instruction: item.instruction,
-        original: { dataUrl: item.original.dataUrl },
-        edited: { dataUrl: item.edited.dataUrl },
-        pixelDiff,
-        includeMeta: true
-      });
-      const exactOk = result.verdict === item.expected;
-      const safeOk = item.expected === 'PASS' ? result.verdict === 'PASS' : result.verdict !== 'PASS';
-      if (exactOk) exactCorrect++;
-      if (safeOk) safeCorrect++;
-      if (item.expected === 'FAIL' && result.verdict === 'PASS') unsafePasses++;
-      inputTokens += Number(usage?.input_tokens || 0); outputTokens += Number(usage?.output_tokens || 0);
-      const row = { name:item.name, expected:item.expected, actual:result.verdict, score:result.score, exactOk, safeOk, ms:Date.now()-t0, pixel:pixelDiff };
-      rows.push(row); console.log('live_benchmark_case', JSON.stringify(row));
-    } catch (error) {
-      const row = { name:item.name, expected:item.expected, actual:'ERROR', exactOk:false, safeOk:false, ms:Date.now()-t0, error:String(error?.message || error).slice(0,300) };
-      rows.push(row); console.log('live_benchmark_case', JSON.stringify(row));
-    }
-  }
-  const summary = { cases:cases.length, exact_correct:exactCorrect, exact_accuracy:Number((exactCorrect/cases.length).toFixed(3)), safe_correct:safeCorrect, safe_accuracy:Number((safeCorrect/cases.length).toFixed(3)), unsafe_passes:unsafePasses, input_tokens:inputTokens, output_tokens:outputTokens, total_ms:Date.now()-started, rows };
-  console.log('live_benchmark_summary', JSON.stringify(summary));
-  return summary;
-}
+export async function runLiveBenchmark(){const started=Date.now();let exactCorrect=0,safeCorrect=0,unsafePasses=0,falseReviews=0,inputTokens=0,outputTokens=0;const rows=[];console.log('live_benchmark_start',JSON.stringify({cases:cases.length,model:process.env.DEEPSEEK_MODEL||'deepseek-flash'}));for(const item of cases){const t0=Date.now();try{const pixelDiff=analyzeRawPixelDiff(item.original.pixels,item.edited.pixels,W,H,item.instruction);const{result,usage}=await runAudit({instruction:item.instruction,original:{dataUrl:item.original.dataUrl},edited:{dataUrl:item.edited.dataUrl},pixelDiff,includeMeta:true});const exactOk=result.verdict===item.expected;const safeOk=item.expected==='PASS'?result.verdict==='PASS':result.verdict!=='PASS';if(exactOk)exactCorrect++;if(safeOk)safeCorrect++;if(item.expected==='FAIL'&&result.verdict==='PASS')unsafePasses++;if(item.expected==='PASS'&&result.verdict==='REVIEW')falseReviews++;inputTokens+=Number(usage?.input_tokens||0);outputTokens+=Number(usage?.output_tokens||0);const row={name:item.name,expected:item.expected,actual:result.verdict,score:result.score,exactOk,safeOk,ms:Date.now()-t0,pixel:pixelDiff};rows.push(row);console.log('live_benchmark_case',JSON.stringify(row));}catch(error){const row={name:item.name,expected:item.expected,actual:'ERROR',exactOk:false,safeOk:false,ms:Date.now()-t0,error:String(error?.message||error).slice(0,300)};rows.push(row);console.log('live_benchmark_case',JSON.stringify(row));}}const summary={cases:cases.length,exact_correct:exactCorrect,exact_accuracy:Number((exactCorrect/cases.length).toFixed(3)),safe_correct:safeCorrect,safe_accuracy:Number((safeCorrect/cases.length).toFixed(3)),unsafe_passes:unsafePasses,false_reviews:falseReviews,input_tokens:inputTokens,output_tokens:outputTokens,total_ms:Date.now()-started,rows};console.log('live_benchmark_summary',JSON.stringify(summary));return summary;}
