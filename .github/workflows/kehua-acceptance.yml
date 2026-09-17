@@ -1,0 +1,65 @@
+name: Kehua Android Acceptance
+
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/kehua-acceptance.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  kehua-build-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - name: Checkout Kehua production branch
+        uses: actions/checkout@v4
+        with:
+          ref: kehua-firebase-auth-prod
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+      - name: Build Kehua APK and test APK
+        run: gradle --no-daemon :app:assembleDebug :app:assembleDebugAndroidTest
+      - name: Enable KVM
+        run: |
+          if [ -e /dev/kvm ]; then sudo chmod 666 /dev/kvm; fi
+      - name: Kehua emulator scenario acceptance
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          target: google_apis
+          profile: pixel_6
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none
+          script: |
+            adb uninstall com.socialmix.experiment.b || true
+            gradle --no-daemon :app:connectedDebugAndroidTest
+            adb install -r app/build/outputs/apk/debug/app-debug.apk
+            adb shell am force-stop com.socialmix.experiment.b || true
+            adb shell monkey -p com.socialmix.experiment.b -c android.intent.category.LAUNCHER 1
+            sleep 4
+            adb shell pidof com.socialmix.experiment.b
+      - name: Prepare verified Kehua APK
+        if: success()
+        run: |
+          mkdir -p deliverable
+          cp app/build/outputs/apk/debug/app-debug.apk deliverable/Kehua-Verified.apk
+          sha256sum deliverable/Kehua-Verified.apk | tee deliverable/SHA256.txt
+      - name: Upload verified Kehua APK
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Kehua-Android-Verified
+          path: deliverable/
+          if-no-files-found: error
+          retention-days: 14
