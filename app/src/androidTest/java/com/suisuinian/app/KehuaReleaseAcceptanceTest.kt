@@ -26,7 +26,7 @@ class KehuaReleaseAcceptanceTest {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val api = KehuaApi(context)
         api.logout()
-        val email = "kehua-ci-" + System.currentTimeMillis() + "@example.com"
+        val email = "kehua.ci." + System.currentTimeMillis() + "@gmail.com"
         val result = api.signUp(email, "KehuaCiRelease2026!")
         assertTrue("Real Kehua signup failed: " + result.message, result.success)
     }
