@@ -1,6 +1,6 @@
 import { deflateSync } from 'node:zlib';
 import { runAudit } from './server.js';
-import { analyzeRawPixelDiff } from './diff-core.js';
+import { analyzeRawPixelDiff } from './public/diff-core.js';
 
 const W = 256, H = 256;
 function crc32(buffer){let c=0xffffffff;for(const byte of buffer){c^=byte;for(let k=0;k<8;k++)c=(c>>>1)^(0xedb88320&-(c&1));}return(c^0xffffffff)>>>0;}
@@ -17,24 +17,19 @@ const cases=[
  c('remove_cup_background_changed','FAIL','Remove the red cup. Keep the background color, lighting and everything else unchanged.',scene({cup:true}),scene({cup:false,bg:C.blueBg})),
  c('remove_cup_plant_removed','FAIL','Remove only the red cup. Keep the plant and everything else unchanged.',scene({cup:true,plant:true}),scene({cup:false,plant:false})),
  c('remove_cup_not_done','FAIL','Remove the red cup on the counter and change nothing else.',scene({cup:true}),scene({cup:true})),
-
  c('shirt_blue_to_white_clean','PASS','Change only the shirt from blue to white. Keep the face, cup, plant, poster, composition, background and everything else unchanged.',scene({shirt:C.blue}),scene({shirt:C.white})),
  c('shirt_extra_plant_removed','FAIL','Change only the shirt from blue to white. Keep the face, cup, plant, poster, composition, background and everything else unchanged.',scene({shirt:C.blue,plant:true}),scene({shirt:C.white,plant:false})),
  c('shirt_extra_background_changed','FAIL','Change only the shirt from blue to white. Keep the background and everything else unchanged.',scene({shirt:C.blue,bg:C.bg}),scene({shirt:C.white,bg:C.yellowBg})),
  c('shirt_not_changed','FAIL','Change only the shirt from blue to white. Keep everything else unchanged.',scene({shirt:C.blue}),scene({shirt:C.blue})),
-
  c('remove_plant_clean','PASS','Remove only the green plant on the right. Keep the person, cup, poster, background and everything else unchanged.',scene({plant:true}),scene({plant:false})),
  c('remove_plant_extra_cup_removed','FAIL','Remove only the green plant on the right. Keep the red cup and everything else unchanged.',scene({plant:true,cup:true}),scene({plant:false,cup:false})),
  c('remove_plant_person_shifted','FAIL','Remove the green plant. Keep the person and composition unchanged.',scene({plant:true}),scene({plant:false,shift:12})),
-
  c('background_to_blue_clean','PASS','Change only the wall background from beige to light blue. Keep the person, shirt, cup, plant, poster and composition unchanged.',scene({bg:C.bg}),scene({bg:C.blueBg})),
  c('background_to_blue_shirt_changed','FAIL','Change only the wall background from beige to light blue. Keep the shirt and everything else unchanged.',scene({bg:C.bg,shirt:C.blue}),scene({bg:C.blueBg,shirt:C.white})),
  c('background_to_blue_cup_removed','FAIL','Change only the wall background from beige to light blue. Keep the red cup and everything else unchanged.',scene({bg:C.bg,cup:true}),scene({bg:C.blueBg,cup:false})),
-
  c('do_nothing_clean','PASS','Do not change the image. Keep every visible element exactly the same.',scene(),scene()),
  c('do_nothing_face_changed','FAIL','Do not change the image. Keep every visible element exactly the same.',scene({face:C.skin}),scene({face:C.altSkin})),
  c('do_nothing_poster_removed','FAIL','Do not change the image. Keep every visible element exactly the same.',scene({poster:true}),scene({poster:false})),
-
  c('cup_red_to_green_clean','PASS','Change only the cup color from red to green. Keep its position, size, person, plant, background and everything else unchanged.',scene({cupColor:C.red}),scene({cupColor:C.green})),
  c('cup_red_to_green_face_changed','FAIL','Change only the cup color from red to green. Keep the face and everything else unchanged.',scene({cupColor:C.red,face:C.skin}),scene({cupColor:C.green,face:C.altSkin})),
  c('cup_move_left_clean','PASS','Move only the red cup about 30 pixels to the left. Keep its size and all other visible elements unchanged.',scene({cupX:132}),scene({cupX:102})),
