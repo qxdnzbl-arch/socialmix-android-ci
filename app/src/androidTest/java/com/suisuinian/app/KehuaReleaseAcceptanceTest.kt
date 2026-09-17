@@ -52,4 +52,22 @@ class KehuaReleaseAcceptanceTest {
         val message = api.sendPasswordReset("not-an-email")
         assertTrue(message?.contains("注册时使用的邮箱") == true)
     }
+
+    @Test
+    fun protectedCoreRequiresSession() = runBlocking {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val api = KehuaApi(context)
+        api.logout()
+        val failures = listOf(
+            runCatching { api.ensureProfile() }.exceptionOrNull(),
+            runCatching { api.myPosts() }.exceptionOrNull(),
+            runCatching { api.publish("CI protected publish", null) }.exceptionOrNull(),
+            runCatching { api.resonances("00000000-0000-0000-0000-000000000000") }.exceptionOrNull(),
+            runCatching { api.conversations() }.exceptionOrNull(),
+            runCatching { api.incomingFriendRequests() }.exceptionOrNull(),
+            runCatching { api.friends() }.exceptionOrNull(),
+            runCatching { api.messages("00000000-0000-0000-0000-000000000000") }.exceptionOrNull()
+        )
+        assertTrue("Every protected core call must reject a logged-out client", failures.all { it?.message?.contains("登录已过期") == true })
+    }
 }
