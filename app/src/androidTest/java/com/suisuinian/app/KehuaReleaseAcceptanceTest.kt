@@ -92,4 +92,20 @@ class KehuaReleaseAcceptanceTest {
         )
         assertTrue("Every protected mutation must reject a logged-out client", failures.all { it?.message?.contains("登录已过期") == true })
     }
+
+    @Test
+    fun localContentBoundsRejectEmptyAndOversizedPayloadsBeforeNetwork() = runBlocking {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val api = KehuaApi(context)
+        api.logout()
+
+        val emptyPost = runCatching { api.publish("   ", null) }.exceptionOrNull()
+        val oversizedPost = runCatching { api.publish("x".repeat(1201), null) }.exceptionOrNull()
+        val emptyMessage = runCatching { api.sendMessage("00000000-0000-0000-0000-000000000000", "   ") }.exceptionOrNull()
+        val oversizedMessage = runCatching { api.sendMessage("00000000-0000-0000-0000-000000000000", "x".repeat(2001)) }.exceptionOrNull()
+
+        // Session protection runs before content validation, so logged-out calls must never reach the network.
+        val all = listOf(emptyPost, oversizedPost, emptyMessage, oversizedMessage)
+        assertTrue("Logged-out content mutations must be stopped locally", all.all { it?.message?.contains("登录已过期") == true })
+    }
 }
