@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { analyzeRawPixelDiff } from '../diff-core.js';
+import { analyzeRawPixelDiff } from '../public/diff-core.js';
 
 const W = 64, H = 64;
 function image(rgb = [240, 240, 240]) {
