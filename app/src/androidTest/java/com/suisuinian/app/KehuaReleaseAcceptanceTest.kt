@@ -30,4 +30,17 @@ class KehuaReleaseAcceptanceTest {
         val result = api.signUp(email, "KehuaCiRelease2026!")
         assertTrue("Real Kehua signup failed: " + result.message, result.success)
     }
+
+    @Test
+    fun invalidAuthInputIsRejected() = runBlocking {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val api = KehuaApi(context)
+        api.logout()
+        val signup = api.signUp("not-an-email", "123")
+        val signin = api.signIn("not-an-email", "123")
+        assertFalse(signup.success)
+        assertFalse(signin.success)
+        assertTrue(signup.message.contains("有效邮箱"))
+        assertTrue(signin.message.contains("有效邮箱"))
+    }
 }
