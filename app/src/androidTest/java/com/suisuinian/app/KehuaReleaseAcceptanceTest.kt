@@ -70,4 +70,25 @@ class KehuaReleaseAcceptanceTest {
         )
         assertTrue("Every protected core call must reject a logged-out client", failures.all { it?.message?.contains("登录已过期") == true })
     }
+
+    @Test
+    fun protectedMutationsRequireSessionAndLogoutStaysLoggedOut() = runBlocking {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val api = KehuaApi(context)
+        api.logout()
+        assertFalse("logout must leave no restorable session", api.restoreSession())
+
+        val id = "00000000-0000-0000-0000-000000000000"
+        val failures = listOf(
+            runCatching { api.light(id) }.exceptionOrNull(),
+            runCatching { api.sendMessage(id, "CI protected message") }.exceptionOrNull(),
+            runCatching { api.acceptFriendRequest(id) }.exceptionOrNull(),
+            runCatching { api.friendStatus(id) }.exceptionOrNull(),
+            runCatching { api.friendRequest(id) }.exceptionOrNull(),
+            runCatching { api.block(id) }.exceptionOrNull(),
+            runCatching { api.report(id, null, "CI protected report") }.exceptionOrNull(),
+            runCatching { api.saveProfile("CI", "protected", null) }.exceptionOrNull()
+        )
+        assertTrue("Every protected mutation must reject a logged-out client", failures.all { it?.message?.contains("登录已过期") == true })
+    }
 }
