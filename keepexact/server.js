@@ -12,8 +12,7 @@ const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
 const ALLOWED_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
 
 export const auditSchema = {
-  type: 'object',
-  additionalProperties: false,
+  type: 'object', additionalProperties: false,
   properties: {
     verdict: { type: 'string', enum: ['PASS', 'REVIEW', 'FAIL'] },
     score: { type: 'integer', minimum: 0, maximum: 100 },
@@ -76,7 +75,11 @@ async function serveStatic(req, res) { const url = new URL(req.url, 'http://loca
 
 export async function requestHandler(req, res) {
   const url = new URL(req.url, 'http://localhost');
-  if (req.method === 'GET' && url.pathname === '/health') return json(res, 200, { ok: true, service: 'keepexact', verifier: 'deepseek-flash' });
+  if (req.method === 'GET' && url.pathname === '/health') return json(res, 200, { ok: true, service: 'keepexact', verifier: 'deepseek-flash', live: Boolean(process.env.DEEPSEEK_API_KEY) });
+  if (req.method === 'POST' && url.pathname === '/api/interest') {
+    console.log('paid_interest_click', JSON.stringify({ at: new Date().toISOString(), ua: String(req.headers['user-agent'] || '').slice(0, 180), referer: String(req.headers.referer || '').slice(0, 220) }));
+    return json(res, 200, { ok: true, message: 'Thanks — your paid beta interest was recorded.' });
+  }
   if (req.method === 'POST' && url.pathname === '/api/audit') {
     try {
       if (!String(req.headers['content-type'] || '').startsWith('application/json')) return json(res, 415, { error: 'Unsupported request format.' });
