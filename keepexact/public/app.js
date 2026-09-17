@@ -1,186 +1,258 @@
-import { analyzeRawPixelDiff } from '/diff-core.js';
-
 const MAX_BYTES = 10 * 1024 * 1024;
 const allowedTypes = new Set(['image/jpeg','image/png','image/webp']);
-const form = document.querySelector('#audit-form');
+const form = document.querySelector('#edit-form');
+const fileInput = document.querySelector('#original');
+const preview = document.querySelector('#source-preview');
+const canvas = document.querySelector('#selection-canvas');
+const selectionSection = document.querySelector('#selection-section');
+const editOptions = document.querySelector('#edit-options');
+const instructionBlock = document.querySelector('#instruction-block');
+const instruction = document.querySelector('#instruction');
 const submit = document.querySelector('#submit');
 const errorBox = document.querySelector('#form-error');
-const result = document.querySelector('#result');
-const instruction = document.querySelector('#instruction');
 const liveStatus = document.querySelector('#live-status');
+const result = document.querySelector('#result');
+const selectionStatus = document.querySelector('#selection-status');
+const uploadCopy = document.querySelector('#upload-copy');
+
+let selectedFile = null;
+let objectUrl = null;
+let selection = null;
+let dragStart = null;
+let serviceReady = false;
 
 function setError(message='') {
   errorBox.textContent = message;
   errorBox.hidden = !message;
 }
 
+function selectedType() {
+  return form.querySelector('input[name="edit-type"]:checked')?.value || '';
+}
+
+function updateSubmit() {
+  submit.disabled = !(serviceReady && selectedFile && selection && selectedType() && instruction.value.trim());
+}
+
 async function checkLive() {
   try {
-    const r = await fetch('/health', { cache:'no-store' });
-    const d = await r.json();
-    if (!r.ok || !d.live) {
-      form.querySelectorAll('input,textarea,button[type="submit"]').forEach(el => el.disabled = true);
-      liveStatus.textContent = 'Verification is temporarily unavailable.';
-    } else {
-      liveStatus.textContent = 'Verifier ready.';
-    }
+    const response = await fetch('/health', { cache:'no-store' });
+    const data = await response.json();
+    serviceReady = Boolean(response.ok && data.live);
+    liveStatus.textContent = serviceReady ? '修改服务 + 质检服务已就绪。' : '服务暂时不可用。';
   } catch {
-    form.querySelectorAll('input,textarea,button[type="submit"]').forEach(el => el.disabled = true);
-    liveStatus.textContent = 'Verification is temporarily unavailable.';
+    serviceReady = false;
+    liveStatus.textContent = '服务暂时不可用。';
   }
+  updateSubmit();
 }
 checkLive();
 
-function setupFileInput(id) {
-  const input = document.querySelector(`#${id}`);
-  const preview = document.querySelector(`#${id}-preview`);
-  const name = document.querySelector(`#${id}-name`);
-  let objectUrl = null;
-  input.addEventListener('change', () => {
-    setError();
-    const file = input.files?.[0];
-    if (!file) return;
-    if (!allowedTypes.has(file.type)) {
-      input.value = '';
-      return setError('Use a JPG, PNG, or WEBP image.');
-    }
-    if (file.size > MAX_BYTES) {
-      input.value = '';
-      return setError('Each image must be 10 MB or smaller.');
-    }
-    if (objectUrl) URL.revokeObjectURL(objectUrl);
-    objectUrl = URL.createObjectURL(file);
-    preview.src = objectUrl;
-    preview.hidden = false;
-    name.textContent = file.name;
-  });
-}
-setupFileInput('original');
-setupFileInput('edited');
-
-function findingHtml(title, detail) {
-  const item = document.createElement('div');
-  item.className = 'finding';
-  const strong = document.createElement('strong');
-  strong.textContent = title;
-  const p = document.createElement('p');
-  p.textContent = detail;
-  item.append(strong, p);
-  return item;
+function resetSelection() {
+  selection = null;
+  dragStart = null;
+  selectionStatus.textContent = '还没圈选';
+  drawSelection();
+  updateSubmit();
 }
 
-function renderResult(data) {
-  const verdict = document.querySelector('#verdict');
-  verdict.textContent = data.verdict;
-  verdict.className = `verdict ${data.verdict}`;
-  document.querySelector('#score').textContent = data.score;
-  document.querySelector('#summary').textContent = data.summary;
-  const requested = document.querySelector('#requested-list');
-  requested.replaceChildren();
-  for (const item of data.requested_changes || []) requested.append(findingHtml(`${item.status.replaceAll('_',' ').toUpperCase()} · ${item.item}`, item.evidence));
-  if (!data.requested_changes?.length) {
-    const empty = findingHtml('No requested changes identified', 'The verifier could not split the instruction into a concrete requested edit.');
-    empty.classList.add('empty');
-    requested.append(empty);
+document.querySelector('#reset-selection').addEventListener('click', resetSelection);
+
+fileInput.addEventListener('change', () => {
+  setError();
+  result.hidden = true;
+  const file = fileInput.files?.[0];
+  if (!file) return;
+  if (!allowedTypes.has(file.type)) {
+    fileInput.value = '';
+    return setError('请选择 JPG、PNG 或 WEBP 图片。');
   }
-  const unintended = document.querySelector('#unintended-list');
-  unintended.replaceChildren();
-  for (const item of data.unintended_changes || []) unintended.append(findingHtml(`${item.severity.toUpperCase()} · ${item.area}`, `${item.change} ${item.why_it_matters}`));
-  if (!data.unintended_changes?.length) {
-    const empty = findingHtml('No material unintended change detected', 'KeepExact did not identify an unrelated visible change with enough confidence to flag it.');
-    empty.classList.add('empty');
-    unintended.append(empty);
+  if (file.size > MAX_BYTES) {
+    fileInput.value = '';
+    return setError('图片不能超过 10MB。');
   }
-  document.querySelector('#repair-prompt').textContent = data.repair_prompt;
-  result.hidden = false;
-  result.scrollIntoView({ behavior:'smooth', block:'start' });
+  selectedFile = file;
+  if (objectUrl) URL.revokeObjectURL(objectUrl);
+  objectUrl = URL.createObjectURL(file);
+  preview.src = objectUrl;
+  uploadCopy.textContent = file.name;
+  resetSelection();
+  selectionSection.hidden = false;
+  editOptions.hidden = false;
+  instructionBlock.hidden = false;
+});
+
+preview.addEventListener('load', () => {
+  resizeCanvas();
+  drawSelection();
+});
+window.addEventListener('resize', () => {
+  if (!selectionSection.hidden) {
+    resizeCanvas();
+    drawSelection();
+  }
+});
+
+function resizeCanvas() {
+  const rect = preview.getBoundingClientRect();
+  canvas.width = Math.max(1, Math.round(rect.width));
+  canvas.height = Math.max(1, Math.round(rect.height));
 }
+
+function pointFromEvent(event) {
+  const rect = canvas.getBoundingClientRect();
+  return {
+    x: Math.max(0, Math.min(rect.width, event.clientX - rect.left)),
+    y: Math.max(0, Math.min(rect.height, event.clientY - rect.top))
+  };
+}
+
+function normalizedRect(a, b) {
+  const w = canvas.clientWidth || canvas.width;
+  const h = canvas.clientHeight || canvas.height;
+  const x1 = Math.min(a.x, b.x), x2 = Math.max(a.x, b.x);
+  const y1 = Math.min(a.y, b.y), y2 = Math.max(a.y, b.y);
+  return { x: x1 / w, y: y1 / h, w: (x2 - x1) / w, h: (y2 - y1) / h };
+}
+
+function drawSelection(tempPoint=null) {
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return;
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  let r = selection;
+  if (dragStart && tempPoint) r = normalizedRect(dragStart, tempPoint);
+  if (!r) return;
+  const x = r.x * canvas.width, y = r.y * canvas.height;
+  const w = r.w * canvas.width, h = r.h * canvas.height;
+  ctx.fillStyle = 'rgba(61, 108, 75, .14)';
+  ctx.fillRect(x, y, w, h);
+  ctx.strokeStyle = '#255f37';
+  ctx.lineWidth = 2;
+  ctx.setLineDash([7,5]);
+  ctx.strokeRect(x + 1, y + 1, Math.max(0, w - 2), Math.max(0, h - 2));
+}
+
+canvas.addEventListener('pointerdown', event => {
+  if (!selectedFile) return;
+  event.preventDefault();
+  canvas.setPointerCapture(event.pointerId);
+  dragStart = pointFromEvent(event);
+  selection = null;
+  drawSelection(dragStart);
+});
+
+canvas.addEventListener('pointermove', event => {
+  if (!dragStart) return;
+  event.preventDefault();
+  drawSelection(pointFromEvent(event));
+});
+
+canvas.addEventListener('pointerup', event => {
+  if (!dragStart) return;
+  event.preventDefault();
+  const end = pointFromEvent(event);
+  const next = normalizedRect(dragStart, end);
+  dragStart = null;
+  const fraction = next.w * next.h;
+  if (fraction < 0.001) {
+    selection = null;
+    selectionStatus.textContent = '圈选太小，请重新圈';
+  } else if (fraction > 0.35) {
+    selection = null;
+    selectionStatus.textContent = '圈选超过 35%，请缩小范围';
+  } else {
+    selection = next;
+    selectionStatus.textContent = `已圈选约 ${(fraction * 100).toFixed(1)}% 的画面`;
+  }
+  drawSelection();
+  updateSubmit();
+});
+
+canvas.addEventListener('pointercancel', () => {
+  dragStart = null;
+  drawSelection();
+});
+
+form.addEventListener('change', updateSubmit);
+instruction.addEventListener('input', updateSubmit);
 
 function readAsDataUrl(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => resolve(reader.result);
-    reader.onerror = () => reject(new Error('Could not read the selected image.'));
+    reader.onerror = () => reject(new Error('读取图片失败。'));
     reader.readAsDataURL(file);
   });
 }
 
-async function samplePixels(file) {
-  const bitmap = await createImageBitmap(file);
-  try {
-    const canvas = document.createElement('canvas');
-    canvas.width = 128;
-    canvas.height = 128;
-    const ctx = canvas.getContext('2d', { willReadFrequently: true });
-    if (!ctx) throw new Error('Image comparison is not supported in this browser.');
-    ctx.fillStyle = '#fff';
-    ctx.fillRect(0, 0, 128, 128);
-    ctx.drawImage(bitmap, 0, 0, 128, 128);
-    return {
-      pixels: ctx.getImageData(0, 0, 128, 128).data,
-      originalWidth: bitmap.width,
-      originalHeight: bitmap.height
-    };
-  } finally {
-    bitmap.close?.();
-  }
+function buildMaskDataUrl() {
+  if (!selection || !preview.naturalWidth || !preview.naturalHeight) throw new Error('请先圈出要修改的位置。');
+  const mask = document.createElement('canvas');
+  mask.width = preview.naturalWidth;
+  mask.height = preview.naturalHeight;
+  const ctx = mask.getContext('2d');
+  if (!ctx) throw new Error('当前浏览器无法创建修改区域。');
+  ctx.fillStyle = '#000';
+  ctx.fillRect(0, 0, mask.width, mask.height);
+  const padX = Math.max(2, Math.round(mask.width * 0.006));
+  const padY = Math.max(2, Math.round(mask.height * 0.006));
+  const x = Math.max(0, Math.floor(selection.x * mask.width) - padX);
+  const y = Math.max(0, Math.floor(selection.y * mask.height) - padY);
+  const w = Math.min(mask.width - x, Math.ceil(selection.w * mask.width) + padX * 2);
+  const h = Math.min(mask.height - y, Math.ceil(selection.h * mask.height) + padY * 2);
+  ctx.clearRect(x, y, w, h);
+  return mask.toDataURL('image/png');
 }
 
-async function computePixelDiff(original, edited, text) {
-  try {
-    const [a, b] = await Promise.all([samplePixels(original), samplePixels(edited)]);
-    return analyzeRawPixelDiff(a.pixels, b.pixels, 128, 128, text, {
-      dimensionMismatch: a.originalWidth !== b.originalWidth || a.originalHeight !== b.originalHeight
-    });
-  } catch {
-    return null;
+function friendlyError(response, data) {
+  if (response.status === 422) return '这次结果没有达到交付标准，所以没有展示半成品，也没有继续自动重试。请缩小圈选范围或换一张图再试。';
+  if (response.status === 429) return '今天这个网络的免费测试次数已经用完了。';
+  if (response.status === 503) return '修改服务暂时不可用。';
+  if (response.status === 400) {
+    const raw = String(data?.error || '');
+    if (/too large|35%/i.test(raw)) return '圈选范围太大，这一版只处理不超过整张图 35% 的局部修改。';
+    if (/one edit|single/i.test(raw)) return '一次只能改一个地方、做一件事。';
+    if (/outside the current supported range/i.test(raw)) return '这个需求现在不接。当前只做：删一个物体、改一个区域颜色、替换一个小物体、去掉一个路人。';
+    if (/mask|draw a box|area/i.test(raw)) return '请先圈出唯一要修改的位置。';
   }
+  return data?.error || '这次没有可靠完成，因此没有交付结果。';
 }
 
 form.addEventListener('submit', async event => {
   event.preventDefault();
   setError();
-  const original = document.querySelector('#original').files?.[0];
-  const edited = document.querySelector('#edited').files?.[0];
-  const text = instruction.value.trim();
-  if (!original) return setError('Upload the original image.');
-  if (!edited) return setError('Upload the edited image.');
-  if (!text) return setError('Enter the exact edit instruction you gave the AI.');
-  submit.disabled = true;
-  submit.textContent = 'Checking…';
   result.hidden = true;
+  if (!selectedFile) return setError('请先上传原图。');
+  if (!selection) return setError('请先圈出唯一要修改的位置。');
+  const editType = selectedType();
+  if (!editType) return setError('请选择一种修改功能。');
+  const text = instruction.value.trim();
+  if (!text) return setError('请用一句话说清楚你要的结果。');
+
+  submit.disabled = true;
+  submit.textContent = '正在修改并质检…';
+  liveStatus.textContent = '先修改，再自动检查；不合格不会展示。';
   try {
-    const [originalData, editedData, pixelDiff] = await Promise.all([
-      readAsDataUrl(original),
-      readAsDataUrl(edited),
-      computePixelDiff(original, edited, text)
-    ]);
-    const response = await fetch('/api/audit', {
+    const [originalData, mask] = await Promise.all([readAsDataUrl(selectedFile), Promise.resolve(buildMaskDataUrl())]);
+    const response = await fetch('/api/edit', {
       method: 'POST',
       headers: { 'Content-Type':'application/json' },
-      body: JSON.stringify({ original: originalData, edited: editedData, instruction: text, pixelDiff })
+      body: JSON.stringify({ original: originalData, mask, instruction: text, editType, regionFraction: selection.w * selection.h })
     });
     const data = await response.json().catch(() => ({}));
-    if (!response.ok) throw new Error(data.error || 'Verification failed.');
-    renderResult(data);
+    if (!response.ok || !data.delivered || !data.image) throw new Error(friendlyError(response, data));
+    const finalImage = document.querySelector('#final-image');
+    finalImage.src = data.image;
+    document.querySelector('#quality-summary').textContent = data.quality?.summary || '指定修改已完成，未发现需要拦截的额外改动。';
+    document.querySelector('#download-result').href = data.image;
+    result.hidden = false;
+    result.scrollIntoView({ behavior:'smooth', block:'start' });
+    liveStatus.textContent = '已完成：只有通过质检的结果才会显示。';
   } catch (error) {
-    setError(error.message || 'Verification failed.');
+    setError(error.message || '这次没有可靠完成，因此没有交付结果。');
+    liveStatus.textContent = '没有交付不合格结果。';
   } finally {
-    submit.disabled = false;
-    submit.textContent = 'Check this edit';
-  }
-});
-
-document.querySelector('#copy-repair').addEventListener('click', async event => {
-  const text = document.querySelector('#repair-prompt').textContent;
-  if (!text) return;
-  try {
-    await navigator.clipboard.writeText(text);
-    const button = event.currentTarget;
-    const old = button.textContent;
-    button.textContent = 'Copied';
-    setTimeout(() => { button.textContent = old; }, 1200);
-  } catch {
-    setError('Could not copy automatically. Select the repair instruction and copy it manually.');
+    submit.textContent = '开始修改并质检';
+    updateSubmit();
   }
 });
