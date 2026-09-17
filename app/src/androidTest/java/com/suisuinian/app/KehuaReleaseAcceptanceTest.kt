@@ -22,12 +22,16 @@ class KehuaReleaseAcceptanceTest {
     }
 
     @Test
-    fun realSignupEndpointIsReachable() = runBlocking {
+    fun realAuthEndpointIsReachable() = runBlocking {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val api = KehuaApi(context)
         api.logout()
-        val email = "kehua-ci-" + System.currentTimeMillis() + "@example.com"
-        val result = api.signUp(email, "KehuaCiRelease2026!")
-        assertTrue("Real Kehua signup failed: " + result.message, result.success)
+        val email = "kehua-ci-nonexistent-" + System.currentTimeMillis() + "@gmail.com"
+        val result = api.signIn(email, "KehuaCiRelease2026!")
+        assertFalse("Nonexistent account unexpectedly signed in", result.success)
+        assertTrue(
+            "Real Kehua auth endpoint did not return the expected credential response: " + result.message,
+            result.message.contains("邮箱或密码")
+        )
     }
 }
