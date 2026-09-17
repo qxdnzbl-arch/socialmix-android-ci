@@ -2,6 +2,7 @@ import http from 'node:http';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { analyzePixelDiff } from './image-diff.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -75,11 +76,37 @@ async function callDeepSeek({ instruction, original, edited }) {
   return { payload, text };
 }
 
+function applyPixelGuardrail(result, pixelDiff) {
+  if (!pixelDiff?.suspicious || result.verdict !== 'PASS') return result;
+  const reasons = pixelDiff.reasons.join('; ');
+  result.verdict = 'REVIEW';
+  result.score = Math.min(Number(result.score || 100), 84);
+  result.summary = `Semantic check passed, but deterministic pixel comparison found a pattern that may indicate an extra edit: ${reasons}.`;
+  result.unintended_changes = [
+    ...(Array.isArray(result.unintended_changes) ? result.unintended_changes : []),
+    {
+      severity: 'medium',
+      area: 'image-difference guardrail',
+      change: reasons,
+      why_it_matters: 'The visible changes extend beyond the pattern expected from a tightly scoped edit.'
+    }
+  ];
+  result.repair_prompt = 'Re-run the edit from the original image and change only the requested target. Preserve all unrelated regions exactly; verify the result again before use.';
+  return result;
+}
+
 export async function runAudit({ instruction, original, edited, includeMeta = false }) {
   if (!process.env.DEEPSEEK_API_KEY) {
     const error = new Error('Live AI verification is not configured yet.');
     error.code = 'NO_API_KEY';
     throw error;
+  }
+
+  let pixelDiff = null;
+  try {
+    pixelDiff = await analyzePixelDiff(original.dataUrl, edited.dataUrl, instruction);
+  } catch (error) {
+    console.error('pixel_diff_failed', String(error?.message || error).slice(0, 200));
   }
 
   let lastError = null;
@@ -93,9 +120,9 @@ export async function runAudit({ instruction, original, edited, includeMeta = fa
       totalOutputTokens += Number(payload?.usage?.output_tokens || 0);
       if (payload?.status === 'incomplete') throw new Error(`DeepSeek response incomplete: ${payload?.incomplete_details?.reason || 'unknown reason'}`);
       if (!text) throw new Error('The AI service returned an empty result.');
-      const result = JSON.parse(text);
+      const result = applyPixelGuardrail(JSON.parse(text), pixelDiff);
       return includeMeta
-        ? { result, usage: { input_tokens: totalInputTokens, output_tokens: totalOutputTokens, attempts: attempt } }
+        ? { result, usage: { input_tokens: totalInputTokens, output_tokens: totalOutputTokens, attempts: attempt }, pixelDiff }
         : result;
     } catch (error) {
       lastError = error;
