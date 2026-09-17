@@ -27,18 +27,19 @@ jobs:
 
       - name: Generate production icon
         run: |
-          python3 -m pip install --quiet 'pillow==11.3.0'
-          python3 - <<'PY'
+          python3 -m venv .icon-venv
+          .icon-venv/bin/python -m pip install --quiet 'pillow==11.3.0'
+          .icon-venv/bin/python - <<'PY'
           from PIL import Image, ImageDraw
           from pathlib import Path
           p=Path('Kehua/Assets.xcassets/AppIcon.appiconset/icon-1024.png')
           p.parent.mkdir(parents=True,exist_ok=True)
-          img=Image.new('RGB',(1024,1024),(244,243,248))
+          img=Image.new('RGB',(1024,1024),(244,244,247))
           d=ImageDraw.Draw(img)
-          d.rounded_rectangle((88,88,936,936),radius=224,fill=(255,255,255),outline=(226,224,232),width=12)
-          d.rounded_rectangle((236,280,788,652),radius=144,fill=(35,35,40))
-          d.polygon([(580,624),(688,624),(636,740)],fill=(35,35,40))
-          for x in (380,512,644): d.ellipse((x-26,440,x+26,492),fill=(244,243,248))
+          d.rounded_rectangle((88,88,936,936),radius=224,fill=(255,255,255),outline=(231,231,235),width=12)
+          d.rounded_rectangle((236,280,788,652),radius=144,fill=(36,36,40))
+          d.polygon([(580,624),(688,624),(636,740)],fill=(36,36,40))
+          for x in (380,512,644): d.ellipse((x-26,440,x+26,492),fill=(255,62,104))
           img.save(p)
           PY
 
