@@ -77,8 +77,8 @@ export async function requestHandler(req, res) {
   const url = new URL(req.url, 'http://localhost');
   if (req.method === 'GET' && url.pathname === '/health') return json(res, 200, { ok: true, service: 'keepexact', verifier: 'deepseek-flash', live: Boolean(process.env.DEEPSEEK_API_KEY) });
   if (req.method === 'POST' && url.pathname === '/api/interest') {
-    console.log('paid_interest_click', JSON.stringify({ at: new Date().toISOString(), ua: String(req.headers['user-agent'] || '').slice(0, 180), referer: String(req.headers.referer || '').slice(0, 220) }));
-    return json(res, 200, { ok: true, message: 'Thanks — your paid beta interest was recorded.' });
+    console.log('interest_signal', JSON.stringify({ at: new Date().toISOString() }));
+    return json(res, 200, { ok: true, message: 'Anonymous interest signal recorded. No payment or reservation was created.' });
   }
   if (req.method === 'POST' && url.pathname === '/api/audit') {
     try {
