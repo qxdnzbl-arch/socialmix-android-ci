@@ -36,7 +36,7 @@ test('schema requires all top-level result fields', () => {
   assert.equal(auditSchema.additionalProperties, false);
 });
 
-test('running server serves public beta, health, security headers, and no-key path without spending API credit', async t => {
+test('running server serves public beta, browser modules, health, security headers, and no-key path without spending API credit', async t => {
   const { app } = await import('../server.js');
   await new Promise(resolve => app.listen(0, '127.0.0.1', resolve));
   t.after(() => new Promise(resolve => app.close(resolve)));
@@ -50,6 +50,17 @@ test('running server serves public beta, health, security headers, and no-key pa
   assert.match(html, /Did the AI change anything you didn’t ask for/);
   assert.match(html, /Free beta/);
   assert.doesNotMatch(html, /internal accuracy testing/i);
+
+  const appJs = await fetch(`${base}/app.js`);
+  assert.equal(appJs.status, 200);
+  const appSource = await appJs.text();
+  assert.match(appSource, /from '\/diff-core\.js'/);
+  assert.match(appSource, /analyzeRawPixelDiff/);
+
+  const diffJs = await fetch(`${base}/diff-core.js`);
+  assert.equal(diffJs.status, 200);
+  const diffSource = await diffJs.text();
+  assert.match(diffSource, /export function analyzeRawPixelDiff/);
 
   const health = await fetch(`${base}/health`);
   const healthJson = await health.json();
