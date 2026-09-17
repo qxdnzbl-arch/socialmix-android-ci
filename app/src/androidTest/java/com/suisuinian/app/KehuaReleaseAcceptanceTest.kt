@@ -43,4 +43,13 @@ class KehuaReleaseAcceptanceTest {
         assertTrue(signup.message.contains("有效邮箱"))
         assertTrue(signin.message.contains("有效邮箱"))
     }
+
+    @Test
+    fun invalidPasswordResetInputIsRejectedWithoutNetwork() = runBlocking {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val api = KehuaApi(context)
+        api.logout()
+        val message = api.sendPasswordReset("not-an-email")
+        assertTrue(message?.contains("注册时使用的邮箱") == true)
+    }
 }
