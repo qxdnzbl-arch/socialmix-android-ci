@@ -2,7 +2,6 @@ import http from 'node:http';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { analyzePixelDiff } from './image-diff.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -39,6 +38,20 @@ function parseDataUrl(value) {
   return { mime: match[1], bytes, dataUrl: value };
 }
 
+function sanitizePixelDiff(value) {
+  if (!value || typeof value !== 'object') return null;
+  const clamp01 = n => Math.max(0, Math.min(1, Number.isFinite(Number(n)) ? Number(n) : 0));
+  return {
+    suspicious: Boolean(value.suspicious),
+    reasons: Array.isArray(value.reasons) ? value.reasons.slice(0, 6).map(x => String(x).slice(0, 120)) : [],
+    changedFraction: clamp01(value.changedFraction),
+    bboxFraction: clamp01(value.bboxFraction),
+    significantComponents: Math.max(0, Math.min(50, Math.trunc(Number(value.significantComponents) || 0))),
+    secondComponentFraction: clamp01(value.secondComponentFraction),
+    dimensionMismatch: Boolean(value.dimensionMismatch)
+  };
+}
+
 export function validateAuditBody(body) {
   const instruction = String(body?.instruction || '').trim();
   if (!instruction) return { error: 'Enter the exact edit instruction you gave the AI.' };
@@ -47,7 +60,7 @@ export function validateAuditBody(body) {
   if (original.error) return { error: original.error === 'Image data is missing.' ? 'Upload the original image.' : `Original: ${original.error}` };
   const edited = parseDataUrl(body?.edited);
   if (edited.error) return { error: edited.error === 'Image data is missing.' ? 'Upload the edited image.' : `Edited: ${edited.error}` };
-  return { instruction, original, edited };
+  return { instruction, original, edited, pixelDiff: sanitizePixelDiff(body?.pixelDiff) };
 }
 
 async function callDeepSeek({ instruction, original, edited }) {
@@ -78,41 +91,28 @@ async function callDeepSeek({ instruction, original, edited }) {
 
 function applyPixelGuardrail(result, pixelDiff) {
   if (!pixelDiff?.suspicious || result.verdict !== 'PASS') return result;
-  const reasons = pixelDiff.reasons.join('; ');
+  const reasons = pixelDiff.reasons.length ? pixelDiff.reasons.join('; ') : 'deterministic pixel comparison found a suspicious change pattern';
   result.verdict = 'REVIEW';
   result.score = Math.min(Number(result.score || 100), 84);
   result.summary = `Semantic check passed, but deterministic pixel comparison found a pattern that may indicate an extra edit: ${reasons}.`;
   result.unintended_changes = [
     ...(Array.isArray(result.unintended_changes) ? result.unintended_changes : []),
-    {
-      severity: 'medium',
-      area: 'image-difference guardrail',
-      change: reasons,
-      why_it_matters: 'The visible changes extend beyond the pattern expected from a tightly scoped edit.'
-    }
+    { severity: 'medium', area: 'image-difference guardrail', change: reasons, why_it_matters: 'The visible changes extend beyond the pattern expected from a tightly scoped edit.' }
   ];
   result.repair_prompt = 'Re-run the edit from the original image and change only the requested target. Preserve all unrelated regions exactly; verify the result again before use.';
   return result;
 }
 
-export async function runAudit({ instruction, original, edited, includeMeta = false }) {
+export async function runAudit({ instruction, original, edited, pixelDiff = null, includeMeta = false }) {
   if (!process.env.DEEPSEEK_API_KEY) {
     const error = new Error('Live AI verification is not configured yet.');
     error.code = 'NO_API_KEY';
     throw error;
   }
 
-  let pixelDiff = null;
-  try {
-    pixelDiff = await analyzePixelDiff(original.dataUrl, edited.dataUrl, instruction);
-  } catch (error) {
-    console.error('pixel_diff_failed', String(error?.message || error).slice(0, 200));
-  }
-
   let lastError = null;
   let totalInputTokens = 0;
   let totalOutputTokens = 0;
-
   for (let attempt = 1; attempt <= 3; attempt++) {
     try {
       const { payload, text } = await callDeepSeek({ instruction, original, edited });
@@ -121,9 +121,7 @@ export async function runAudit({ instruction, original, edited, includeMeta = fa
       if (payload?.status === 'incomplete') throw new Error(`DeepSeek response incomplete: ${payload?.incomplete_details?.reason || 'unknown reason'}`);
       if (!text) throw new Error('The AI service returned an empty result.');
       const result = applyPixelGuardrail(JSON.parse(text), pixelDiff);
-      return includeMeta
-        ? { result, usage: { input_tokens: totalInputTokens, output_tokens: totalOutputTokens, attempts: attempt }, pixelDiff }
-        : result;
+      return includeMeta ? { result, usage: { input_tokens: totalInputTokens, output_tokens: totalOutputTokens, attempts: attempt }, pixelDiff } : result;
     } catch (error) {
       lastError = error;
       if (error?.status && error.status >= 400 && error.status < 500 && error.status !== 408 && error.status !== 429) break;
@@ -154,16 +152,12 @@ async function readJson(req) {
       }
       chunks.push(chunk);
     });
-    req.on('end', () => {
-      try { resolve(JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}')); }
-      catch { reject(new Error('Invalid JSON.')); }
-    });
+    req.on('end', () => { try { resolve(JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}')); } catch { reject(new Error('Invalid JSON.')); } });
     req.on('error', reject);
   });
 }
 
 const MIME = { '.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.ico': 'image/x-icon' };
-
 async function serveStatic(req, res) {
   const url = new URL(req.url, 'http://localhost');
   const requested = url.pathname === '/' ? '/index.html' : url.pathname;
@@ -176,16 +170,12 @@ async function serveStatic(req, res) {
     res.writeHead(200, { 'Content-Type': MIME[ext] || 'application/octet-stream', 'Content-Length': data.length, 'Cache-Control': process.env.NODE_ENV === 'production' ? 'public, max-age=3600' : 'no-cache' });
     res.end(data);
     return true;
-  } catch {
-    return false;
-  }
+  } catch { return false; }
 }
 
 export async function requestHandler(req, res) {
   const url = new URL(req.url, 'http://localhost');
-  if (req.method === 'GET' && url.pathname === '/health') {
-    return json(res, 200, { ok: true, service: 'keepexact', verifier: 'deepseek-flash', live: Boolean(process.env.DEEPSEEK_API_KEY) });
-  }
+  if (req.method === 'GET' && url.pathname === '/health') return json(res, 200, { ok: true, service: 'keepexact', verifier: 'deepseek-flash', live: Boolean(process.env.DEEPSEEK_API_KEY) });
   if (req.method === 'POST' && url.pathname === '/api/audit') {
     try {
       if (!String(req.headers['content-type'] || '').startsWith('application/json')) return json(res, 415, { error: 'Unsupported request format.' });
