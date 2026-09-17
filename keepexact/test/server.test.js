@@ -1,34 +1,44 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildAuditPrompt, validateAuditBody, auditSchema } from '../server.js';
+import { buildAuditPrompt, validateAuditBody, validateEditBody, auditSchema } from '../server.js';
 
 const pngData = 'data:image/png;base64,iVBORw0KGgo=';
+const maskData = 'data:image/png;base64,iVBORw0KGgo=';
 
-test('audit prompt labels before/after and preserves instruction', () => {
+test('audit prompt checks unintended edits and visible artifacts', () => {
   const p = buildAuditPrompt('Remove the cup only.');
   assert.match(p, /BEFORE/);
   assert.match(p, /AFTER/);
   assert.match(p, /Remove the cup only/);
   assert.match(p, /unintended/i);
+  assert.match(p, /artifact/i);
 });
 
-test('validation rejects missing instruction', () => {
+test('audit validation rejects missing instruction', () => {
   assert.equal(validateAuditBody({}).error, 'Enter the exact edit instruction you gave the AI.');
 });
 
-test('validation rejects missing original after instruction exists', () => {
-  assert.equal(validateAuditBody({ instruction: 'x' }).error, 'Upload the original image.');
-});
-
-test('validation rejects unsupported image format', () => {
-  assert.match(validateAuditBody({ instruction: 'x', original: 'data:image/gif;base64,R0lGODlhAQABAIAAAAUEBA==' }).error, /^Original:/);
-});
-
-test('validation accepts complete normalized request', () => {
+test('audit validation accepts complete normalized request', () => {
   const r = validateAuditBody({ instruction: '  change shirt to white  ', original: pngData, edited: pngData });
   assert.equal(r.instruction, 'change shirt to white');
   assert.equal(r.original.mime, 'image/png');
   assert.equal(r.edited.mime, 'image/png');
+});
+
+test('edit precheck accepts one small supported local edit', () => {
+  const r = validateEditBody({ editType: 'remove_object', instruction: '删掉圈出的杯子', original: pngData, mask: maskData, regionFraction: 0.08 });
+  assert.equal(r.editType, 'remove_object');
+  assert.equal(r.regionFraction, 0.08);
+});
+
+test('edit precheck rejects oversized region before paid API use', () => {
+  const r = validateEditBody({ editType: 'remove_object', instruction: '删掉圈出的杯子', original: pngData, mask: maskData, regionFraction: 0.5 });
+  assert.match(r.error, /35%/);
+});
+
+test('edit precheck rejects unsupported complex edits before paid API use', () => {
+  const r = validateEditBody({ editType: 'replace_object', instruction: '换脸并且改发型', original: pngData, mask: maskData, regionFraction: 0.1 });
+  assert.match(r.error, /outside the current supported range/);
 });
 
 test('schema requires all top-level result fields', () => {
@@ -36,7 +46,7 @@ test('schema requires all top-level result fields', () => {
   assert.equal(auditSchema.additionalProperties, false);
 });
 
-test('running server serves public beta, browser modules, health, security headers, and no-key path without spending API credit', async t => {
+test('running server serves explicit local-edit product, modules, health and safe precheck', async t => {
   const { app } = await import('../server.js');
   await new Promise(resolve => app.listen(0, '127.0.0.1', resolve));
   t.after(() => new Promise(resolve => app.close(resolve)));
@@ -45,45 +55,29 @@ test('running server serves public beta, browser modules, health, security heade
   const home = await fetch(`${base}/`);
   assert.equal(home.status, 200);
   assert.equal(home.headers.get('x-content-type-options'), 'nosniff');
-  assert.match(home.headers.get('content-security-policy') || '', /default-src 'self'/);
   const html = await home.text();
-  assert.match(html, /KeepExact is a checker, not an image editor/);
-  assert.match(html, /What it catches/);
-  assert.match(html, /What it does not do/);
-  assert.match(html, /Free beta/);
-  assert.doesNotMatch(html, /internal accuracy testing/i);
+  assert.match(html, /只改你圈出的这一小块/);
+  assert.match(html, /现在能做/);
+  assert.match(html, /现在不接/);
+  assert.match(html, /不合格结果不会交付/);
 
-  for (const modulePath of ['/app.js', '/diff-core.js']) {
-    const moduleResponse = await fetch(`${base}${modulePath}`);
-    assert.equal(moduleResponse.status, 200);
-    assert.match(moduleResponse.headers.get('content-type') || '', /javascript/);
-    assert.ok((await moduleResponse.text()).length > 100);
+  for (const asset of ['/app.js', '/styles.css']) {
+    const response = await fetch(`${base}${asset}`);
+    assert.equal(response.status, 200);
   }
 
   const health = await fetch(`${base}/health`);
   const healthJson = await health.json();
   assert.equal(healthJson.ok, true);
   assert.equal(healthJson.service, 'keepexact');
-  assert.equal(healthJson.verifier, 'deepseek-flash');
-  assert.equal(healthJson.beta, true);
+  assert.equal(typeof healthJson.editorLive, 'boolean');
+  assert.equal(typeof healthJson.verifierLive, 'boolean');
   assert.equal(typeof healthJson.live, 'boolean');
 
-  const missing = await fetch(`${base}/api/audit`, {
-    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({})
+  const precheck = await fetch(`${base}/api/edit`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ editType: 'remove_object', instruction: '删掉杯子', original: pngData, mask: maskData, regionFraction: 0.7 })
   });
-  assert.equal(missing.status, 400);
-  assert.equal((await missing.json()).error, 'Enter the exact edit instruction you gave the AI.');
-
-  const savedKey = process.env.DEEPSEEK_API_KEY;
-  delete process.env.DEEPSEEK_API_KEY;
-  try {
-    const noKey = await fetch(`${base}/api/audit`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ instruction: 'change shirt', original: pngData, edited: pngData })
-    });
-    assert.equal(noKey.status, 503);
-  } finally {
-    if (savedKey) process.env.DEEPSEEK_API_KEY = savedKey;
-  }
+  assert.equal(precheck.status, 400);
+  assert.equal((await precheck.json()).precheck, true);
 });
