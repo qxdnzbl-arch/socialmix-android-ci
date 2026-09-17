@@ -67,10 +67,12 @@ async function callDeepSeek({ instruction, original, edited }) {
   const apiResponse = await fetch('https://api.deepseek.com/responses', {
     method: 'POST',
     headers: { 'Authorization': `Bearer ${process.env.DEEPSEEK_API_KEY}`, 'Content-Type': 'application/json' },
+    signal: AbortSignal.timeout(25000),
     body: JSON.stringify({
       model: process.env.DEEPSEEK_MODEL || 'deepseek-flash',
+      reasoning: { effort: 'none' },
       temperature: 0,
-      max_output_tokens: 2600,
+      max_output_tokens: 1800,
       input: [{ role: 'user', content: [
         { type: 'input_text', text: buildAuditPrompt(instruction) },
         { type: 'input_image', image_url: original.dataUrl, detail: 'high' },
@@ -92,15 +94,17 @@ async function callDeepSeek({ instruction, original, edited }) {
 function applyPixelGuardrail(result, pixelDiff) {
   if (!pixelDiff?.suspicious || result.verdict !== 'PASS') return result;
   const reasons = pixelDiff.reasons.length ? pixelDiff.reasons.join('; ') : 'deterministic pixel comparison found a suspicious change pattern';
-  result.verdict = 'REVIEW';
-  result.score = Math.min(Number(result.score || 100), 84);
-  result.summary = `Semantic check passed, but deterministic pixel comparison found a pattern that may indicate an extra edit: ${reasons}.`;
-  result.unintended_changes = [
-    ...(Array.isArray(result.unintended_changes) ? result.unintended_changes : []),
-    { severity: 'medium', area: 'image-difference guardrail', change: reasons, why_it_matters: 'The visible changes extend beyond the pattern expected from a tightly scoped edit.' }
-  ];
-  result.repair_prompt = 'Re-run the edit from the original image and change only the requested target. Preserve all unrelated regions exactly; verify the result again before use.';
-  return result;
+  return {
+    ...result,
+    verdict: 'REVIEW',
+    score: Math.min(Number(result.score || 100), 84),
+    summary: `Semantic check passed, but deterministic pixel comparison found a pattern that may indicate an extra edit: ${reasons}.`,
+    unintended_changes: [
+      ...(Array.isArray(result.unintended_changes) ? result.unintended_changes : []),
+      { severity: 'medium', area: 'image-difference guardrail', change: reasons, why_it_matters: 'The visible changes extend beyond the pattern expected from this instruction.' }
+    ],
+    repair_prompt: 'Re-run the edit from the original image and change only the requested target. Preserve all unrelated regions exactly; verify the result again before use.'
+  };
 }
 
 export async function runAudit({ instruction, original, edited, pixelDiff = null, includeMeta = false }) {
@@ -125,7 +129,7 @@ export async function runAudit({ instruction, original, edited, pixelDiff = null
     } catch (error) {
       lastError = error;
       if (error?.status && error.status >= 400 && error.status < 500 && error.status !== 408 && error.status !== 429) break;
-      if (attempt < 3) await new Promise(resolve => setTimeout(resolve, 250 * attempt));
+      if (attempt < 3) await new Promise(resolve => setTimeout(resolve, 300 * attempt));
     }
   }
   throw lastError || new Error('Verification failed.');
