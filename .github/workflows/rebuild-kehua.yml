@@ -1,0 +1,39 @@
+name: Rebuild verified Kehua bundle
+on:
+  push:
+    branches: [kehua-original-production]
+    paths:
+      - '.build/**'
+      - '.github/workflows/rebuild-kehua.yml'
+permissions:
+  contents: write
+jobs:
+  rebuild:
+    if: ${{ !contains(github.event.head_commit.message, '[bundle-built]') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: kehua-original-production
+      - name: Rebuild and verify exact bundle
+        shell: bash
+        run: |
+          cat .build/kgz00.txt .build/kgz01.txt .build/kgz02.txt .build/kgz03.txt > /tmp/bundle.gz.b64
+          test "$(wc -c < /tmp/bundle.gz.b64)" -eq 10916
+          printf '%s  %s\n' '630439305e5c4a977cc97b0a429d10a2bdc05c504e96877b8fbfa374a6f8c847' /tmp/bundle.gz.b64 | sha256sum -c -
+          base64 -d /tmp/bundle.gz.b64 | gzip -dc > index.html
+          test "$(wc -c < index.html)" -eq 26037
+          printf '%s  %s\n' 'cb3c11538db5dd1a34bd8e3330ec7607ee58736bea77adbedf385c189ccad8cf' index.html | sha256sum -c -
+          test "$(git hash-object index.html)" = '6844db5b810b0b0ca31a4e83cdf4e88fa010ed3d'
+          grep -q '<title>可话</title>' index.html
+          grep -q "orig_posts" index.html
+          grep -q "orig_messages" index.html
+      - name: Commit verified index
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          rm -rf .build
+          git add -A
+          git commit -m "build: verified production bundle [bundle-built]"
+          git push origin HEAD:kehua-original-production
