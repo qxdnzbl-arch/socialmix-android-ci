@@ -250,22 +250,25 @@ private fun KehuaShell(api: KehuaApi, onLogout: () -> Unit) {
     var tab by remember { mutableIntStateOf(0) }
     var resonancePost by remember { mutableStateOf<KehuaPost?>(null) }
     var chat by remember { mutableStateOf<KehuaConversation?>(null) }
+    var publishOpen by remember { mutableStateOf(false) }
+    var friendsOpen by remember { mutableStateOf(false) }
+    var homeRefresh by remember { mutableIntStateOf(0) }
 
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
         Column(Modifier.fillMaxHeight().fillMaxWidth().widthIn(max = 760.dp)) {
-            if (resonancePost != null) {
-                ResonanceScreen(api, resonancePost!!, onClose = { resonancePost = null }, onChat = { c -> chat = c; resonancePost = null })
-            } else if (chat != null) {
-                ChatScreen(api, chat!!, onBack = { chat = null })
-            } else {
-                Scaffold(
+            when {
+                publishOpen -> PublishScreen(api, onBack = { publishOpen = false }, onPublished = { publishOpen = false; homeRefresh++ })
+                friendsOpen -> FriendsScreen(api, onBack = { friendsOpen = false })
+                resonancePost != null -> ResonanceScreen(api, resonancePost!!, onClose = { resonancePost = null }, onChat = { conv -> chat = conv; resonancePost = null })
+                chat != null -> ChatScreen(api, chat!!, onBack = { chat = null })
+                else -> Scaffold(
                     containerColor = KehuaBg,
                     bottomBar = { KehuaBottomBar(tab) { tab = it } }
                 ) { pad ->
                     Box(Modifier.padding(pad)) {
                         when (tab) {
-                            0 -> HomeScreen(api) { resonancePost = it }
-                            1 -> MessagesScreen(api) { chat = it }
+                            0 -> HomeScreen(api, refreshToken = homeRefresh, onCompose = { publishOpen = true }, onResonance = { resonancePost = it })
+                            1 -> MessagesScreen(api, onChat = { chat = it }, onFriends = { friendsOpen = true })
                             else -> MeScreen(api, onLogout)
                         }
                     }
@@ -295,16 +298,18 @@ private fun KehuaBottomBar(tab: Int, onTab: (Int) -> Unit) {
 }
 
 @Composable
-private fun HomeScreen(api: KehuaApi, onResonance: (KehuaPost) -> Unit) {
+private fun HomeScreen(
+    api: KehuaApi,
+    refreshToken: Int,
+    onCompose: () -> Unit,
+    onResonance: (KehuaPost) -> Unit
+) {
     var posts by remember { mutableStateOf<List<KehuaPost>>(emptyList()) }
-    var body by remember { mutableStateOf("") }
-    var image by remember { mutableStateOf<Uri?>(null) }
-    var busy by remember { mutableStateOf(false) }
     var status by remember { mutableStateOf("") }
-    var refresh by remember { mutableIntStateOf(0) }
-    val scope = rememberCoroutineScope()
-    val picker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { image = it }
-    LaunchedEffect(refresh) { runCatching { api.myPosts() }.onSuccess { posts = it }.onFailure { status = it.message.orEmpty() } }
+
+    LaunchedEffect(refreshToken) {
+        runCatching { api.myPosts() }.onSuccess { posts = it; status = "" }.onFailure { status = it.message.orEmpty() }
+    }
 
     LazyColumn(
         Modifier.fillMaxSize().background(
@@ -317,57 +322,26 @@ private fun HomeScreen(api: KehuaApi, onResonance: (KehuaPost) -> Unit) {
                 Spacer(Modifier.height(12.dp))
                 Text("此刻，说你想说的话～", color = Color(0xFF252529), fontSize = 28.sp, fontWeight = FontWeight.Bold)
                 Spacer(Modifier.height(20.dp))
-                Column(
-                    Modifier.fillMaxWidth().clip(RoundedCornerShape(26.dp)).background(Color.White).padding(horizontal = 22.dp, vertical = 20.dp)
+                Box(
+                    Modifier.fillMaxWidth().height(348.dp).clip(RoundedCornerShape(26.dp)).background(Color.White).clickable { onCompose() }
                 ) {
-                    BasicTextField(
-                        value = body,
-                        onValueChange = { if (it.length <= 1200) body = it },
-                        textStyle = TextStyle(color = KehuaInk, fontSize = 18.sp, lineHeight = 27.sp),
-                        modifier = Modifier.fillMaxWidth().height(245.dp),
-                        decorationBox = { inner -> if (body.isEmpty()) Text("我想说...", color = Color(0xFFD0D0D5), fontSize = 18.sp) else inner() }
-                    )
-                    if (image != null) {
-                        AsyncImage(model = image, contentDescription = null, modifier = Modifier.fillMaxWidth().height(150.dp).clip(RoundedCornerShape(14.dp)), contentScale = ContentScale.Crop)
-                        Spacer(Modifier.height(8.dp))
-                    }
-                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                        IconButton(onClick = { picker.launch("image/*") }, modifier = Modifier.size(38.dp)) {
-                            Icon(Icons.Outlined.AddPhotoAlternate, "添加图片", tint = Color(0xFFB4B4BB))
-                        }
-                        if (image != null) Text("移除", color = KehuaSub, fontSize = 12.sp, modifier = Modifier.clickable { image = null }.padding(8.dp))
-                        Spacer(Modifier.weight(1f))
-                        Text(body.length.toString() + "/1200", color = Color(0xFFBEBEC4), fontSize = 11.sp)
-                        Spacer(Modifier.width(12.dp))
-                        Text(
-                            if (busy) "发布中…" else "发布",
-                            color = if (busy || body.isBlank()) Color(0xFFC9C9CE) else KehuaPink,
-                            fontSize = 15.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            modifier = Modifier.clickable(enabled = !busy && body.isNotBlank()) {
-                                busy = true; status = ""
-                                scope.launch {
-                                    runCatching {
-                                        val path = image?.let { api.uploadImage(it, "posts") }
-                                        api.publish(body, path)
-                                    }.onSuccess { pair ->
-                                        status = if (pair.second > 0) "共鸣已到达。请签收～" else "已经说出去了，正在替你寻找共鸣…"
-                                        body = ""; image = null; refresh++
-                                    }.onFailure { status = it.message.orEmpty() }
-                                    busy = false
-                                }
-                            }.padding(horizontal = 8.dp, vertical = 9.dp)
-                        )
-                    }
+                    Text("我想说...", color = Color(0xFFD0D0D5), fontSize = 18.sp, modifier = Modifier.padding(24.dp))
                 }
-                if (status.isNotBlank()) { Spacer(Modifier.height(10.dp)); Text(status, color = Color(0xFF8E8E95), fontSize = 12.sp) }
+                if (status.isNotBlank()) {
+                    Spacer(Modifier.height(10.dp))
+                    Text(status, color = Color(0xFF8E8E95), fontSize = 12.sp)
+                }
             }
         }
+
         items(posts, key = { it.id }) { post ->
             Box(Modifier.padding(horizontal = 20.dp, vertical = 5.dp)) {
                 Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(22.dp)).background(Color.White).padding(18.dp)) {
                     Text(post.body, color = KehuaInk, fontSize = 15.sp, lineHeight = 23.sp)
-                    if (!post.imagePath.isNullOrBlank()) { Spacer(Modifier.height(12.dp)); SignedImage(api, post.imagePath, Modifier.fillMaxWidth().height(200.dp).clip(RoundedCornerShape(14.dp))) }
+                    if (!post.imagePath.isNullOrBlank()) {
+                        Spacer(Modifier.height(12.dp))
+                        SignedImage(api, post.imagePath, Modifier.fillMaxWidth().height(200.dp).clip(RoundedCornerShape(14.dp)))
+                    }
                     Spacer(Modifier.height(11.dp))
                     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                         Text(shortTime(post.createdAt), color = Color(0xFFB5B5BB), fontSize = 10.sp, modifier = Modifier.weight(1f))
@@ -378,6 +352,94 @@ private fun HomeScreen(api: KehuaApi, onResonance: (KehuaPost) -> Unit) {
             }
         }
         item { Spacer(Modifier.height(28.dp)) }
+    }
+}
+
+@Composable
+private fun PublishScreen(api: KehuaApi, onBack: () -> Unit, onPublished: () -> Unit) {
+    var body by remember { mutableStateOf("") }
+    var image by remember { mutableStateOf<Uri?>(null) }
+    var visibility by remember { mutableStateOf("他人可见") }
+    var showVisibility by remember { mutableStateOf(false) }
+    var busy by remember { mutableStateOf(false) }
+    var status by remember { mutableStateOf("") }
+    val scope = rememberCoroutineScope()
+    val picker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { image = it }
+
+    Box(Modifier.fillMaxSize().background(Color(0xFFF6F6F9))) {
+        Column(Modifier.fillMaxSize()) {
+            Row(Modifier.fillMaxWidth().height(56.dp).background(Color.White).padding(horizontal = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                IconButton(onClick = onBack) { Text("⌄", color = KehuaInk, fontSize = 30.sp) }
+                Text("说点什么", color = KehuaInk, fontSize = 17.sp, modifier = Modifier.weight(1f))
+                Text(
+                    if (busy) "发布中…" else "发布",
+                    color = if (body.isBlank() || busy) Color(0xFFC7C7CD) else KehuaPink,
+                    fontSize = 15.sp,
+                    modifier = Modifier.clickable(enabled = body.isNotBlank() && !busy) {
+                        busy = true; status = ""
+                        scope.launch {
+                            runCatching {
+                                val path = image?.let { api.uploadImage(it, "posts") }
+                                api.publish(body, path)
+                            }.onSuccess { onPublished() }.onFailure { status = it.message.orEmpty() }
+                            busy = false
+                        }
+                    }.padding(12.dp)
+                )
+            }
+            HorizontalDivider(color = KehuaLine)
+            Column(Modifier.fillMaxWidth().background(Color.White).padding(horizontal = 20.dp, vertical = 18.dp)) {
+                BasicTextField(
+                    value = body,
+                    onValueChange = { if (it.length <= 1200) body = it },
+                    modifier = Modifier.fillMaxWidth().height(250.dp),
+                    textStyle = TextStyle(color = KehuaInk, fontSize = 18.sp, lineHeight = 27.sp),
+                    decorationBox = { inner -> if (body.isBlank()) Text("这一刻你在想什么？", color = Color(0xFFC5C5CB), fontSize = 18.sp) else inner() }
+                )
+                if (image != null) {
+                    AsyncImage(model = image, contentDescription = null, modifier = Modifier.fillMaxWidth().height(150.dp).clip(RoundedCornerShape(14.dp)), contentScale = ContentScale.Crop)
+                    Spacer(Modifier.height(8.dp))
+                }
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Text("图片", color = KehuaSub, fontSize = 13.sp, modifier = Modifier.clickable { picker.launch("image/*") }.padding(vertical = 10.dp))
+                    Spacer(Modifier.width(22.dp))
+                    if (image != null) Text("移除", color = KehuaSub, fontSize = 13.sp, modifier = Modifier.clickable { image = null }.padding(vertical = 10.dp))
+                    Spacer(Modifier.weight(1f))
+                    Text(body.length.toString() + "/1200", color = Color(0xFFBDBDC3), fontSize = 11.sp)
+                }
+            }
+            Spacer(Modifier.height(12.dp))
+            Row(
+                Modifier.fillMaxWidth().height(56.dp).background(Color.White).clickable { showVisibility = true }.padding(horizontal = 20.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text("谁可以看", color = KehuaInk, fontSize = 14.sp, modifier = Modifier.weight(1f))
+                Text(visibility, color = KehuaSub, fontSize = 13.sp)
+                Spacer(Modifier.width(4.dp))
+                Icon(Icons.Outlined.ChevronRight, null, tint = Color(0xFFC9C9CF))
+            }
+            if (status.isNotBlank()) Text(status, color = KehuaDanger, fontSize = 12.sp, modifier = Modifier.padding(20.dp))
+        }
+
+        if (showVisibility) {
+            Box(Modifier.fillMaxSize().background(Color(0x33000000)).clickable { showVisibility = false })
+            Column(
+                Modifier.align(Alignment.BottomCenter).fillMaxWidth().background(Color(0xFFF5F5F7)).navigationBarsPadding()
+            ) {
+                listOf("他人可见", "仅自己可见").forEach { option ->
+                    Row(
+                        Modifier.fillMaxWidth().height(56.dp).background(Color.White).clickable { visibility = option; showVisibility = false }.padding(horizontal = 20.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(option, color = KehuaInk, fontSize = 15.sp, modifier = Modifier.weight(1f))
+                        if (visibility == option) Box(Modifier.size(9.dp).clip(CircleShape).background(KehuaPink))
+                    }
+                    HorizontalDivider(color = KehuaLine)
+                }
+                Spacer(Modifier.height(8.dp))
+                Text("取消", color = KehuaInk, fontSize = 15.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().background(Color.White).clickable { showVisibility = false }.padding(18.dp))
+            }
+        }
     }
 }
 
