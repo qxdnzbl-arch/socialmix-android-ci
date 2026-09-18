@@ -10,7 +10,7 @@ import org.junit.runner.RunWith
 @RunWith(AndroidJUnit4::class)
 class LaunchSmokeTest {
     @get:Rule
-    val activityRule = ActivityScenarioRule(ProductionChatActivity::class.java)
+    val activityRule = ActivityScenarioRule(KehuaActivity::class.java)
 
     @Test
     fun freshInstall_launchesWithoutCrash() {

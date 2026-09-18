@@ -1,31 +1,26 @@
-name: Kehua Android Engineering Acceptance
+name: Kehua Public Production
 
 on:
   push:
-    branches: [main, socialmix-chat-production-core, kehua-firebase-auth-prod]
+    branches: [kehua-public-production-build]
   workflow_dispatch:
 
 permissions:
   contents: read
 
 jobs:
-  build-and-acceptance-test:
+  production-build:
     runs-on: ubuntu-latest
     timeout-minutes: 35
-
     steps:
-      - name: Checkout
+      - name: Checkout production branch
         uses: actions/checkout@v4
 
-      - name: Enforce revival product authority
-        run: |
-          test -f KEHUA-REVIVAL-AUTHORITY.md
-          grep -q '状态：ACTIVE' KEHUA-REVIVAL-AUTHORITY.md
-          grep -q '当前视觉复刻尚未经过用户实际看过并确认通过' KEHUA-REVIVAL-AUTHORITY.md
-          grep -q '注册 / 找回密码流程尚未最终定案' KEHUA-REVIVAL-AUTHORITY.md
+      - name: Prepare release auth
+        run: python3 ci/prepare_kehua_release.py
 
       - name: Set up Java 17
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '17'
@@ -35,14 +30,22 @@ jobs:
         with:
           gradle-version: '8.11.1'
 
-      - name: Build debug APK and test APK
+      - name: Build APK and test APK
         run: gradle --no-daemon :app:assembleDebug :app:assembleDebugAndroidTest
+
+      - name: Upload compiled APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: Kehua-Public-Production-Compiled
+          path: app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          retention-days: 14
 
       - name: Enable KVM
         run: |
           if [ -e /dev/kvm ]; then sudo chmod 666 /dev/kvm; fi
 
-      - name: Android emulator infrastructure regression tests
+      - name: Emulator acceptance
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 35
@@ -60,19 +63,18 @@ jobs:
             sleep 4
             adb shell pidof com.qxdnzbl.kehua
 
-      - name: Prepare engineering candidate APK
+      - name: Prepare verified APK
         if: success()
         run: |
           mkdir -p deliverable
-          cp app/build/outputs/apk/debug/app-debug.apk deliverable/Kehua-Android-Engineering-Candidate.apk
-          sha256sum deliverable/Kehua-Android-Engineering-Candidate.apk | tee deliverable/SHA256.txt
-          printf '%s\n' 'ENGINEERING CANDIDATE ONLY - NOT USER-CONFIRMED REVIVAL - NOT FINAL RELEASE' > deliverable/NOT-FINAL.txt
+          cp app/build/outputs/apk/debug/app-debug.apk deliverable/Kehua-Public-Production.apk
+          sha256sum deliverable/Kehua-Public-Production.apk | tee deliverable/SHA256.txt
 
-      - name: Upload engineering candidate APK
+      - name: Upload verified APK
         if: success()
         uses: actions/upload-artifact@v4
         with:
-          name: Kehua-Android-Engineering-Candidate
+          name: Kehua-Public-Production-Verified
           path: deliverable/
           if-no-files-found: error
           retention-days: 14

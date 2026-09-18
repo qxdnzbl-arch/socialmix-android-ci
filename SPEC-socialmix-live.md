@@ -1,3 +1,11 @@
+# ⚠️ HISTORICAL ONLY — NOT CURRENT KEHUA PRODUCT AUTHORITY
+
+> 本文件仅保留历史实现记录。它**不得**用于定义、推断或验收当前“可话复活”的产品需求。
+> 当前唯一产品权威来自用户在聊天中亲自确认的原可话需求，并受仓库根目录 `KEHUA-REVIVAL-AUTHORITY.md` 约束。
+> 本文件中邮箱注册/邮箱确认、好友搜索/申请、B版绿色视觉、功能范围及验收场景均属于旧实现，不代表当前已确认方案；自动化、开发和测试不得据此继续扩展产品。
+
+---
+
 # SocialMix Phase 1 SPEC
 
 ## One-Sentence Concept

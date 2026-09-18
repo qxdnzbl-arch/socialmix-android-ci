@@ -11,17 +11,21 @@ android {
     compileSdk 35
 
     defaultConfig {
-        applicationId 'com.socialmix.experiment.b'
+        applicationId 'com.qxdnzbl.kehua'
         minSdk 26
         targetSdk 35
         versionCode ciVersionCode
-        versionName "2.2-B-refresh.${ciVersionCode}"
+        versionName "1.0.0.${ciVersionCode}"
         testInstrumentationRunner 'androidx.test.runner.AndroidJUnitRunner'
     }
 
     buildTypes {
         debug { }
-        release { minifyEnabled false }
+        release {
+            minifyEnabled true
+            shrinkResources true
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt')
+        }
     }
 
     compileOptions {
@@ -43,8 +47,10 @@ dependencies {
     implementation 'androidx.compose.material3:material3'
     implementation 'androidx.compose.material:material-icons-extended'
     implementation 'io.coil-kt:coil-compose:2.7.0'
-    implementation 'io.coil-kt:coil-video:2.7.0'
     implementation 'com.squareup.okhttp3:okhttp:4.12.0'
+
+    implementation platform('com.google.firebase:firebase-bom:34.19.0')
+    implementation 'com.google.firebase:firebase-auth'
 
     implementation platform('io.github.jan-tennert.supabase:bom:2.6.0')
     implementation 'io.github.jan-tennert.supabase:realtime-kt'
