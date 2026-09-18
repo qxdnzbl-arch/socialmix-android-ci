@@ -3,6 +3,8 @@ name: Kehua Phase1 APK
 on:
   push:
     branches: [kehua-phase1-rebuild]
+  pull_request:
+    branches: [main]
   workflow_dispatch:
 
 permissions:
@@ -11,7 +13,7 @@ permissions:
 jobs:
   build-and-verify:
     runs-on: ubuntu-latest
-    timeout-minutes: 35
+    timeout-minutes: 40
     steps:
       - name: Checkout phase1 branch
         uses: actions/checkout@v4
@@ -37,7 +39,7 @@ jobs:
         run: |
           if [ -e /dev/kvm ]; then sudo chmod 666 /dev/kvm; fi
 
-      - name: Install and launch on Android emulator
+      - name: Native Android acceptance
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 35
@@ -47,6 +49,8 @@ jobs:
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none
           script: |
+            gradle --no-daemon :app:connectedDebugAndroidTest
+            adb uninstall com.qxdnzbl.kehua || true
             adb install -r app/build/outputs/apk/debug/app-debug.apk
             adb shell am force-stop com.qxdnzbl.kehua || true
             adb shell monkey -p com.qxdnzbl.kehua -c android.intent.category.LAUNCHER 1
