@@ -32,3 +32,10 @@ jobs:
           curl --fail -sS 'https://nvwdtfnhsyfdopaxdylx.supabase.co/storage/v1/object/public/kehua-original-public/manifest.webmanifest' | grep -q '"name":"可话"'
           curl --fail -sS 'https://nvwdtfnhsyfdopaxdylx.supabase.co/storage/v1/object/public/kehua-original-public/sw.js' | grep -q "kehua-original-v1"
           curl --fail -sS 'https://nvwdtfnhsyfdopaxdylx.supabase.co/storage/v1/object/public/kehua-original-public/icon.svg' | grep -q '<svg'
+      - name: Verify real Auth, RLS and cross-device data
+        run: |
+          curl --fail --retry 2 --retry-delay 2 -sS -X POST 'https://nvwdtfnhsyfdopaxdylx.supabase.co/functions/v1/kehua-original-e2e-selftest' -o /tmp/e2e.json
+          cat /tmp/e2e.json
+          grep -q '"ok":true' /tmp/e2e.json
+          grep -q 'post write/read across two independent clients' /tmp/e2e.json
+          grep -q 'message visible to peer' /tmp/e2e.json
