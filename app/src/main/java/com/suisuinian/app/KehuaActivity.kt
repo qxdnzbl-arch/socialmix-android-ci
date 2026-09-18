@@ -501,16 +501,39 @@ private fun MessagesScreen(
     onProfile: (Int) -> Unit,
     onFriends: () -> Unit
 ) {
-    val bg = if (dark) KehuaDark else KehuaPage
-    val card = if (dark) KehuaDarkCard else Color.White
-    val ink = if (dark) Color(0xFFF2F2F2) else KehuaInk
-    val sub = if (dark) Color(0xFF777777) else KehuaSub
-    val line = if (dark) KehuaDarkLine else KehuaLine
-    val people = listOf(
-        Triple("乘风778", "刚刚", "我也有过这种感觉"),
-        Triple("Miraitowa", "昨天", "有时候慢一点也没关系"),
-        Triple("Zliiiiiiii", "周一", "晚安")
+    val bg = if (dark) Color(0xFF101010) else Color.White
+    val ink = if (dark) Color(0xFFF3F3F3) else KehuaInk
+    val sub = if (dark) Color(0xFF777777) else Color(0xFFB6B6BC)
+    val line = if (dark) Color(0xFF242424) else Color(0xFFF0F0F3)
+
+    data class RowData(
+        val name: String,
+        val message: String,
+        val quote: String,
+        val time: String,
+        val avatar: Color,
+        val badge: Int = 0,
+        val vip: Boolean = false
     )
+
+    val rows = if (dark) {
+        listOf(
+            RowData("黄花远志", "[与你的共鸣]", "", "21:31", Color(0xFF8E735D), 2, true),
+            RowData("Ayue", "[与你的共鸣]", "", "21:30", Color(0xFFB79C5E), 2, true),
+            RowData("卡斯帕尔", "真没想到，过了将近三年回来，发现你还…", "", "01-25", Color(0xFF426181)),
+            RowData("可我还是好困喔", "可我还是好困喔 点亮了你", "", "01-06", Color(0xFF6D9CC5), 0, true),
+            RowData("皮不皮得过卡丘", "皮不皮得过卡丘 点亮了你", "", "2024-12-27", Color(0xFF91476D), 2, true),
+            RowData("随梦", "[与你的共鸣]", "", "2024-12-26", Color(0xFF335F7A), 2, true),
+            RowData("他是她的云天明", "不上班也死气沉沉的", "", "2024-12-26", Color(0xFF777777), 3, true)
+        )
+    } else {
+        listOf(
+            RowData("月亮", "嗯嗯嗯", "Zliiiiiii: 看到自己的朋友在那个领域闪闪发光，…", "15:08", Color(0xFFE9C7B8)),
+            RowData("夜雨寄北", "夜雨寄北 点亮了你", "Zliiiiiii: 现在好像过得很好了，不像那个时候适…", "昨天", Color(0xFF94A8C7)),
+            RowData("不知道叫什么", "很难相处", "Zliiiiiii: 不太适应人类社会", "2021-12-27", Color(0xFF9B8B78)),
+            RowData("可话君", "Zliiiiiii，你发布了第 1 条动态！🌟 点亮你…", "Zliiiiiii: 不太适应人类社会", "2021-12-27", KehuaPink)
+        )
+    }
 
     Scaffold(
         containerColor = bg,
@@ -526,46 +549,159 @@ private fun MessagesScreen(
         ) {
             item {
                 Row(
-                    Modifier.fillMaxWidth().height(58.dp).padding(horizontal = 18.dp),
+                    Modifier
+                        .fillMaxWidth()
+                        .height(76.dp)
+                        .padding(horizontal = 22.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text("消息", color = ink, fontSize = 25.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
-                    Icon(Icons.Outlined.Search, null, tint = sub, modifier = Modifier.size(24.dp))
+                    Text(
+                        "消息",
+                        color = ink,
+                        fontSize = 26.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier.weight(1f)
+                    )
+                    if (dark) {
+                        Text("♕", color = Color(0xFFE6E6E6), fontSize = 30.sp)
+                        Spacer(Modifier.width(26.dp))
+                        Text("♧", color = Color(0xFFE6E6E6), fontSize = 28.sp)
+                    } else {
+                        Icon(
+                            Icons.Outlined.ChatBubbleOutline,
+                            null,
+                            tint = ink,
+                            modifier = Modifier.size(30.dp)
+                        )
+                    }
                 }
+                Divider(color = line, modifier = Modifier.padding(horizontal = 22.dp))
             }
+
             item {
-                MessageShortcut("我的好友", "看看已经认识的人", dark, onFriends)
-                Divider(color = line)
-                MessageShortcut("点亮我的", "收到的点亮会出现在这里", dark) {}
-                Spacer(Modifier.height(10.dp))
+                Column(
+                    Modifier
+                        .fillMaxWidth()
+                        .clickable { onChat() }
+                        .padding(horizontal = 22.dp, vertical = 22.dp)
+                ) {
+                    Box(
+                        Modifier
+                            .size(68.dp)
+                            .clip(CircleShape)
+                            .background(if (dark) Color(0xFF171717) else Color.White)
+                            .then(
+                                Modifier.background(
+                                    if (dark) Color(0xFF171717) else Color.White
+                                )
+                            ),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Box(
+                            Modifier
+                                .size(62.dp)
+                                .clip(CircleShape)
+                                .background(if (dark) Color(0xFF1F1F1F) else Color(0xFFF8F8FA)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text("~", color = KehuaPink, fontSize = 49.sp, fontWeight = FontWeight.Black)
+                        }
+                    }
+                    Spacer(Modifier.height(7.dp))
+                    Text(
+                        "遇见",
+                        color = if (dark) Color(0xFF8D8D8D) else Color(0xFF9D9DA4),
+                        fontSize = 13.sp,
+                        modifier = Modifier.padding(start = 17.dp)
+                    )
+                }
+                Divider(color = line, modifier = Modifier.padding(horizontal = 22.dp))
             }
-            itemsIndexed(people) { index, item ->
+
+            itemsIndexed(rows) { index, item ->
                 Row(
                     Modifier
                         .fillMaxWidth()
-                        .background(card)
                         .clickable { onChat() }
-                        .padding(horizontal = 18.dp, vertical = 13.dp)
+                        .padding(horizontal = 22.dp, vertical = if (dark) 16.dp else 14.dp)
                         .testTag("message-row-" + index),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Avatar(
-                        initial = item.first.take(1),
-                        color = listOf(Color(0xFF8098BF), Color(0xFF72A6A0), Color(0xFFB18F7F))[index],
-                        size = 48.dp,
-                        modifier = Modifier.clickable { onProfile(index) }
+                        initial = if (item.name == "可话君") "~!" else item.name.take(1),
+                        color = item.avatar,
+                        size = if (dark) 58.dp else 56.dp,
+                        modifier = Modifier.clickable { onProfile(index.coerceAtMost(2)) }
                     )
-                    Spacer(Modifier.width(13.dp))
+                    Spacer(Modifier.width(14.dp))
                     Column(Modifier.weight(1f)) {
-                        Row(Modifier.fillMaxWidth()) {
-                            Text(item.first, color = ink, fontSize = 15.sp, modifier = Modifier.weight(1f))
-                            Text(item.second, color = sub, fontSize = 10.sp)
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                item.name,
+                                color = ink,
+                                fontSize = if (dark) 16.sp else 15.sp,
+                                fontWeight = FontWeight.Normal,
+                                maxLines = 1
+                            )
+                            if (item.vip) {
+                                Spacer(Modifier.width(7.dp))
+                                Box(
+                                    Modifier
+                                        .clip(RoundedCornerShape(7.dp))
+                                        .background(Color(0xFF4D1B2D))
+                                        .padding(horizontal = 5.dp, vertical = 1.dp)
+                                ) {
+                                    Text("♕VIP", color = KehuaPink, fontSize = 10.sp)
+                                }
+                            }
                         }
-                        Spacer(Modifier.height(5.dp))
-                        Text(item.third, color = sub, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            item.message,
+                            color = if (dark) Color(0xFF8E8E8E) else Color(0xFF77777E),
+                            fontSize = 12.5.sp,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        if (item.quote.isNotBlank()) {
+                            Spacer(Modifier.height(5.dp))
+                            Text(
+                                "▌ " + item.quote,
+                                color = if (dark) Color(0xFF4F4F4F) else Color(0xFFC8C8CD),
+                                fontSize = 10.5.sp,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                    }
+                    Column(horizontalAlignment = Alignment.End) {
+                        Text(item.time, color = if (dark) Color(0xFF4C4C4C) else Color(0xFFC9C9CE), fontSize = 10.5.sp)
+                        if (item.badge > 0) {
+                            Spacer(Modifier.height(8.dp))
+                            Box(
+                                Modifier
+                                    .size(28.dp)
+                                    .clip(CircleShape)
+                                    .background(KehuaPink),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(item.badge.toString(), color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                            }
+                        }
                     }
                 }
-                Divider(color = line, modifier = Modifier.padding(start = 79.dp))
+            }
+
+            if (!dark) {
+                item {
+                    Text(
+                        "没有更多消息啦",
+                        color = Color(0xFFC7C7CC),
+                        fontSize = 13.sp,
+                        modifier = Modifier.fillMaxWidth().padding(top = 30.dp),
+                        textAlign = TextAlign.Center
+                    )
+                }
             }
         }
     }
@@ -701,155 +837,298 @@ private fun ProfileScreen(
     onFriends: () -> Unit,
     onPost: () -> Unit
 ) {
-    val data = when (kind) {
-        ProfileKind.Miraitowa -> listOf("Miraitowa", "女 · 00后", "IP属地：广东", "186", "5697", "M")
-        ProfileKind.Lexie -> listOf("Lexie", "女 · 00后", "IP属地：浙江", "78", "2240", "L")
-        ProfileKind.Zli -> listOf("Zliiiiiiii", "女 · 00后", "IP属地：广东", "0", "25", "Z")
+    val name = when (kind) {
+        ProfileKind.Miraitowa -> "Miraitowa"
+        ProfileKind.Lexie -> "Lexie"
+        ProfileKind.Zli -> "Zliiiiiii"
+    }
+    val meta = when (kind) {
+        ProfileKind.Miraitowa -> "西安市 · 双子座 · 536 条"
+        ProfileKind.Lexie -> "重庆市 · 双子座 · 2188 条"
+        ProfileKind.Zli -> "中国 · 白羊座 · 14 条"
+    }
+    val ip = when (kind) {
+        ProfileKind.Miraitowa -> "IP 陕西"
+        ProfileKind.Lexie -> "IP 重庆"
+        ProfileKind.Zli -> "IP 广东 ⓘ"
+    }
+    val friends = when (kind) {
+        ProfileKind.Miraitowa -> "186"
+        ProfileKind.Lexie -> "241"
+        ProfileKind.Zli -> "0"
+    }
+    val lights = when (kind) {
+        ProfileKind.Miraitowa -> "5697"
+        ProfileKind.Lexie -> "2.86万"
+        ProfileKind.Zli -> "25"
+    }
+    val avatarColor = when (kind) {
+        ProfileKind.Miraitowa -> Color(0xFF628EC4)
+        ProfileKind.Lexie -> Color(0xFFB98B7D)
+        ProfileKind.Zli -> Color(0xFF2D67BE)
     }
 
     Scaffold(
-        containerColor = KehuaPage,
+        containerColor = Color(0xFFF6F6F9),
         bottomBar = { MainBottomBar(selected = 2, dark = false, onSelect = onNav) }
     ) { pad ->
         LazyColumn(
             Modifier
                 .fillMaxSize()
                 .padding(bottom = pad.calculateBottomPadding())
-                .background(KehuaPage)
+                .background(Color(0xFFF6F6F9))
                 .testTag("profile-screen")
         ) {
             item {
                 Box(
                     Modifier
                         .fillMaxWidth()
-                        .height(245.dp)
+                        .height(if (kind == ProfileKind.Zli) 500.dp else 405.dp)
                         .background(profileCoverBrush(kind))
                 ) {
+                    if (kind == ProfileKind.Lexie) {
+                        Text(
+                            "♥",
+                            color = Color(0x4D151515),
+                            fontSize = 132.sp,
+                            modifier = Modifier.align(Alignment.CenterStart).padding(start = 8.dp, bottom = 62.dp)
+                        )
+                        Text(
+                            "◯",
+                            color = Color(0x3D3A2B27),
+                            fontSize = 190.sp,
+                            modifier = Modifier.align(Alignment.CenterEnd).padding(end = 10.dp, bottom = 40.dp)
+                        )
+                    } else if (kind == ProfileKind.Miraitowa) {
+                        Text(
+                            "☁",
+                            color = Color(0xE6FFFFFF),
+                            fontSize = 88.sp,
+                            modifier = Modifier.align(Alignment.TopStart).padding(start = 12.dp, top = 46.dp)
+                        )
+                        Text(
+                            "☁",
+                            color = Color(0xCFFFFFFF),
+                            fontSize = 72.sp,
+                            modifier = Modifier.align(Alignment.TopEnd).padding(end = 24.dp, top = 86.dp)
+                        )
+                        Text(
+                            "▲  ▲   ▲▲",
+                            color = Color(0xFF3E8044),
+                            fontSize = 46.sp,
+                            modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 92.dp)
+                        )
+                    } else {
+                        Text(
+                            "◇",
+                            color = Color(0x99FFFFFF),
+                            fontSize = 220.sp,
+                            modifier = Modifier.align(Alignment.Center).padding(bottom = 54.dp)
+                        )
+                    }
+
+                    Box(
+                        Modifier
+                            .fillMaxWidth()
+                            .height(145.dp)
+                            .align(Alignment.BottomCenter)
+                            .background(
+                                Brush.verticalGradient(
+                                    listOf(Color.Transparent, Color(0xFFF6F6F9))
+                                )
+                            )
+                    )
+
                     Row(
                         Modifier
                             .fillMaxWidth()
                             .statusBarsPadding()
-                            .padding(horizontal = 12.dp, vertical = 6.dp),
+                            .padding(horizontal = 14.dp, vertical = 8.dp),
                         horizontalArrangement = Arrangement.End
                     ) {
+                        IconButton(onClick = {}) {
+                            Icon(Icons.Outlined.Search, "搜索", tint = Color.White, modifier = Modifier.size(29.dp))
+                        }
                         IconButton(onClick = onSettings, modifier = Modifier.testTag("settings-button")) {
-                            Icon(Icons.Outlined.Settings, "设置", tint = Color.White)
+                            Icon(Icons.Outlined.Settings, "设置", tint = Color.White, modifier = Modifier.size(29.dp))
                         }
                     }
+
+                    Avatar(
+                        initial = name.take(1),
+                        color = avatarColor,
+                        size = 96.dp,
+                        modifier = Modifier
+                            .align(Alignment.BottomCenter)
+                            .padding(bottom = 8.dp),
+                        border = Color.White
+                    )
                 }
-            }
-            item {
+
                 Column(
                     Modifier
                         .fillMaxWidth()
-                        .background(KehuaPage)
-                        .padding(horizontal = 16.dp)
+                        .padding(horizontal = 18.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
                 ) {
+                    Spacer(Modifier.height(8.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(name, color = KehuaInk, fontSize = 27.sp, fontWeight = FontWeight.Bold)
+                        if (kind != ProfileKind.Zli) {
+                            Spacer(Modifier.width(7.dp))
+                            Box(
+                                Modifier
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .background(Color(0xFFFFE7EF))
+                                    .padding(horizontal = 6.dp, vertical = 2.dp)
+                            ) {
+                                Text("♕VIP", color = KehuaPink, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                            }
+                        }
+                    }
+                    Spacer(Modifier.height(6.dp))
+                    Text(meta, color = Color(0xFF9E9EA5), fontSize = 13.sp)
+                    Spacer(Modifier.height(3.dp))
+                    Text(ip, color = Color(0xFFBDBDC3), fontSize = 11.sp)
+                    Spacer(Modifier.height(24.dp))
+
                     Row(
-                        Modifier
-                            .fillMaxWidth()
-                            .padding(top = 18.dp),
-                        verticalAlignment = Alignment.CenterVertically
+                        Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
-                        Avatar(
-                            initial = data[5],
-                            color = when (kind) {
-                                ProfileKind.Miraitowa -> Color(0xFF81A8C3)
-                                ProfileKind.Lexie -> Color(0xFFB9897D)
-                                ProfileKind.Zli -> Color(0xFFA98F7D)
-                            },
-                            size = 76.dp,
-                            border = Color.White
+                        StatCard(
+                            friends,
+                            "好友",
+                            "♣",
+                            Color(0xFFEAF9E6),
+                            Modifier.weight(1f).clickable { onFriends() }.testTag("profile-friends")
                         )
-                        Spacer(Modifier.width(14.dp))
-                        Column(Modifier.weight(1f)) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text(data[0], color = KehuaInk, fontSize = 21.sp, fontWeight = FontWeight.Bold)
-                                Spacer(Modifier.width(7.dp))
-                                Box(
-                                    Modifier.clip(RoundedCornerShape(8.dp)).background(Color(0xFFFFE9EF)).padding(horizontal = 7.dp, vertical = 2.dp)
-                                ) {
-                                    Text("VIP", color = KehuaPink, fontSize = 10.sp)
+                        StatCard(
+                            lights,
+                            "点亮的动态",
+                            "☀",
+                            Color(0xFFFFF7D8),
+                            Modifier.weight(1f)
+                        )
+                    }
+
+                    Spacer(Modifier.height(14.dp))
+
+                    if (kind != ProfileKind.Zli) {
+                        Row(
+                            Modifier
+                                .fillMaxWidth()
+                                .height(60.dp)
+                                .clip(RoundedCornerShape(18.dp))
+                                .background(Color.White)
+                                .padding(horizontal = 17.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text("查看 VIP 特权", color = KehuaInk, fontSize = 16.sp, modifier = Modifier.weight(1f))
+                            Text("♕", color = KehuaPink, fontSize = 21.sp)
+                            Spacer(Modifier.width(5.dp))
+                            Icon(Icons.Outlined.ChevronRight, null, tint = Color(0xFFD0D0D5))
+                        }
+                        Spacer(Modifier.height(14.dp))
+
+                        Column(
+                            Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(22.dp))
+                                .background(Color.White)
+                                .padding(16.dp)
+                        ) {
+                            Text("相册", color = KehuaInk, fontSize = 18.sp, fontWeight = FontWeight.Medium)
+                            Spacer(Modifier.height(12.dp))
+                            Row(horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+                                repeat(4) { index ->
+                                    AlbumTile(kind, index, Modifier.weight(1f))
                                 }
                             }
-                            Spacer(Modifier.height(5.dp))
-                            Text(data[1] + "  ·  " + data[2], color = KehuaSub, fontSize = 11.sp)
+                        }
+                        Spacer(Modifier.height(14.dp))
+                    }
+
+                    if (kind == ProfileKind.Zli) {
+                        ZliPost("2023-04-12 19:45", "今遇到了明日香cos", onPost)
+                        Spacer(Modifier.height(14.dp))
+                        ZliPost("2023-04-12 19:45", "看到朋友穿旗袍，好美哈哈哈", onPost)
+                    } else {
+                        Column(
+                            Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(20.dp))
+                                .background(Color.White)
+                                .clickable { onPost() }
+                                .padding(16.dp)
+                                .testTag("profile-post")
+                        ) {
+                            Text("2025-12-10 13:40", color = Color(0xFFBEBEC4), fontSize = 10.5.sp)
+                            Spacer(Modifier.height(8.dp))
+                            Text(
+                                if (kind == ProfileKind.Lexie)
+                                    "看到可话停止运营的消息，非常不舍\n最开始使用这个软件也是在年末，想有一个新的开始，结果也是在年末结束\n比起精修和总是延后的朋友圈，这里承载了更多当下真实的感受和生活…更多"
+                                else
+                                    "很久没有认真记录生活了。\n希望这里还能一直保留这些真实又普通的瞬间。",
+                                color = KehuaInk,
+                                fontSize = 14.5.sp,
+                                lineHeight = 22.sp
+                            )
+                            Spacer(Modifier.height(10.dp))
+                            Text("☀ 11     ◯ 8     ↗", color = Color(0xFF9F9FA6), fontSize = 12.sp)
                         }
                     }
-                    Spacer(Modifier.height(14.dp))
-                    Text(
-                        when (kind) {
-                            ProfileKind.Miraitowa -> "愿所有真诚都被温柔接住。"
-                            ProfileKind.Lexie -> "今天也想好好生活。"
-                            ProfileKind.Zli -> "累了就休息，不需要解释。"
-                        },
-                        color = Color(0xFF696970),
-                        fontSize = 13.sp
-                    )
-                    Spacer(Modifier.height(16.dp))
-                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        StatCard(data[3], "好友", "友", Color(0xFFEFF8EF), Modifier.weight(1f).clickable { onFriends() })
-                        StatCard(data[4], "点亮", "☀", Color(0xFFFFF7DA), Modifier.weight(1f))
-                    }
-                    Spacer(Modifier.height(12.dp))
-                    Row(
-                        Modifier
-                            .fillMaxWidth()
-                            .height(58.dp)
-                            .clip(RoundedCornerShape(18.dp))
-                            .background(Color.White)
-                            .padding(horizontal = 16.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text("查看 VIP 特权", color = KehuaInk, fontSize = 15.sp, modifier = Modifier.weight(1f))
-                        Text("♕", color = KehuaPink, fontSize = 20.sp)
-                        Spacer(Modifier.width(4.dp))
-                        Icon(Icons.Outlined.ChevronRight, null, tint = Color(0xFFCECED4))
-                    }
-                    Spacer(Modifier.height(12.dp))
-                    Column(
-                        Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(20.dp))
-                            .background(Color.White)
-                            .padding(16.dp)
-                    ) {
-                        Text("相册", color = KehuaInk, fontSize = 17.sp, fontWeight = FontWeight.Medium)
-                        Spacer(Modifier.height(12.dp))
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            repeat(4) { index -> AlbumTile(kind, index, Modifier.weight(1f)) }
-                        }
-                    }
-                    Spacer(Modifier.height(12.dp))
-                    Column(
-                        Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(18.dp))
-                            .background(Color.White)
-                            .clickable { onPost() }
-                            .padding(16.dp)
-                            .testTag("profile-post")
-                    ) {
-                        Text(
-                            if (kind == ProfileKind.Zli) "学会累了就自己休息" else "看到可话停止运营的消息，非常不舍",
-                            color = KehuaInk,
-                            fontSize = 14.sp,
-                            lineHeight = 21.sp
-                        )
-                        Spacer(Modifier.height(8.dp))
-                        Text("2025-12-10 13:40", color = Color(0xFFBDBDC3), fontSize = 10.sp)
-                    }
-                    Spacer(Modifier.height(26.dp))
+                    Spacer(Modifier.height(24.dp))
                 }
             }
         }
     }
 }
 
+@Composable
+private fun ZliPost(time: String, text: String, onPost: () -> Unit) {
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(20.dp))
+            .background(Color.White)
+            .clickable { onPost() }
+            .padding(18.dp)
+    ) {
+        Text(time, color = Color(0xFFB9B9BF), fontSize = 11.sp)
+        Spacer(Modifier.height(8.dp))
+        Text(text, color = KehuaInk, fontSize = 15.sp)
+        Spacer(Modifier.height(10.dp))
+        Text("☀ 0     ◯ 0", color = Color(0xFF9F9FA6), fontSize = 12.sp)
+    }
+}
+
 private fun profileCoverBrush(kind: ProfileKind): Brush = when (kind) {
-    ProfileKind.Miraitowa -> Brush.verticalGradient(listOf(Color(0xFF76BCE0), Color(0xFFA5D38C), Color(0xFFEFF2E7)))
-    ProfileKind.Lexie -> Brush.verticalGradient(listOf(Color(0xFF8D6D5B), Color(0xFFC8B6A7), Color(0xFFE6DDD6)))
-    ProfileKind.Zli -> Brush.verticalGradient(listOf(Color(0xFFBBA591), Color(0xFFD7CEC5), Color(0xFFEDE8E3)))
+    ProfileKind.Miraitowa -> Brush.verticalGradient(
+        listOf(
+            Color(0xFF69BDE7),
+            Color(0xFF89CCE9),
+            Color(0xFF74B760),
+            Color(0xFFB7D58E),
+            Color(0xFFF6F6F9)
+        )
+    )
+    ProfileKind.Lexie -> Brush.verticalGradient(
+        listOf(
+            Color(0xFF9A846F),
+            Color(0xFFB6A594),
+            Color(0xFFD8CEC4),
+            Color(0xFFF6F6F9)
+        )
+    )
+    ProfileKind.Zli -> Brush.verticalGradient(
+        listOf(
+            Color(0xFFC09B7E),
+            Color(0xFFD2B8A2),
+            Color(0xFFE4DDD7),
+            Color(0xFFF6F6F9)
+        )
+    )
 }
 
 @Composable
@@ -883,20 +1162,54 @@ private fun StatCard(
 
 @Composable
 private fun AlbumTile(kind: ProfileKind, index: Int, modifier: Modifier) {
-    val palette = when (kind) {
-        ProfileKind.Miraitowa -> listOf(Color(0xFFB8D8E8), Color(0xFFE6C7D3), Color(0xFFACC690), Color(0xFF758B90))
-        ProfileKind.Lexie -> listOf(Color(0xFF5B332D), Color(0xFFBE995F), Color(0xFF6C4A32), Color(0xFF7D7470))
-        ProfileKind.Zli -> listOf(Color(0xFFD1B59D), Color(0xFF7390B4), Color(0xFFB8AFA4), Color(0xFF6D806E))
+    val palettes = when (kind) {
+        ProfileKind.Miraitowa -> listOf(
+            listOf(Color(0xFFEAF1EE), Color(0xFFAACB85)),
+            listOf(Color(0xFFFFE4EA), Color(0xFFF0BFD2)),
+            listOf(Color(0xFFD6E1C4), Color(0xFF7BA257)),
+            listOf(Color(0xFFB3BEAE), Color(0xFF546E54))
+        )
+        ProfileKind.Lexie -> listOf(
+            listOf(Color(0xFF7D3D31), Color(0xFFC79B5A)),
+            listOf(Color(0xFFC7A260), Color(0xFFF1DBA8)),
+            listOf(Color(0xFF8A633F), Color(0xFF4C3527)),
+            listOf(Color(0xFF9A8F89), Color(0xFF4D4745))
+        )
+        ProfileKind.Zli -> listOf(
+            listOf(Color(0xFFE0C3AA), Color(0xFF92755F)),
+            listOf(Color(0xFF9FB7D0), Color(0xFF4D77AB)),
+            listOf(Color(0xFFD3CCC3), Color(0xFF8C8175)),
+            listOf(Color(0xFFA8B29B), Color(0xFF526A55))
+        )
     }
     Box(
         modifier
-            .height(74.dp)
+            .height(78.dp)
             .clip(RoundedCornerShape(8.dp))
-            .background(palette[index]),
+            .background(Brush.verticalGradient(palettes[index])),
         contentAlignment = Alignment.Center
     ) {
-        if (index == 3) {
-            Text("+1054", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+        if (index < 3) {
+            Text(
+                when (index) {
+                    0 -> "▦"
+                    1 -> "◉"
+                    else -> "◇"
+                },
+                color = Color(0xCCFFFFFF),
+                fontSize = 22.sp
+            )
+        } else {
+            Text(
+                "+" + when (kind) {
+                    ProfileKind.Miraitowa -> "1054"
+                    ProfileKind.Lexie -> "4615"
+                    ProfileKind.Zli -> "25"
+                },
+                color = Color.White,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Bold
+            )
         }
     }
 }
