@@ -1,6 +1,6 @@
 package com.suisuinian.app
 
-import androidx.compose.ui.test.assertExists
+import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
@@ -15,21 +15,23 @@ class KehuaPhase1UiTest {
 
     @Test
     fun corePhase1FlowWorks() {
-        rule.onNodeWithTag("login-button").assertExists().performClick()
-        rule.onNodeWithTag("home-input-card").assertExists().performClick()
+        rule.onNodeWithTag("login-button").performClick()
+        rule.onNodeWithTag("home-input-card").performClick()
 
-        rule.onNodeWithTag("publish-input").assertExists().performTextInput("今天想把这句话说出来")
-        rule.onNodeWithTag("publish-button").assertExists().performClick()
+        rule.onNodeWithTag("publish-input").performTextInput("今天想把这句话说出来")
+        rule.onNodeWithTag("visibility-button").performClick()
+        rule.onNodeWithText("仅自己可见").performClick()
+        rule.onNodeWithTag("publish-button").performClick()
 
-        rule.onNodeWithTag("home-resonance-screen").assertExists()
-        rule.onNodeWithTag("nav-1").assertExists().performClick()
-        rule.onNodeWithTag("messages-screen").assertExists()
+        rule.onNodeWithTag("home-resonance-screen").assertIsDisplayed()
+        rule.onNodeWithTag("nav-1").performClick()
+        rule.onNodeWithTag("messages-screen").assertIsDisplayed()
 
-        rule.onNodeWithTag("message-row-0").assertExists().performClick()
-        rule.onNodeWithTag("chat-screen").assertExists()
+        rule.onNodeWithTag("message-row-0").performClick()
+        rule.onNodeWithTag("chat-screen").assertIsDisplayed()
 
-        rule.onNodeWithTag("chat-input").assertExists().performTextInput("你好")
-        rule.onNodeWithTag("chat-send").assertExists().performClick()
-        rule.onNodeWithText("你好").assertExists()
+        rule.onNodeWithTag("chat-input").performTextInput("测试消息123")
+        rule.onNodeWithTag("chat-send").performClick()
+        rule.onNodeWithText("测试消息123").assertIsDisplayed()
     }
 }
