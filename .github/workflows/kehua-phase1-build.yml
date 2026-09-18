@@ -27,6 +27,9 @@ jobs:
         with:
           gradle-version: '8.11.1'
 
+      - name: Enforce Phase1 hard gate
+        run: python3 ci/kehua_phase1_hard_gate.py
+
       - name: Build APK and test APK
         run: gradle --no-daemon :app:assembleDebug :app:assembleDebugAndroidTest
 
