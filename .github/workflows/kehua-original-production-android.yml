@@ -44,26 +44,10 @@ jobs:
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none
           script: |
-            set -e
             adb install -r app/build/outputs/apk/debug/app-debug.apk
             adb shell am force-stop com.qxdnzbl.kehua || true
             adb shell monkey -p com.qxdnzbl.kehua -c android.intent.category.LAUNCHER 1
-            ok=0
-            for i in $(seq 1 25); do
-              sleep 1
-              adb shell uiautomator dump /sdcard/window.xml >/dev/null 2>&1 || true
-              adb pull /sdcard/window.xml /tmp/window.xml >/dev/null 2>&1 || true
-              if grep -q '可话' /tmp/window.xml 2>/dev/null; then ok=1; break; fi
-            done
-            adb shell pidof com.qxdnzbl.kehua
-            mkdir -p deliverable
-            adb exec-out screencap -p > deliverable/Kehua-Original-Android.png
-            test -s deliverable/Kehua-Original-Android.png
-            if [ "$ok" != "1" ]; then
-              echo "Rendered UI text not detected"
-              cat /tmp/window.xml || true
-              exit 1
-            fi
+            ok=0; for i in $(seq 1 25); do sleep 1; adb shell uiautomator dump /sdcard/window.xml >/dev/null 2>&1 || true; adb pull /sdcard/window.xml /tmp/window.xml >/dev/null 2>&1 || true; if grep -q '可话' /tmp/window.xml 2>/dev/null; then ok=1; break; fi; done; adb shell pidof com.qxdnzbl.kehua; mkdir -p deliverable; adb exec-out screencap -p > deliverable/Kehua-Original-Android.png; test -s deliverable/Kehua-Original-Android.png; test "$ok" = "1"
       - name: Prepare deliverable
         run: |
           cp app/build/outputs/apk/debug/app-debug.apk deliverable/Kehua-Original.apk
