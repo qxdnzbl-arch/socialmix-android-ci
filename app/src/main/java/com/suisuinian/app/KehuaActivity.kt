@@ -536,7 +536,7 @@ private fun ResonanceScreen(api: KehuaApi, post: KehuaPost, onClose: () -> Unit,
 }
 
 @Composable
-private fun MessagesScreen(api: KehuaApi, onChat: (KehuaConversation) -> Unit) {
+private fun MessagesScreen(api: KehuaApi, onChat: (KehuaConversation) -> Unit, onFriends: () -> Unit) {
     var conversations by remember { mutableStateOf<List<KehuaConversation>>(emptyList()) }
     var requests by remember { mutableStateOf<List<KehuaFriendRequest>>(emptyList()) }
     var friends by remember { mutableStateOf<List<KehuaFriend>>(emptyList()) }
@@ -608,6 +608,40 @@ private fun MessagesScreen(api: KehuaApi, onChat: (KehuaConversation) -> Unit) {
             HorizontalDivider(color = Color(0xFFEFEFF2), modifier = Modifier.padding(start = 81.dp))
         }
         item { Spacer(Modifier.height(28.dp)) }
+    }
+}
+
+@Composable
+private fun FriendsScreen(api: KehuaApi, onBack: () -> Unit) {
+    var friends by remember { mutableStateOf<List<KehuaFriend>>(emptyList()) }
+    var status by remember { mutableStateOf("") }
+
+    LaunchedEffect(Unit) {
+        runCatching { api.friends() }.onSuccess { friends = it }.onFailure { status = it.message.orEmpty() }
+    }
+
+    LazyColumn(Modifier.fillMaxSize().background(Color(0xFF101010))) {
+        item {
+            Row(Modifier.fillMaxWidth().height(58.dp).padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                IconButton(onClick = onBack) { Icon(Icons.Outlined.ArrowBackIosNew, "返回", tint = Color.White) }
+                Text("我的好友", color = Color.White, fontSize = 16.sp, modifier = Modifier.weight(1f), textAlign = TextAlign.Center)
+                Spacer(Modifier.width(48.dp))
+            }
+        }
+        if (friends.isEmpty()) {
+            item {
+                Text(if (status.isBlank()) "还没有好友" else status, color = Color(0xFF777777), fontSize = 13.sp, modifier = Modifier.fillMaxWidth().padding(top = 180.dp), textAlign = TextAlign.Center)
+            }
+        } else {
+            items(friends, key = { it.id }) { friend ->
+                Row(Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+                    KehuaAvatar(api, friend.nickname, friend.avatarPath, 40.dp)
+                    Spacer(Modifier.width(12.dp))
+                    Text(friend.nickname, color = Color(0xFFE8E8E8), fontSize = 13.sp, modifier = Modifier.weight(1f))
+                    Text(friend.latestPostAt?.let { shortTime(it) }.orEmpty(), color = Color(0xFF747474), fontSize = 10.sp)
+                }
+            }
+        }
     }
 }
 
