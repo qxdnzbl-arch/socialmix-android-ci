@@ -127,25 +127,48 @@ private fun KehuaRoot(api: KehuaApi) {
 
 @Composable
 private fun KehuaAuth(api: KehuaApi, onDone: () -> Unit) {
-    var registerMode by remember { mutableStateOf(true) }
+    var showForm by remember { mutableStateOf(false) }
+    var registerMode by remember { mutableStateOf(false) }
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var busy by remember { mutableStateOf(false) }
-    var status by remember { mutableStateOf(if (api.isFirebaseConfigured()) "" else "正式账号服务等待 Firebase 项目配置") }
+    var status by remember { mutableStateOf("") }
     val scope = rememberCoroutineScope()
 
-    Box(Modifier.fillMaxSize().background(KehuaSurface), contentAlignment = Alignment.Center) {
-        Column(Modifier.fillMaxWidth().widthIn(max = 520.dp).padding(horizontal = 30.dp)) {
-            Text("可话·重生", color = KehuaInk, fontSize = 31.sp, fontWeight = FontWeight.SemiBold)
-            Spacer(Modifier.height(6.dp))
-            Text("说想说的话，找到真正的共鸣。", color = KehuaSub, fontSize = 14.sp)
-            Spacer(Modifier.height(34.dp))
-            Row(Modifier.fillMaxWidth()) {
-                AuthMode("第一次来", registerMode) { registerMode = true; status = "" }
-                Spacer(Modifier.width(22.dp))
-                AuthMode("回来看看", !registerMode) { registerMode = false; status = "" }
+    if (!showForm) {
+        Box(Modifier.fillMaxSize().background(Color.White)) {
+            Column(
+                Modifier.fillMaxWidth().align(Alignment.TopCenter).padding(top = 205.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text("可话~!", color = KehuaPink, fontSize = 48.sp, fontWeight = FontWeight.Black)
+                Spacer(Modifier.height(8.dp))
+                Text("说  你  想  说  的  话", color = Color(0xFFB7B7BD), fontSize = 14.sp)
             }
-            Spacer(Modifier.height(24.dp))
+            Button(
+                onClick = { showForm = true },
+                modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 126.dp).fillMaxWidth(.58f).height(54.dp),
+                shape = RoundedCornerShape(27.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = KehuaPink)
+            ) { Text("手机号登录", fontSize = 17.sp, color = Color.White) }
+        }
+        return
+    }
+
+    Box(Modifier.fillMaxSize().background(Color.White)) {
+        Column(
+            Modifier.fillMaxWidth().widthIn(max = 520.dp).align(Alignment.Center).padding(horizontal = 30.dp)
+        ) {
+            Text("可话~!", color = KehuaPink, fontSize = 34.sp, fontWeight = FontWeight.Black)
+            Spacer(Modifier.height(8.dp))
+            Text("说你想说的话", color = Color(0xFF9A9AA1), fontSize = 14.sp)
+            Spacer(Modifier.height(30.dp))
+            Row(Modifier.fillMaxWidth()) {
+                AuthMode("回来看看", !registerMode) { registerMode = false; status = "" }
+                Spacer(Modifier.width(24.dp))
+                AuthMode("第一次来", registerMode) { registerMode = true; status = "" }
+            }
+            Spacer(Modifier.height(22.dp))
             KehuaField("邮箱", email, { email = it }, KeyboardType.Email)
             Spacer(Modifier.height(12.dp))
             KehuaField("密码", password, { password = it }, KeyboardType.Password, true)
@@ -184,9 +207,11 @@ private fun KehuaAuth(api: KehuaApi, onDone: () -> Unit) {
                 shape = RoundedCornerShape(26.dp),
                 enabled = !busy,
                 colors = ButtonDefaults.buttonColors(containerColor = KehuaPink)
-            ) { Text(if (busy) "处理中…" else if (registerMode) "进去" else "登录", fontSize = 16.sp) }
-            Spacer(Modifier.height(18.dp))
-            Text("没有公开广场、热度榜和关注数。你说的话只会去寻找共鸣。", color = KehuaSub, fontSize = 12.sp, lineHeight = 18.sp)
+            ) { Text(if (busy) "处理中…" else if (registerMode) "注册" else "登录", fontSize = 16.sp) }
+            Spacer(Modifier.height(10.dp))
+            TextButton(onClick = { showForm = false }, modifier = Modifier.align(Alignment.CenterHorizontally)) {
+                Text("返回", color = KehuaSub, fontSize = 13.sp)
+            }
         }
     }
 }
