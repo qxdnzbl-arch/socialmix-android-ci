@@ -1,0 +1,10 @@
+{
+  "name":"可话",
+  "short_name":"可话",
+  "description":"说想说的话，遇见真正的共鸣。",
+  "start_url":"./",
+  "display":"standalone",
+  "background_color":"#f6f5fa",
+  "theme_color":"#f6f5fa",
+  "icons":[{"src":"./icon.svg","sizes":"any","type":"image/svg+xml","purpose":"any maskable"}]
+}
