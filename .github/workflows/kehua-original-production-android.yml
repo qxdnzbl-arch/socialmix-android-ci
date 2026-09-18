@@ -1,0 +1,55 @@
+name: Kehua Original Production Android
+on:
+  push:
+    branches: [kehua-original-production-android]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build-verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify public production endpoint
+        run: |
+          curl --fail --retry 5 --retry-delay 3 -sS https://kehua-original-production.onrender.com | grep -q '<title>可话</title>'
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+      - name: Build installable APK
+        run: gradle --no-daemon :app:assembleDebug
+      - name: Enable KVM
+        run: if [ -e /dev/kvm ]; then sudo chmod 666 /dev/kvm; fi
+      - name: Install and launch on Android
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          target: google_apis
+          profile: pixel_6
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none
+          script: |
+            adb install -r app/build/outputs/apk/debug/app-debug.apk
+            adb shell am force-stop com.qxdnzbl.kehua || true
+            adb shell monkey -p com.qxdnzbl.kehua -c android.intent.category.LAUNCHER 1
+            sleep 8
+            adb shell pidof com.qxdnzbl.kehua
+            mkdir -p deliverable
+            adb exec-out screencap -p > deliverable/Kehua-Original-Android.png
+            test -s deliverable/Kehua-Original-Android.png
+      - name: Prepare deliverable
+        run: |
+          cp app/build/outputs/apk/debug/app-debug.apk deliverable/Kehua-Original.apk
+          sha256sum deliverable/Kehua-Original.apk > deliverable/SHA256.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Kehua-Original-Android-Verified
+          path: deliverable/
+          if-no-files-found: error
+          retention-days: 14
