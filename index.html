@@ -80,6 +80,6 @@ $('#sendMsg')?.addEventListener('click',sendMsg);
 $('#lightRes')?.addEventListener('click',()=>{if(S.overlay?.r)light(S.overlay.r)});
 $('#dismissRes')?.addEventListener('click',async()=>{if(S.overlay?.r)await sb.from('orig_resonances').update({status:'dismissed'}).eq('id',S.overlay.r.id);S.overlay=null;await loadRes();render()});
 }
-boot();
+if('serviceWorker' in navigator){navigator.serviceWorker.register('./sw.js').catch(()=>{});}boot();
 </script>
 </body></html>
