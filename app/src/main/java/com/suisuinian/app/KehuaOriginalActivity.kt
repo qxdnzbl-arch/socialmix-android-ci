@@ -55,6 +55,6 @@ class KehuaOriginalActivity : ComponentActivity() {
     }
 
     companion object {
-        const val APP_URL = "https://kehua-original-production.onrender.com"
+        const val APP_URL = "https://nvwdtfnhsyfdopaxdylx.supabase.co/storage/v1/object/public/kehua-original-public/index.html"
     }
 }
