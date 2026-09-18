@@ -1,0 +1,67 @@
+name: Kehua Phase1 APK
+
+on:
+  push:
+    branches: [kehua-phase1-rebuild]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - name: Checkout phase1 branch
+        uses: actions/checkout@v4
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+
+      - name: Build APK and test APK
+        run: gradle --no-daemon :app:assembleDebug :app:assembleDebugAndroidTest
+
+      - name: Enable KVM
+        run: |
+          if [ -e /dev/kvm ]; then sudo chmod 666 /dev/kvm; fi
+
+      - name: Install and launch on Android emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          target: google_apis
+          profile: pixel_6
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none
+          script: |
+            adb install -r app/build/outputs/apk/debug/app-debug.apk
+            adb shell am force-stop com.qxdnzbl.kehua || true
+            adb shell monkey -p com.qxdnzbl.kehua -c android.intent.category.LAUNCHER 1
+            sleep 4
+            adb shell pidof com.qxdnzbl.kehua
+
+      - name: Prepare verified APK
+        if: success()
+        run: |
+          mkdir -p deliverable
+          cp app/build/outputs/apk/debug/app-debug.apk deliverable/Kehua-Phase1.apk
+          sha256sum deliverable/Kehua-Phase1.apk | tee deliverable/SHA256.txt
+
+      - name: Upload verified APK
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Kehua-Phase1-Verified
+          path: deliverable/
+          if-no-files-found: error
+          retention-days: 14
