@@ -33,6 +33,16 @@ class KehuaReleaseAcceptanceTest {
     }
 
     @Test
+    fun realPasswordResetEndpointIsReachable() = runBlocking {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val api = KehuaApi(context)
+        api.logout()
+        val message = api.sendPasswordReset("kehua.reset.probe." + System.currentTimeMillis() + "@gmail.com")
+        val reachable = message == null || message.contains("操作太频繁")
+        assertTrue("Real Kehua password reset endpoint was not reachable: " + message, reachable)
+    }
+
+    @Test
     fun invalidAuthInputIsRejected() = runBlocking {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val api = KehuaApi(context)
