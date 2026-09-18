@@ -27,7 +27,8 @@ jobs:
           grep -q 'orig_posts' /tmp/index.html
           grep -q 'orig_messages' /tmp/index.html
           grep -q 'orig_resonances' /tmp/index.html
-          curl --fail --retry 4 --retry-delay 2 -sSI 'https://nvwdtfnhsyfdopaxdylx.supabase.co/storage/v1/object/public/kehua-original-public/index.html' | grep -qi 'content-type: text/html'
+          curl --fail --retry 4 --retry-delay 2 -sS -D /tmp/headers.txt -o /tmp/index2.html 'https://nvwdtfnhsyfdopaxdylx.supabase.co/storage/v1/object/public/kehua-original-public/index.html'
+          grep -qi 'content-type: text/html' /tmp/headers.txt
       - name: Verify PWA assets
         run: |
           curl --fail -sS 'https://nvwdtfnhsyfdopaxdylx.supabase.co/storage/v1/object/public/kehua-original-public/manifest.webmanifest' | grep -q '"name":"可话"'
