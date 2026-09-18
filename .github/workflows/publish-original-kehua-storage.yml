@@ -1,0 +1,35 @@
+name: Publish Original Kehua Static Production
+
+on:
+  push:
+    branches: [kehua-original-production]
+    paths:
+      - '.github/workflows/publish-original-kehua-storage.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  publish-verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Publish verified original bundle to Supabase Storage
+        run: |
+          curl --fail --retry 4 --retry-delay 2 -sS -X POST 'https://nvwdtfnhsyfdopaxdylx.supabase.co/functions/v1/kehua-original-publisher' -o /tmp/publish.json
+          cat /tmp/publish.json
+          grep -q '"ok":true' /tmp/publish.json
+      - name: Verify public production HTML
+        run: |
+          curl --fail --retry 6 --retry-delay 2 -sS 'https://nvwdtfnhsyfdopaxdylx.supabase.co/storage/v1/object/public/kehua-original-public/index.html' -o /tmp/index.html
+          grep -q '<title>可话</title>' /tmp/index.html
+          grep -q 'orig_posts' /tmp/index.html
+          grep -q 'orig_messages' /tmp/index.html
+          grep -q 'orig_resonances' /tmp/index.html
+          curl --fail --retry 4 --retry-delay 2 -sSI 'https://nvwdtfnhsyfdopaxdylx.supabase.co/storage/v1/object/public/kehua-original-public/index.html' | grep -qi 'content-type: text/html'
+      - name: Verify PWA assets
+        run: |
+          curl --fail -sS 'https://nvwdtfnhsyfdopaxdylx.supabase.co/storage/v1/object/public/kehua-original-public/manifest.webmanifest' | grep -q '"name":"可话"'
+          curl --fail -sS 'https://nvwdtfnhsyfdopaxdylx.supabase.co/storage/v1/object/public/kehua-original-public/sw.js' | grep -q "kehua-original-v1"
+          curl --fail -sS 'https://nvwdtfnhsyfdopaxdylx.supabase.co/storage/v1/object/public/kehua-original-public/icon.svg' | grep -q '<svg'
