@@ -1,5 +1,7 @@
 package com.suisuinian.app
 
+import android.Manifest
+import android.content.pm.PackageManager
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
@@ -117,5 +119,27 @@ class KehuaReleaseAcceptanceTest {
         // Session protection runs before content validation, so logged-out calls must never reach the network.
         val all = listOf(emptyPost, oversizedPost, emptyMessage, oversizedMessage)
         assertTrue("Logged-out content mutations must be stopped locally", all.all { it?.message?.contains("登录已过期") == true })
+    }
+
+    @Test
+    fun releaseApkDoesNotRequestDangerousUserDataPermissions() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val packageInfo = context.packageManager.getPackageInfo(context.packageName, PackageManager.GET_PERMISSIONS)
+        val requested = packageInfo.requestedPermissions?.toSet().orEmpty()
+        val forbidden = setOf(
+            Manifest.permission.READ_CONTACTS,
+            Manifest.permission.WRITE_CONTACTS,
+            Manifest.permission.RECORD_AUDIO,
+            Manifest.permission.CAMERA,
+            Manifest.permission.ACCESS_FINE_LOCATION,
+            Manifest.permission.ACCESS_COARSE_LOCATION,
+            Manifest.permission.READ_PHONE_STATE,
+            Manifest.permission.READ_SMS,
+            Manifest.permission.SEND_SMS,
+            Manifest.permission.READ_CALL_LOG,
+            Manifest.permission.WRITE_CALL_LOG
+        )
+        val leaked = requested.intersect(forbidden)
+        assertTrue("Kehua release unexpectedly requests dangerous user-data permissions: $leaked", leaked.isEmpty())
     }
 }
