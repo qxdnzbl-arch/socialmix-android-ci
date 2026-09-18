@@ -142,4 +142,23 @@ class KehuaReleaseAcceptanceTest {
         val leaked = requested.intersect(forbidden)
         assertTrue("Kehua release unexpectedly requests dangerous user-data permissions: $leaked", leaked.isEmpty())
     }
+
+    @Test
+    fun releaseApkExportsOnlyExpectedLauncherActivity() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        @Suppress("DEPRECATION")
+        val packageInfo = context.packageManager.getPackageInfo(
+            context.packageName,
+            PackageManager.GET_ACTIVITIES or PackageManager.GET_SERVICES or PackageManager.GET_RECEIVERS or PackageManager.GET_PROVIDERS
+        )
+        val exportedActivities = packageInfo.activities.orEmpty().filter { it.exported }.map { it.name }.toSet()
+        val exportedServices = packageInfo.services.orEmpty().filter { it.exported }.map { it.name }
+        val exportedReceivers = packageInfo.receivers.orEmpty().filter { it.exported }.map { it.name }
+        val exportedProviders = packageInfo.providers.orEmpty().filter { it.exported }.map { it.name }
+
+        assertTrue("Only KehuaActivity may be exported, found: $exportedActivities", exportedActivities == setOf(KehuaActivity::class.java.name))
+        assertTrue("Release APK must not export services: $exportedServices", exportedServices.isEmpty())
+        assertTrue("Release APK must not export receivers: $exportedReceivers", exportedReceivers.isEmpty())
+        assertTrue("Release APK must not export providers: $exportedProviders", exportedProviders.isEmpty())
+    }
 }
