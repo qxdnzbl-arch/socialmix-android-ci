@@ -267,10 +267,10 @@ private fun HomeScreen(
                 .background(
                     Brush.verticalGradient(
                         listOf(
-                            Color(0xFFBFD6FF),
-                            Color(0xFFE6D9F7),
-                            Color(0xFFF3D8E3),
-                            Color(0xFFF5F5F8)
+                            Color(0xFFC9DAFF),
+                            Color(0xFFE9E0F7),
+                            Color(0xFFF3DDE8),
+                            Color(0xFFF7F7F9)
                         )
                     )
                 )
@@ -281,7 +281,7 @@ private fun HomeScreen(
                     .fillMaxWidth()
                     .statusBarsPadding()
                     .padding(horizontal = 22.dp)
-                    .padding(top = 205.dp)
+                    .padding(top = 188.dp)
             ) {
                 Text("10月01日 星期六", color = Color(0xFF4A4A50), fontSize = 14.sp)
                 Spacer(Modifier.height(12.dp))
@@ -296,7 +296,7 @@ private fun HomeScreen(
                 Box(
                     Modifier
                         .fillMaxWidth()
-                        .height(if (resonance) 330.dp else 302.dp)
+                        .height(if (resonance) 360.dp else 348.dp)
                         .clip(RoundedCornerShape(25.dp))
                         .background(Color.White)
                         .clickable { onCompose() }
@@ -1338,26 +1338,40 @@ private fun FriendsScreen(onBack: () -> Unit) {
 @Composable
 private fun MainBottomBar(selected: Int, dark: Boolean, onSelect: (Int) -> Unit) {
     val bg = if (dark) KehuaDark else Color.White
-    val selectedColor = if (dark) Color.White else KehuaInk
-    val unselected = if (dark) Color(0xFF6A6A6A) else Color(0xFFB8B8BE)
-    NavigationBar(containerColor = bg, tonalElevation = 0.dp, modifier = Modifier.navigationBarsPadding()) {
-        val icons = listOf(Icons.Outlined.Home, Icons.Outlined.ChatBubbleOutline, Icons.Outlined.PersonOutline)
-        icons.forEachIndexed { index, icon ->
-            NavigationBarItem(
-                selected = selected == index,
-                onClick = { onSelect(index) },
-                modifier = Modifier.testTag("nav-" + index),
-                icon = {
+    val selectedColor = if (dark) Color.White else Color(0xFF26262A)
+    val unselected = if (dark) Color(0xFF6A6A6A) else Color(0xFFB9B9BE)
+    val icons = listOf(Icons.Outlined.Home, Icons.Outlined.ChatBubbleOutline, Icons.Outlined.PersonOutline)
+
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .background(bg)
+            .navigationBarsPadding()
+    ) {
+        Divider(color = if (dark) Color(0xFF202020) else Color(0xFFF0F0F2), thickness = 0.5.dp)
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .height(68.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            icons.forEachIndexed { index, icon ->
+                Box(
+                    Modifier
+                        .weight(1f)
+                        .fillMaxSize()
+                        .clickable { onSelect(index) }
+                        .testTag("nav-" + index),
+                    contentAlignment = Alignment.Center
+                ) {
                     Icon(
                         icon,
-                        null,
+                        contentDescription = null,
                         tint = if (selected == index) selectedColor else unselected,
-                        modifier = Modifier.size(28.dp)
+                        modifier = Modifier.size(if (index == 2) 31.dp else 29.dp)
                     )
-                },
-                label = null,
-                alwaysShowLabel = false
-            )
+                }
+            }
         }
     }
 }
