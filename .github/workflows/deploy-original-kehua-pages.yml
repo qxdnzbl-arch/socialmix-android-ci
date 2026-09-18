@@ -1,0 +1,50 @@
+name: Deploy Original Kehua Pages
+
+on:
+  push:
+    branches: [kehua-original-production]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: kehua-original-pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: kehua-original-production
+      - name: Verify original production bundle
+        run: |
+          grep -q '<title>可话</title>' index.html
+          grep -q 'orig_posts' index.html
+          grep -q 'orig_messages' index.html
+          grep -q 'orig_resonances' index.html
+          test -s manifest.webmanifest
+          test -s sw.js
+          test -s icon.svg
+      - name: Prepare site
+        run: |
+          mkdir -p site
+          cp index.html manifest.webmanifest sw.js icon.svg site/
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+        with:
+          enablement: true
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+      - name: Deploy Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
