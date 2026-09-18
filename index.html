@@ -1,175 +1,85 @@
 <!doctype html>
 <html lang="zh-CN">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
-  <meta name="theme-color" content="#ffffff" />
-  <meta name="description" content="å¯è¯å¤åŸä½“éªŒï¼šè®°å½•çœŸå®æƒ³æ³•ï¼Œé‡è§æœ‰å…±é¸£çš„äººã€‚" />
-  <style>
-:root{--ink:#202124;--muted:#92959d;--line:#ececef;--paper:#fff;--soft:#f7f7f8;--accent:#ff3f7f;--accent-soft:#fff0f5;--danger:#e24b4b;--ok:#2f9f70;--shadow:0 10px 30px rgba(25,25,30,.08);font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",Inter,system-ui,sans-serif;color:var(--ink);background:#fff}
-*{box-sizing:border-box}html,body{margin:0;min-height:100%;background:#fff}button,input,textarea{font:inherit}button{border:0;background:none;color:inherit}.app-shell{min-height:100dvh;max-width:520px;margin:0 auto;background:#fff;position:relative;padding-bottom:78px}.topbar{height:58px;display:flex;align-items:center;justify-content:space-between;padding:0 20px;border-bottom:1px solid rgba(236,236,239,.7);position:sticky;top:0;background:rgba(255,255,255,.94);backdrop-filter:blur(14px);z-index:5}.brand{font-size:19px;font-weight:700;letter-spacing:.12em}.ghost{font-size:13px;color:var(--muted);padding:8px}.screen{padding:26px 22px 100px}.hero{padding-top:32px}.hero h1{font-size:30px;line-height:1.25;margin:0 0 8px;font-weight:750;letter-spacing:-.02em}.hero h1::after{content:"";display:inline-block;width:3px;height:31px;background:var(--accent);margin-left:4px;vertical-align:-5px;border-radius:3px}.hero p{margin:0 0 42px;color:#777b84;font-size:15px}.prompt{font-size:23px;line-height:1.3;font-weight:700;margin:0 0 16px}.composer{background:var(--soft);border-radius:22px;padding:18px 18px 14px}.composer textarea{border:0;outline:0;background:transparent;width:100%;resize:none;min-height:128px;font-size:17px;line-height:1.65;color:var(--ink)}.composer textarea::placeholder{color:#b6b8bf}.composer-foot{display:flex;align-items:center;justify-content:space-between;border-top:1px solid #e8e8eb;padding-top:12px}.counter{font-size:12px;color:#adb0b7}.primary{background:var(--ink);color:#fff;border-radius:999px;padding:10px 18px;font-weight:650}.primary:disabled{opacity:.35}.accent{background:var(--accent);color:#fff}.notice{margin:18px 0;background:var(--accent-soft);border-radius:16px;padding:14px 16px;display:flex;align-items:center;justify-content:space-between;gap:12px}.notice strong{font-size:14px}.notice span{font-size:12px;color:#9b5d72}.section-title{font-size:13px;color:#a0a3aa;margin:26px 2px 10px}.card{border:1px solid var(--line);border-radius:20px;padding:17px 18px;margin:10px 0;background:#fff}.card-body{white-space:pre-wrap;font-size:16px;line-height:1.65}.meta{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:12px;color:var(--muted);font-size:12px}.row{display:flex;align-items:center;gap:10px}.row.between{justify-content:space-between}.pill{padding:7px 12px;border-radius:999px;background:var(--soft);font-size:12px}.pill.accent{background:var(--accent-soft);color:var(--accent)}.tabbar{position:fixed;left:50%;bottom:0;transform:translateX(-50%);width:min(520px,100%);height:72px;padding-bottom:env(safe-area-inset-bottom);background:rgba(255,255,255,.96);backdrop-filter:blur(16px);border-top:1px solid var(--line);display:grid;grid-template-columns:repeat(3,1fr);z-index:8}.tab{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;color:#a2a5ad;font-size:11px}.tab b{font-size:19px;line-height:1}.tab.active{color:var(--ink)}.dot{width:6px;height:6px;background:var(--accent);border-radius:50%;position:absolute;margin-left:18px;margin-top:-15px}.empty{padding:70px 20px;text-align:center;color:#a2a5ad;line-height:1.8}.auth{min-height:100dvh;display:flex;flex-direction:column;justify-content:center;padding:34px 30px}.auth .logo{font-size:40px;font-weight:800;letter-spacing:.18em;margin-bottom:8px}.auth .sub{color:#92959d;margin-bottom:46px}.field{width:100%;border:0;border-bottom:1px solid var(--line);padding:15px 2px;outline:0;font-size:17px;margin-bottom:12px}.auth .primary{width:100%;margin-top:14px;padding:14px}.hint{font-size:12px;color:#a4a6ad;margin-top:18px;line-height:1.6}.profile-head{display:flex;gap:14px;align-items:center}.avatar{width:58px;height:58px;border-radius:50%;background:linear-gradient(145deg,#fff0f5,#f1f1f4);display:grid;place-items:center;font-size:22px;font-weight:750;color:var(--accent)}.profile-name{font-size:20px;font-weight:750}.profile-bio{color:var(--muted);font-size:13px;margin-top:4px}.link-btn{color:var(--accent);font-weight:650;padding:8px 0}.danger{color:var(--danger)}.chat{position:fixed;inset:0;background:#fff;z-index:20;max-width:520px;margin:0 auto;display:flex;flex-direction:column}.chat-head{height:58px;border-bottom:1px solid var(--line);display:flex;align-items:center;padding:0 14px;gap:10px}.chat-head button{padding:10px}.chat-title{font-weight:700;flex:1}.chat-body{flex:1;overflow:auto;padding:18px 14px}.bubble{max-width:78%;padding:10px 13px;border-radius:16px;margin:8px 0;background:var(--soft);line-height:1.55;white-space:pre-wrap}.bubble.me{margin-left:auto;background:var(--accent-soft)}.chat-send{display:flex;gap:8px;padding:10px 12px calc(10px + env(safe-area-inset-bottom));border-top:1px solid var(--line)}.chat-send input{flex:1;border:1px solid var(--line);border-radius:999px;padding:11px 14px;outline:0}.toast{position:fixed;left:50%;bottom:94px;transform:translate(-50%,10px);background:rgba(26,26,28,.92);color:#fff;padding:9px 14px;border-radius:999px;font-size:13px;opacity:0;pointer-events:none;transition:.2s;z-index:99;max-width:80%;text-align:center}.toast.show{opacity:1;transform:translate(-50%,0)}.modal{position:fixed;inset:0;background:rgba(0,0,0,.28);z-index:30;display:grid;place-items:end center}.sheet{width:min(520px,100%);background:#fff;border-radius:24px 24px 0 0;padding:20px 20px calc(22px + env(safe-area-inset-bottom));box-shadow:var(--shadow)}.sheet h3{margin:0 0 14px}.sheet .field{margin-bottom:8px}.muted{color:var(--muted)}.small{font-size:12px}.badge{min-width:20px;height:20px;padding:0 6px;border-radius:10px;background:var(--accent);color:#fff;font-size:11px;display:grid;place-items:center}.divider{height:1px;background:var(--line);margin:16px 0}.actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}.actions button{padding:9px 12px;border-radius:999px;background:var(--soft);font-size:12px}.actions .hot{background:var(--accent-soft);color:var(--accent)}
-@media(min-width:700px){body{background:#f5f5f6}.app-shell{min-height:100vh;box-shadow:0 0 50px rgba(20,20,26,.08)}.chat{left:50%;right:auto;width:520px;transform:translateX(-50%)}}
-
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#f6f5fa">
+<link rel="manifest" href="./manifest.webmanifest">
+<title>å¯è¯</title>
+<style>
+:root{--bg:#f5f4f8;--card:#fff;--ink:#202025;--sub:#96949e;--line:#eceaf0;--pink:#ff3b6d;--pink2:#ff5d88;--bubble:#f0eff3;--shadow:0 8px 30px rgba(80,72,95,.08);font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif}
+html[data-theme=dark]{--bg:#0f0f11;--card:#171719;--ink:#f2f2f4;--sub:#8d8d95;--line:#28282c;--bubble:#25252a;--shadow:none}
+*{box-sizing:border-box}html,body{margin:0;min-height:100%;background:var(--bg);color:var(--ink)}button,input,textarea{font:inherit;color:inherit}button{border:0;background:none}.app{min-height:100dvh;max-width:520px;margin:auto;background:var(--bg);position:relative;padding-bottom:72px}.hidden{display:none!important}
+.splash{min-height:100dvh;background:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center;position:relative}.splash-logo{font-size:38px;font-weight:900;font-style:italic;color:var(--pink);letter-spacing:.04em}.splash-sub{font-size:12px;color:#c7c5cc;letter-spacing:.7em;margin:10px 0 180px}.splash button{position:absolute;bottom:58px;background:var(--pink);color:#fff;border-radius:24px;width:220px;height:46px;font-weight:650}
+.auth{min-height:100dvh;background:#fff;padding:108px 32px 40px}.auth h1{font-size:32px;margin:0 0 8px}.auth p{color:#9a98a1;margin:0 0 34px}.mode{display:flex;gap:26px;margin-bottom:26px}.mode button{font-size:17px;color:#aaa7b0;padding:8px 0;border-bottom:2px solid transparent}.mode button.on{color:#222;border-color:var(--pink);font-weight:650}.field{width:100%;height:54px;border:1px solid #e8e6ec;background:#fff;border-radius:13px;padding:0 16px;outline:none;margin:7px 0}.go{width:100%;height:52px;border-radius:26px;background:var(--pink);color:#fff;margin-top:18px;font-weight:700}.hint{font-size:12px;color:#aaa7b0;line-height:1.7;margin-top:18px}.status{font-size:12px;color:#d85c6b;min-height:20px;margin-top:8px}
+.home-hero{min-height:440px;padding:76px 24px 22px;background:linear-gradient(145deg,#d9e8ff 0%,#f6dcef 45%,#f5eef0 72%,var(--bg) 100%)}html[data-theme=dark] .home-hero{background:linear-gradient(145deg,#1c2130,#211722 55%,#111)}
+.date{color:var(--sub);font-size:13px;margin-bottom:8px}.home-hero h2{font-size:25px;margin:0 0 22px;letter-spacing:.01em}.composer{height:260px;border-radius:22px;background:var(--card);padding:18px;box-shadow:var(--shadow);display:flex;flex-direction:column}.composer textarea{flex:1;resize:none;border:0;outline:0;background:transparent;font-size:17px;line-height:1.7}.composer textarea::placeholder{color:#c9c7cf}.composer-foot{display:flex;align-items:center;border-top:1px solid var(--line);padding-top:10px;color:var(--sub);font-size:12px}.composer-foot span{flex:1}.send{background:var(--pink);color:#fff;border-radius:18px;padding:8px 16px;font-weight:650}.feed{padding:0 16px 95px}.notice{width:100%;background:var(--card);border-radius:20px;padding:18px;margin:14px 0;box-shadow:var(--shadow);text-align:left}.notice strong{font-size:16px}.notice small{display:block;color:var(--sub);margin-top:7px}.badge{float:right;min-width:26px;height:26px;border-radius:13px;background:var(--pink);color:#fff;display:grid;place-items:center;padding:0 7px}.post{background:var(--card);border-radius:20px;padding:18px;margin:14px 0}.post time{color:var(--sub);font-size:12px}.post p{font-size:16px;line-height:1.65;margin:9px 0}.post .tools{display:flex;gap:18px;color:var(--sub);font-size:13px}
+.nav{position:fixed;z-index:20;bottom:0;left:50%;transform:translateX(-50%);width:min(520px,100%);height:68px;padding-bottom:env(safe-area-inset-bottom);display:grid;grid-template-columns:repeat(3,1fr);background:color-mix(in srgb,var(--card) 96%,transparent);border-top:1px solid var(--line)}.nav button{font-size:23px;color:#a3a2a9}.nav button.on{color:var(--ink);font-weight:800}.dot{position:absolute;background:var(--pink);color:#fff;border-radius:12px;min-width:22px;height:22px;line-height:22px;font-size:11px;margin:-14px 0 0 -6px}
+.top{height:58px;display:flex;align-items:center;padding:0 18px;background:var(--card);border-bottom:1px solid var(--line);position:sticky;top:0;z-index:5}.top b{font-size:20px;flex:1}.top button{padding:10px;color:var(--sub)}.list{padding:12px 14px 90px}.msg{width:100%;display:flex;gap:12px;align-items:center;background:var(--card);padding:14px 12px;border-bottom:1px solid var(--line);text-align:left}.avatar{width:48px;height:48px;border-radius:50%;background:linear-gradient(145deg,#dfeeff,#ffdce7);display:grid;place-items:center;font-weight:800;flex:none}.msg main{min-width:0;flex:1}.msg strong{display:block;font-size:15px}.msg small{display:block;color:var(--sub);margin-top:5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.msg time{font-size:11px;color:var(--sub)}
+.profile-hero{height:470px;background:linear-gradient(180deg,#cfe8ff,#d6efcc 50%,rgba(245,244,248,.1) 78%,var(--bg));padding-top:76px;text-align:center;position:relative}.profile-tools{position:absolute;right:18px;top:52px;display:flex;gap:14px}.circlebtn{width:42px;height:42px;border-radius:50%;background:rgba(255,255,255,.55);font-size:22px}.bigavatar{width:116px;height:116px;border:6px solid rgba(255,255,255,.85);border-radius:50%;background:linear-gradient(135deg,#9ccaf8,#ffd6e7);margin:98px auto 14px;display:grid;place-items:center;font-size:36px;font-weight:800}.profile-hero h2{margin:0;font-size:25px}.profile-hero p{margin:8px 0;color:var(--sub)}.stats{display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:0 16px;margin-top:-55px;position:relative}.stat{background:var(--card);border-radius:19px;padding:18px}.stat b{font-size:25px}.stat small{display:block;color:var(--sub);margin-top:3px}.panel{background:var(--card);margin:12px 16px;border-radius:20px;padding:18px}.panel h3{margin:0 0 14px}.album{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}.album i{aspect-ratio:1;border-radius:9px;background:linear-gradient(145deg,#fde7ed,#dcecff);display:block}.settings{min-height:100dvh;background:var(--card)}.setting{height:54px;padding:0 20px;display:flex;align-items:center;border-bottom:1px solid var(--line);font-size:14px}.setting span{flex:1}.switch{width:44px;height:25px;border-radius:13px;background:#ccc;position:relative}.switch:after{content:"";position:absolute;width:21px;height:21px;background:#fff;border-radius:50%;left:2px;top:2px;transition:.2s}.switch.on{background:var(--pink)}.switch.on:after{left:21px}
+.chat{position:fixed;inset:0;z-index:40;background:var(--bg);max-width:520px;margin:auto;display:flex;flex-direction:column}.chat-head{height:58px;background:var(--card);display:flex;align-items:center;padding:0 12px;border-bottom:1px solid var(--line)}.chat-head b{flex:1;text-align:center}.chat-body{flex:1;overflow:auto;padding:18px 12px}.bubble{max-width:78%;background:var(--bubble);padding:11px 14px;border-radius:18px;margin:8px 0;line-height:1.5}.bubble.me{margin-left:auto;background:var(--pink);color:#fff}.chat-send{display:flex;gap:8px;padding:10px 12px calc(10px + env(safe-area-inset-bottom));background:var(--card);border-top:1px solid var(--line)}.chat-send input{flex:1;border:1px solid var(--line);background:var(--bg);border-radius:22px;padding:10px 14px;outline:none}.resonance{position:fixed;inset:0;z-index:35;background:linear-gradient(150deg,#dae9ff,#f8def0 50%,var(--bg));max-width:520px;margin:auto;padding:20px;display:flex;flex-direction:column}.res-card{margin:auto 0;background:var(--card);border-radius:26px;padding:28px;text-align:center}.res-card p{font-size:21px;line-height:1.7}.res-actions{display:flex;gap:10px;justify-content:center}.secondary{border:1px solid var(--line);border-radius:22px;padding:11px 18px}.empty{text-align:center;color:var(--sub);padding:70px 20px;line-height:1.8}.toast{position:fixed;z-index:99;bottom:90px;left:50%;transform:translateX(-50%);background:#222;color:#fff;border-radius:20px;padding:9px 15px;font-size:13px;opacity:0;transition:.2s;pointer-events:none}.toast.show{opacity:1}
+@media(min-width:700px){body{background:#ddd}.app{box-shadow:0 0 40px rgba(0,0,0,.15)}}
 </style>
-  <title>å¯è¯</title>
 </head>
-<body>
-  <div id="app" class="app-shell" aria-live="polite"></div>
-  <div id="toast" class="toast" role="status" aria-live="polite"></div>
-  <script type="module">
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.116.0';
-
-const SUPABASE_URL = 'https://nvwdtfnhsyfdopaxdylx.supabase.co';
-const SUPABASE_KEY = 'sb_publishable_S4IE-ziO7WQ_JAK9tuQGgQ_cszwKBWB';
-const supabase = createClient(SUPABASE_URL, SUPABASE_KEY, {auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}});
-const app=document.querySelector('#app');
-const toastEl=document.querySelector('#toast');
-
-const state={session:null,user:null,tab:'home',profile:null,posts:[],resonances:[],conversations:[],requests:[],chat:null,chatMessages:[],modal:null,loading:false};
-let subscriptions=[];
-const esc=s=>String(s??'').replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));
-const when=v=>new Intl.DateTimeFormat('zh-CN',{month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'}).format(new Date(v));
-function toast(msg){toastEl.textContent=msg;toastEl.classList.add('show');setTimeout(()=>toastEl.classList.remove('show'),1800)}
-function setLoading(v){state.loading=v;render()}
-
-async function boot(){
-  const {data:{session}}=await supabase.auth.getSession();
-  state.session=session;state.user=session?.user??null;
-  if(state.user) await enter(); else render();
-  supabase.auth.onAuthStateChange(async(_,session)=>{state.session=session;state.user=session?.user??null;if(state.user) await enter();else{cleanupSubs();render()}});
-  if('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js').catch(()=>{});
-}
-async function enter(){
-  await ensureProfile();
-  await refreshAll();
-  setupRealtime();
-  render();
-}
-async function ensureProfile(){
-  const uid=state.user.id;
-  let {data}=await supabase.from('orig_profiles').select('*').eq('user_id',uid).maybeSingle();
-  if(!data){
-    const nickname=state.user.user_metadata?.nickname || 'å¯è¯er';
-    const ins=await supabase.from('orig_profiles').insert({user_id:uid,nickname}).select().single();
-    if(ins.error) throw ins.error; data=ins.data;
-  }
-  state.profile=data;
-}
-async function refreshAll(){await Promise.all([loadPosts(),loadResonances(),loadConversations(),loadRequests()])}
-async function loadPosts(){const {data,error}=await supabase.from('orig_posts').select('*').eq('user_id',state.user.id).order('created_at',{ascending:false}).limit(30);if(!error)state.posts=data||[]}
-async function loadResonances(){
-  const {data,error}=await supabase.from('orig_resonances').select('id,status,created_at,candidate_user_id,candidate_post_id,orig_posts!orig_resonances_candidate_post_id_fkey(id,content,created_at,user_id),orig_profiles!orig_resonances_candidate_user_id_fkey(user_id,nickname,avatar_url,bio)').eq('user_id',state.user.id).order('created_at',{ascending:false}).limit(50);
-  if(!error) state.resonances=data||[];
-}
-async function loadConversations(){
-  const {data,error}=await supabase.from('orig_conversations').select('*').or(`user_a.eq.${state.user.id},user_b.eq.${state.user.id}`).order('created_at',{ascending:false});
-  if(error){state.conversations=[];return}
-  const rows=data||[]; const ids=[...new Set(rows.map(c=>c.user_a===state.user.id?c.user_b:c.user_a))];
-  let profiles=[]; if(ids.length){const q=await supabase.from('orig_profiles').select('user_id,nickname,avatar_url,bio').in('user_id',ids);profiles=q.data||[]}
-  state.conversations=rows.map(c=>({...c,peer:profiles.find(p=>p.user_id===(c.user_a===state.user.id?c.user_b:c.user_a))||{nickname:'å¯è¯er'}}));
-}
-async function loadRequests(){const {data,error}=await supabase.from('orig_friend_requests').select('*').eq('to_user',state.user.id).eq('status','pending').order('created_at',{ascending:false});if(!error)state.requests=data||[]}
-function cleanupSubs(){subscriptions.forEach(ch=>supabase.removeChannel(ch));subscriptions=[]}
-function setupRealtime(){
-  cleanupSubs(); const uid=state.user.id;
-  const res=supabase.channel(`orig-res-${uid}`).on('postgres_changes',{event:'INSERT',schema:'public',table:'orig_resonances',filter:`user_id=eq.${uid}`},async()=>{await loadResonances();render();toast('å…±é¸£å·²åˆ°è¾¾ã€‚è¯·ç­¾æ”¶ï½ï¼')}).subscribe();
-  const req=supabase.channel(`orig-req-${uid}`).on('postgres_changes',{event:'INSERT',schema:'public',table:'orig_friend_requests',filter:`to_user=eq.${uid}`},async()=>{await loadRequests();render();toast('æ”¶åˆ°æ–°çš„å¥½å‹ç”³è¯·')}).subscribe();
-  subscriptions.push(res,req);
-}
-async function sendOtp(identity){
-  identity=identity.trim();if(!identity)return toast('è¯·è¾“å…¥æ‰‹æœºå·æˆ–é‚®ç®±');
-  setLoading(true); let out;
-  if(identity.startsWith('+')) out=await supabase.auth.signInWithOtp({phone:identity});
-  else out=await supabase.auth.signInWithOtp({email:identity,options:{emailRedirectTo:location.origin+location.pathname}});
-  setLoading(false); if(out.error)return toast(out.error.message); sessionStorage.setItem('kehua_identity',identity);state.modal='otp';render();toast('éªŒè¯ç å·²å‘é€');
-}
-async function verifyOtp(identity,token){
-  setLoading(true);let out;if(identity.startsWith('+'))out=await supabase.auth.verifyOtp({phone:identity,token,type:'sms'});else out=await supabase.auth.verifyOtp({email:identity,token,type:'email'});setLoading(false);if(out.error)toast(out.error.message)
-}
-async function publish(content){
-  content=content.trim(); if(!content)return; if(content.length>1000)return toast('æœ€å¤š1000å­—');
-  const {error}=await supabase.from('orig_posts').insert({user_id:state.user.id,content});if(error)return toast(error.message);await loadPosts();render();toast('å·²ç»è¯´å‡ºå»å•¦');
-}
-async function openResonance(id){await supabase.from('orig_resonances').update({status:'opened'}).eq('id',id);await loadResonances();render()}
-async function lightResonance(r){
-  await supabase.from('orig_resonances').update({status:'lit'}).eq('id',r.id);
-  const pair=[state.user.id,r.candidate_user_id].sort();
-  let {data}=await supabase.from('orig_conversations').select('*').or(`and(user_a.eq.${pair[0]},user_b.eq.${pair[1]}),and(user_a.eq.${pair[1]},user_b.eq.${pair[0]})`).maybeSingle();
-  if(!data){const ins=await supabase.from('orig_conversations').insert({user_a:pair[0],user_b:pair[1]}).select().single();if(ins.error)return toast(ins.error.message);data=ins.data}
-  await loadConversations();await openChat(data.id);toast('å·²ç»ç‚¹äº®ï¼Œå¯ä»¥èŠèŠäº†');
-}
-async function openChat(id){
-  const c=state.conversations.find(x=>x.id===id)||{id,peer:{nickname:'å¯è¯er'}};state.chat=c;
-  const q=await supabase.from('orig_messages').select('*').eq('conversation_id',id).order('created_at',{ascending:true});state.chatMessages=q.data||[];
-  const ch=supabase.channel(`chat-${id}-${Date.now()}`).on('postgres_changes',{event:'INSERT',schema:'public',table:'orig_messages',filter:`conversation_id=eq.${id}`},payload=>{if(!state.chatMessages.some(m=>m.id===payload.new.id)){state.chatMessages.push(payload.new);render()}}).subscribe();subscriptions.push(ch);render();setTimeout(()=>document.querySelector('.chat-body')?.scrollTo(0,999999),20)
-}
-async function sendMessage(body){body=body.trim();if(!body||!state.chat)return;const {error}=await supabase.from('orig_messages').insert({conversation_id:state.chat.id,sender_id:state.user.id,body});if(error)toast(error.message)}
-async function requestFriend(peerId){const {error}=await supabase.from('orig_friend_requests').insert({from_user:state.user.id,to_user:peerId});if(error)return toast(error.code==='23505'?'å·²ç»ç”³è¯·è¿‡å•¦':error.message);toast('å¥½å‹ç”³è¯·å·²å‘é€')}
-async function respondRequest(id,accept){
-  const req=state.requests.find(r=>r.id===id);if(!req)return;
-  const status=accept?'accepted':'rejected';const up=await supabase.from('orig_friend_requests').update({status,updated_at:new Date().toISOString()}).eq('id',id);if(up.error)return toast(up.error.message);
-  if(accept){const pair=[req.from_user,req.to_user].sort();const ins=await supabase.from('orig_friendships').insert({user_a:pair[0],user_b:pair[1]});if(ins.error&&ins.error.code!=='23505')return toast(ins.error.message)}
-  await loadRequests();render();toast(accept?'å·²ç»æˆä¸ºå¥½å‹':'å·²æ‹’ç»');
-}
-async function updateProfile(nickname,bio){nickname=nickname.trim()||'å¯è¯er';bio=bio.trim();const {data,error}=await supabase.from('orig_profiles').update({nickname,bio,updated_at:new Date().toISOString()}).eq('user_id',state.user.id).select().single();if(error)return toast(error.message);state.profile=data;state.modal=null;render();toast('èµ„æ–™å·²æ›´æ–°')}
-async function togglePost(id,key,value){const {error}=await supabase.from('orig_posts').update({[key]:value}).eq('id',id);if(error)return toast(error.message);await loadPosts();render()}
-async function reportResonance(r){const reason=prompt('ç®€å•å†™ä¸€ä¸‹ä¸¾æŠ¥åŸå› ');if(!reason)return;const {error}=await supabase.from('orig_reports').insert({reporter_id:state.user.id,reported_user_id:r.candidate_user_id,post_id:r.candidate_post_id,reason});if(error)return toast(error.message);toast('å·²æäº¤ä¸¾æŠ¥')}
-async function signOut(){await supabase.auth.signOut();state.session=null;state.user=null;state.profile=null;state.posts=[];state.resonances=[];state.conversations=[];state.requests=[];state.chat=null;cleanupSubs();render()}
-
-function authView(){return `<main class="auth"><div class="logo">å¯è¯</div><div class="sub">è¯´ä½ æƒ³è¯´çš„è¯</div><input id="identity" class="field" autocomplete="email" placeholder="æ‰‹æœºå·ï¼ˆå«å›½å®¶åŒºå·ï¼‰æˆ–é‚®ç®±"><button class="primary accent" id="sendOtp" ${state.loading?'disabled':''}>${state.loading?'å‘é€ä¸­â€¦':'è·å–éªŒè¯ç '}</button><div class="hint">ç™»å½•åï¼ŒåŒä¸€è´¦å·åœ¨ä¸åŒè®¾å¤‡ä¸Šçš„è®°å½•ã€å…±é¸£ã€èŠå¤©å’Œå¥½å‹ä¼šè‡ªåŠ¨åŒæ­¥ã€‚</div></main>${state.modal==='otp'?otpSheet():''}`}
-function otpSheet(){const identity=esc(sessionStorage.getItem('kehua_identity')||'');return `<div class="modal"><div class="sheet"><h3>è¾“å…¥éªŒè¯ç </h3><div class="small muted">å·²å‘é€åˆ° ${identity}</div><input id="otp" class="field" inputmode="numeric" maxlength="8" placeholder="éªŒè¯ç "><button class="primary accent" id="verifyOtp">ç¡®è®¤ç™»å½•</button></div></div>`}
-function topbar(){return `<header class="topbar"><div class="brand">å¯è¯</div><button class="ghost" data-act="refresh">åˆ·æ–°</button></header>`}
-function tabs(){const n=state.resonances.filter(r=>r.status==='new').length+state.requests.length;return `<nav class="tabbar"><button class="tab ${state.tab==='home'?'active':''}" data-tab="home"><b>âŒ‚</b><span>é¦–é¡µ</span></button><button class="tab ${state.tab==='messages'?'active':''}" data-tab="messages"><b>â—Œ</b><span>æ¶ˆæ¯</span>${n?'<i class="dot"></i>':''}</button><button class="tab ${state.tab==='me'?'active':''}" data-tab="me"><b>â—‹</b><span>æˆ‘çš„</span></button></nav>`}
-function homeView(){const fresh=state.resonances.filter(r=>r.status==='new').length;return `<main class="screen"><section class="hero"><h1>è¯´æƒ³è¯´çš„è¯</h1><p>è®°å½•ä½ çœŸå®çš„æƒ³æ³•å’Œæ„Ÿå—</p><div class="prompt">æ­¤åˆ»ï¼Œ<br>æœ‰ä»€ä¹ˆæƒ³è¯´ï½</div><div class="composer"><textarea id="composer" maxlength="1000" placeholder="åœ¨è¿™é‡Œå†™ä¸‹ä½ çš„æƒ³æ³•â€¦"></textarea><div class="composer-foot"><span class="counter" id="counter">0 / 1000</span><button class="primary accent" id="publish" disabled>å‘è¡¨</button></div></div></section>${fresh?`<button class="notice" data-tab="messages"><div><strong>å…±é¸£å·²åˆ°è¾¾ã€‚è¯·ç­¾æ”¶ï½ï¼</strong><br><span>æœ‰ ${fresh} æ¡æ–°çš„å…±é¸£</span></div><b>â€º</b></button>`:''}<div class="section-title">æˆ‘è¯´è¿‡çš„è¯</div>${state.posts.length?state.posts.map(postCard).join(''):`<div class="empty">è¯´å‡ºç¬¬ä¸€å¥è¯åï¼Œ<br>è¿™é‡Œä¼šç•™ä¸‹ä½ çš„è®°å½•ã€‚</div>`}</main>`}
-function postCard(p){return `<article class="card"><div class="card-body">${esc(p.content)}</div><div class="meta"><span>${when(p.created_at)}</span><span>${p.self_only?'ä»…è‡ªå·±å¯è§':p.is_pinned?'å·²ç½®é¡¶':''}</span></div><div class="actions"><button data-toggle-self="${p.id}" data-value="${p.self_only?'0':'1'}">${p.self_only?'æ¢å¤å…±é¸£':'ä»…è‡ªå·±å¯è§'}</button><button data-toggle-pin="${p.id}" data-value="${p.is_pinned?'0':'1'}">${p.is_pinned?'å–æ¶ˆç½®é¡¶':'ç½®é¡¶'}</button></div></article>`}
-function messagesView(){return `<main class="screen"><div class="section-title">å…±é¸£</div>${state.resonances.length?state.resonances.map(resCard).join(''):`<div class="empty">å‘å‡ºä¸€å¥è¯åï¼Œ<br>å…±é¸£ä¼šåœ¨è¿™é‡Œåˆ°è¾¾ã€‚</div>`}<div class="section-title">èŠå¤©</div>${state.conversations.length?state.conversations.map(c=>`<button class="card row between" style="width:100%;text-align:left" data-chat="${c.id}"><div><div style="font-weight:700">${esc(c.peer?.nickname||'å¯è¯er')}</div><div class="small muted">ç‚¹å¼€ç»§ç»­èŠå¤©</div></div><b>â€º</b></button>`).join(''):`<div class="empty" style="padding:25px">ç‚¹äº®ä¸€ä¸ªå…±é¸£ï¼Œå°±èƒ½å¼€å¯èŠå¤©ã€‚</div>`}${state.requests.length?`<div class="section-title">å¥½å‹ç”³è¯·</div>${state.requests.map(r=>`<div class="card"><div>æœ‰äººæƒ³å’Œä½ æˆä¸ºå¥½å‹</div><div class="actions"><button class="hot" data-accept="${r.id}">é€šè¿‡</button><button data-reject="${r.id}">æ‹’ç»</button></div></div>`).join('')}`:''}</main>`}
-function resCard(r){const p=r.orig_posts||{};const prof=r.orig_profiles||{};return `<article class="card" data-open-res="${r.id}"><div class="card-body">${esc(p.content||'è¿™æ¡å…±é¸£æš‚æ—¶ä¸å¯è§')}</div><div class="meta"><span>${esc(prof.nickname||'æŸä¸ªæ‡‚ä½ çš„äºº')}</span><span>${when(r.created_at)}</span></div><div class="actions"><button class="hot" data-light="${r.id}">${r.status==='lit'?'å·²ç‚¹äº®':'ç‚¹äº®'}</button><button data-report="${r.id}">ä¸¾æŠ¥</button></div></article>`}
-function meView(){return `<main class="screen"><div class="profile-head"><div class="avatar">${esc((state.profile?.nickname||'å¯')[0])}</div><div style="flex:1"><div class="profile-name">${esc(state.profile?.nickname||'å¯è¯er')}</div><div class="profile-bio">${esc(state.profile?.bio||'è¿˜æ²¡æœ‰å†™ä»‹ç»')}</div></div><button class="link-btn" id="editProfile">ç¼–è¾‘</button></div><div class="divider"></div><div class="row between"><span>æˆ‘çš„è®°å½•</span><b>${state.posts.length}</b></div><div class="divider"></div><div class="row between"><span>ç‚¹äº®è¿‡çš„å…±é¸£</span><b>${state.resonances.filter(r=>r.status==='lit').length}</b></div><div class="divider"></div><button class="link-btn danger" id="logout">é€€å‡ºç™»å½•</button></main>${state.modal==='profile'?profileSheet():''}`}
-function profileSheet(){return `<div class="modal" id="modalBg"><div class="sheet"><h3>ç¼–è¾‘èµ„æ–™</h3><input class="field" id="nickname" maxlength="24" value="${esc(state.profile?.nickname||'')}" placeholder="æ˜µç§°"><input class="field" id="bio" maxlength="120" value="${esc(state.profile?.bio||'')}" placeholder="ç®€å•ä»‹ç»ä¸€ä¸‹è‡ªå·±"><button class="primary accent" id="saveProfile">ä¿å­˜</button></div></div>`}
-function chatView(){if(!state.chat)return'';return `<section class="chat"><header class="chat-head"><button id="closeChat">â€¹</button><div class="chat-title">${esc(state.chat.peer?.nickname||'å¯è¯er')}</div><button class="link-btn" id="addFriend">åŠ å¥½å‹</button></header><div class="chat-body">${state.chatMessages.length?state.chatMessages.map(m=>`<div class="bubble ${m.sender_id===state.user.id?'me':''}">${esc(m.body)}</div>`).join(''):`<div class="empty">å·²ç»ç‚¹äº®å½¼æ­¤ï¼Œ<br>è¯´å¥è¯å§ï½</div>`}</div><div class="chat-send"><input id="msg" maxlength="4000" placeholder="è¯´ç‚¹ä»€ä¹ˆâ€¦"><button class="primary accent" id="sendMsg">å‘é€</button></div></section>`}
-function render(){
-  if(!state.user){app.innerHTML=authView();bind();return}
-  const body=state.tab==='home'?homeView():state.tab==='messages'?messagesView():meView();app.innerHTML=topbar()+body+tabs()+chatView();bind()
-}
+<body><div id="app" class="app"></div><div id="toast" class="toast"></div>
+<script type="module">
+import {createClient} from 'https://esm.sh/@supabase/supabase-js@2.116.0';
+const sb=createClient('https://nvwdtfnhsyfdopaxdylx.supabase.co','sb_publishable_S4IE-ziO7WQ_JAK9tuQGgQ_cszwKBWB',{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}});
+const S={phase:'splash',mode:'login',user:null,profile:null,tab:'home',posts:[],res:[],chats:[],requests:[],chat:null,msgs:[],overlay:null,busy:false};
+const $=s=>document.querySelector(s), esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const toast=m=>{const e=$('#toast');e.textContent=m;e.classList.add('show');setTimeout(()=>e.classList.remove('show'),1800)};
+document.documentElement.dataset.theme=localStorage.kehua_theme||'light';
+function dateText(){const d=new Date();return (d.getMonth()+1).toString().padStart(2,'0')+'æœˆ'+d.getDate().toString().padStart(2,'0')+'æ—¥ æ˜ŸæœŸ'+'æ—¥ä¸€äºŒä¸‰å››äº”å…­'[d.getDay()]}
+async function boot(){const {data:{session}}=await sb.auth.getSession();if(session){S.user=session.user;S.phase='app';await enter()}render();sb.auth.onAuthStateChange(async(_,x)=>{S.user=x?.user||null;if(S.user){S.phase='app';await enter()}else{S.phase='auth';reset()}render()})}
+function reset(){S.profile=null;S.posts=[];S.res=[];S.chats=[];S.requests=[];S.chat=null;S.msgs=[]}
+async function enter(){await ensureProfile();await refresh()}
+async function ensureProfile(){let q=await sb.from('orig_profiles').select('*').eq('user_id',S.user.id).maybeSingle();if(!q.data){q=await sb.from('orig_profiles').insert({user_id:S.user.id,nickname:S.user.user_metadata?.nickname||'å¯è¯er'}).select().single()}S.profile=q.data}
+async function refresh(){await Promise.all([loadPosts(),loadRes(),loadChats(),loadReq()])}
+async function loadPosts(){const q=await sb.from('orig_posts').select('*').eq('user_id',S.user.id).order('created_at',{ascending:false}).limit(50);if(!q.error)S.posts=q.data||[]}
+async function loadRes(){const q=await sb.from('orig_resonances').select('id,status,created_at,candidate_user_id,candidate_post_id,orig_posts!orig_resonances_candidate_post_id_fkey(id,content,created_at,user_id),orig_profiles!orig_resonances_candidate_user_id_fkey(user_id,nickname,bio)').eq('user_id',S.user.id).order('created_at',{ascending:false}).limit(50);if(!q.error)S.res=q.data||[]}
+async function loadChats(){const q=await sb.from('orig_conversations').select('*').or('user_a.eq.'+S.user.id+',user_b.eq.'+S.user.id).order('created_at',{ascending:false});if(q.error){S.chats=[];return}const rows=q.data||[];const ids=[...new Set(rows.map(c=>c.user_a===S.user.id?c.user_b:c.user_a))];let ps=[];if(ids.length){const z=await sb.from('orig_profiles').select('user_id,nickname,bio').in('user_id',ids);ps=z.data||[]}S.chats=rows.map(c=>Object.assign({},c,{peer:ps.find(p=>p.user_id===(c.user_a===S.user.id?c.user_b:c.user_a))||{nickname:'å¯è¯er'}}))}
+async function loadReq(){const q=await sb.from('orig_friend_requests').select('*').eq('to_user',S.user.id).eq('status','pending');if(!q.error)S.requests=q.data||[]}
+async function auth(){const email=$('#email').value.trim(),password=$('#pass').value;if(!email||password.length<6)return toast('è¯·å¡«å†™é‚®ç®±å’Œè‡³å°‘6ä½å¯†ç ');S.busy=true;render();let q=S.mode==='register'?await sb.auth.signUp({email,password,options:{data:{nickname:'å¯è¯er'}}}):await sb.auth.signInWithPassword({email,password});S.busy=false;if(q.error){render();return toast(q.error.message)}if(S.mode==='register'&&!q.data.session){render();toast('éªŒè¯é‚®ä»¶å·²å‘é€ï¼Œè¯·å®ŒæˆéªŒè¯åç™»å½•')}else toast('ç™»å½•æˆåŠŸ')}
+async function publish(){const e=$('#composer'),v=e.value.trim();if(!v)return;S.busy=true;const q=await sb.from('orig_posts').insert({user_id:S.user.id,content:v});S.busy=false;if(q.error)return toast(q.error.message);e.value='';await loadPosts();await loadRes();render();toast('å·²ç»è¯´å‡ºå»äº†')}
+async function openChat(id){S.chat=S.chats.find(c=>c.id===id)||{id,peer:{nickname:'å¯è¯er'}};const q=await sb.from('orig_messages').select('*').eq('conversation_id',id).order('created_at',{ascending:true});S.msgs=q.data||[];render();setTimeout(()=>{$('.chat-body')?.scrollTo(0,999999)},20)}
+async function sendMsg(){const e=$('#msg'),body=e.value.trim();if(!body||!S.chat)return;const q=await sb.from('orig_messages').insert({conversation_id:S.chat.id,sender_id:S.user.id,body});if(q.error)return toast(q.error.message);e.value='';const x=await sb.from('orig_messages').select('*').eq('conversation_id',S.chat.id).order('created_at',{ascending:true});S.msgs=x.data||[];render()}
+async function light(r){await sb.from('orig_resonances').update({status:'lit'}).eq('id',r.id);const pair=[S.user.id,r.candidate_user_id].sort();let q=await sb.from('orig_conversations').select('*').or('and(user_a.eq.'+pair[0]+',user_b.eq.'+pair[1]+'),and(user_a.eq.'+pair[1]+',user_b.eq.'+pair[0]+')').maybeSingle();if(!q.data){q=await sb.from('orig_conversations').insert({user_a:pair[0],user_b:pair[1]}).select().single()}await loadChats();S.overlay=null;await openChat(q.data.id)}
+async function acceptReq(id,yes){const r=S.requests.find(x=>x.id===id);if(!r)return;await sb.from('orig_friend_requests').update({status:yes?'accepted':'rejected',updated_at:new Date().toISOString()}).eq('id',id);if(yes){const p=[r.from_user,r.to_user].sort();await sb.from('orig_friendships').insert({user_a:p[0],user_b:p[1]})}await loadReq();render()}
+async function saveProfile(){const n=$('#nick').value.trim()||'å¯è¯er',bio=$('#bio').value.trim();const q=await sb.from('orig_profiles').update({nickname:n,bio,updated_at:new Date().toISOString()}).eq('user_id',S.user.id).select().single();if(!q.error){S.profile=q.data;S.overlay=null;render();toast('å·²ä¿å­˜')}}
+function nav(){const n=S.res.filter(x=>x.status==='new').length+S.requests.length;return '<nav class="nav"><button data-tab="home" class="'+(S.tab==='home'?'on':'')+'">âŒ‚'+(n?'<i class="dot">'+n+'</i>':'')+'</button><button data-tab="messages" class="'+(S.tab==='messages'?'on':'')+'">â—¯</button><button data-tab="me" class="'+(S.tab==='me'?'on':'')+'">â™™</button></nav>'}
+function splash(){return '<main class="splash"><div class="splash-logo">å¯è¯~!</div><div class="splash-sub">è¯´æƒ³è¯´çš„è¯</div><button id="enterAuth">æ‰‹æœºå· / é‚®ç®±ç™»å½•</button></main>'}
+function authView(){return '<main class="auth"><h1>å¯è¯</h1><p>è¯´ä½ æƒ³è¯´çš„è¯</p><div class="mode"><button data-mode="register" class="'+(S.mode==='register'?'on':'')+'">ç¬¬ä¸€æ¬¡æ¥</button><button data-mode="login" class="'+(S.mode==='login'?'on':'')+'">å›æ¥çœ‹çœ‹</button></div><input id="email" class="field" type="email" placeholder="é‚®ç®±"><input id="pass" class="field" type="password" placeholder="å¯†ç "><div class="status"></div><button id="authGo" class="go" '+(S.busy?'disabled':'')+'>'+(S.busy?'å¤„ç†ä¸­â€¦':S.mode==='register'?'è¿›å»':'ç™»å½•')+'</button><div class="hint">åŒä¸€è´¦å·å¯åœ¨æ‰‹æœºã€å¹³æ¿å’Œç”µè„‘åŒæ­¥ä½ çš„è®°å½•ã€å…±é¸£ã€èŠå¤©å’Œå¥½å‹ã€‚</div></main>'}
+function postCard(p){return '<article class="post"><time>'+new Date(p.created_at).toLocaleString('zh-CN')+'</time><p>'+esc(p.content)+'</p><div class="tools"><span>â˜¼</span><span>â—¯</span><span>â†—</span></div></article>'}
+function home(){const fresh=S.res.filter(x=>x.status==='new');return '<section><div class="home-hero"><div class="date">'+dateText()+'</div><h2>æ­¤åˆ»ï¼Œè¯´ä½ æƒ³è¯´çš„è¯ï½</h2><div class="composer"><textarea id="composer" maxlength="1000" placeholder="æˆ‘æƒ³è¯´..."></textarea><div class="composer-foot"><span>çœŸå®åœ°è¯´å‡ºæ¥å°±å¥½</span><button id="publish" class="send">å‘å¸ƒ</button></div></div></div><div class="feed">'+fresh.slice(0,5).map(r=>'<button class="notice" data-res="'+r.id+'"><span class="badge">1</span><strong>ğŸ”¥ å…±é¸£å·²åˆ°è¾¾ï¼Œè¯·ç­¾æ”¶ï½ï¼</strong><small>'+esc(r.orig_posts?.content||'æœ‰äººå’Œä½ äº§ç”Ÿäº†å…±é¸£')+'</small></button>').join('')+S.posts.map(postCard).join('')+'</div></section>'}
+function messages(){let body='<header class="top"><b>æ¶ˆæ¯</b><button id="refresh">åˆ·æ–°</button></header><div class="list">';if(S.requests.length)body+=S.requests.map(r=>'<div class="msg"><div class="avatar">+</div><main><strong>æ–°çš„å¥½å‹ç”³è¯·</strong><small>æœ‰äººæƒ³å’Œä½ æˆä¸ºå¥½å‹</small></main><button data-accept="'+r.id+'">é€šè¿‡</button><button data-reject="'+r.id+'">æ‹’ç»</button></div>').join('');body+=S.chats.map(c=>'<button class="msg" data-chat="'+c.id+'"><div class="avatar">'+esc((c.peer?.nickname||'å¯')[0])+'</div><main><strong>'+esc(c.peer?.nickname||'å¯è¯er')+'</strong><small>'+esc(c.peer?.bio||'ç‚¹å¼€ç»§ç»­èŠå¤©')+'</small></main><time>â€º</time></button>').join('');if(!S.chats.length&&!S.requests.length)body+='<div class="empty">å…±é¸£ç‚¹äº®ä»¥åï¼ŒèŠå¤©ä¼šå‡ºç°åœ¨è¿™é‡Œã€‚</div>';return body+'</div>'}
+function me(){const p=S.profile||{};return '<section><div class="profile-hero"><div class="profile-tools"><button id="search" class="circlebtn">âŒ•</button><button id="settings" class="circlebtn">âš™</button></div><div class="bigavatar">'+esc((p.nickname||'å¯')[0])+'</div><h2>'+esc(p.nickname||'å¯è¯er')+'</h2><p>'+esc(p.city||'')+(p.city?' Â· ':'')+esc(p.bio||'ä»Šå¤©ä¹Ÿæƒ³å¥½å¥½ç”Ÿæ´»ã€‚')+'</p></div><div class="stats"><div class="stat"><b>'+S.chats.length+'</b><small>å¥½å‹</small></div><div class="stat"><b>'+S.posts.length+'</b><small>ç‚¹äº®çš„åŠ¨æ€</small></div></div><div class="panel"><h3>æŸ¥çœ‹ VIP ç‰¹æƒ</h3></div><div class="panel"><h3>ç›¸å†Œ</h3><div class="album"><i></i><i></i><i></i><i></i></div></div><div class="panel">'+S.posts.slice(0,3).map(p=>'<div class="post" style="padding:0;margin:0 0 18px"><time>'+new Date(p.created_at).toLocaleString('zh-CN')+'</time><p>'+esc(p.content)+'</p></div>').join('')+'</div></section>'}
+function settingsView(){return '<section class="settings"><header class="top"><button id="closeOverlay">â€¹</button><b style="text-align:center">è®¾ç½®</b><span style="width:40px"></span></header>'+['ä¸ªäººä¿¡æ¯','è´¦å·ä¸å®‰å…¨','æ¶ˆæ¯ç®¡ç†'].map(x=>'<div class="setting"><span>'+x+'</span>â€º</div>').join('')+'<div class="setting"><span>æ·±è‰²æ¨¡å¼</span><button id="theme" class="switch '+(document.documentElement.dataset.theme==='dark'?'on':'')+'"></button></div>'+['æ¸…ç†ç¼“å­˜','é€šç”¨','éšç§','å…³äºå¯è¯'].map(x=>'<div class="setting"><span>'+x+'</span>â€º</div>').join('')+'<div class="setting"><button id="editProfile">ç¼–è¾‘ä¸ªäººèµ„æ–™</button></div><div class="setting"><button id="logout" style="color:#d55">é€€å‡ºç™»å½•</button></div></section>'}
+function editProfile(){const p=S.profile||{};return '<section class="settings"><header class="top"><button id="closeOverlay">â€¹</button><b style="text-align:center">ä¸ªäººä¿¡æ¯</b><span style="width:40px"></span></header><div style="padding:24px"><input id="nick" class="field" value="'+esc(p.nickname||'')+'" placeholder="æ˜µç§°"><input id="bio" class="field" value="'+esc(p.bio||'')+'" placeholder="ç®€ä»‹"><button id="saveProfile" class="go">ä¿å­˜</button></div></section>'}
+function resonance(r){return '<section class="resonance"><button id="closeOverlay" style="align-self:flex-start;font-size:28px">Ã—</button><div class="res-card"><div style="color:var(--sub)">å…±é¸£å·²åˆ°è¾¾ï¼Œè¯·ç­¾æ”¶ï½ï¼</div><p>'+esc(r.orig_posts?.content||'æœ‰äººå’Œä½ äº§ç”Ÿäº†å…±é¸£')+'</p><div class="res-actions"><button class="secondary" id="dismissRes">ç¨å</button><button class="send" id="lightRes">ç‚¹äº®</button></div></div></section>'}
+function chat(){const c=S.chat;return '<section class="chat"><header class="chat-head"><button id="closeChat">â€¹</button><b>'+esc(c.peer?.nickname||'å¯è¯er')+'</b><span style="width:36px"></span></header><div class="chat-body">'+(S.msgs.length?S.msgs.map(m=>'<div class="bubble '+(m.sender_id===S.user.id?'me':'')+'">'+esc(m.body)+'</div>').join(''):'<div class="empty">è¯´å¥è¯å§ï½</div>')+'</div><div class="chat-send"><input id="msg" maxlength="4000" placeholder="æ¶ˆæ¯"><button id="sendMsg" class="send">å‘é€</button></div></section>'}
+function render(){if(S.phase==='splash'){app.innerHTML=splash();bind();return}if(S.phase==='auth'||!S.user){app.innerHTML=authView();bind();return}let v=S.tab==='home'?home():S.tab==='messages'?messages():me();app.innerHTML=v+nav()+(S.overlay==='settings'?settingsView():S.overlay==='edit'?editProfile():S.overlay?.type==='res'?resonance(S.overlay.r):'')+(S.chat?chat():'');bind()}
 function bind(){
-  document.querySelector('#sendOtp')?.addEventListener('click',()=>sendOtp(document.querySelector('#identity').value));
-  document.querySelector('#verifyOtp')?.addEventListener('click',()=>verifyOtp(sessionStorage.getItem('kehua_identity')||'',document.querySelector('#otp').value.trim()));
-  document.querySelectorAll('[data-tab]').forEach(x=>x.addEventListener('click',()=>{state.tab=x.dataset.tab;render()}));
-  document.querySelectoŠ	ÖÙ]KXXİHœ™Yœ™\Ú—IÊOË˜Y]™[\İ[™\Š	ØÛXÚÉË\Ş[˜Ê
-OOØ]ØZ]™Yœ™\Ú[
-
-NÜ™[™\Š
-NİØ\İ
-	ùmì¹îãùb-ù¥¬	Ê_JNÂˆÛÛœİÛÛ\YØİ[Y[œ]Y\TÙ[XİÜŠ	ÈØÛÛ\ÜÙ\‰ÊNÈÛÛœİXYØİ[Y[œ]Y\TÙ[XİÜŠ	ÈÜX›\Ú	ÊNÂˆÛÛ\Ë˜Y]™[\İ[™\Š	Ú[œ]	Ë
-
-OOÙØİ[Y[œ]Y\TÙ[XİÜŠ	ÈØÛİ[\‰ÊK^ÛÛ[X	ØÛÛ\˜[YK›[™İHÈLÜX‹™\ØX›YHXÛÛ\˜[YKš[J
-_JNÂˆXË˜Y]™[\İ[™\Š	ØÛXÚÉË\Ş[˜Ê
-OOØÛÛœİXÛÛ\˜[YNÜX‹™\ØX›Y]YNØ]ØZ]X›\Ú
-Š_JNÂˆØİ[Y[œ]Y\TÙ[XİÜ[
-	ÖÙ]K[Ü[‹\™\×IÊK™›Ü‘XXÚ
-O˜Y]™[\İ[™\Š	ØÛXÚÉËOOÚYŠK\™Ù]˜ÛÜÙ\İ
-	Ø]Û‰ÊJ\™]\›ÛÜ[”™\ÛÛ˜[˜ÙJ™]\Ù]›Ü[”™\Ê_JJNÂˆØİ[Y[œ]Y\TÙ[XİÜ[
-	ÖÙ]K[YÚIÊK™›Ü‘XXÚ
-O˜Y]™[\İ[™\Š	ØÛXÚÉËOOÙKœİÜ›ÜYØ][ÛŠ
-NØÛÛœİ\İ]Kœ™\ÛÛ˜[˜Ù\Ë™š[™
-O‹šYOO^™]\Ù]›YÚ
-NÚYŠŠ[YÚ™\ÛÛ˜[˜ÙJŠ_JJNÂˆØİ[Y[œ]Y\TÙ[XİÜ[
-	ÖÙ]K\™\ÜIÊK™›Ü‘XXÚ
-O˜Y]™[\İ[™\Š	ØÛXÚÉËOOÙKœİÜ›ÜYØ][ÛŠ
-NØÛÛœİ\İ]Kœ™\ÛÛ˜[˜Ù\Ë™š[™
-O‹šYOO^™]\Ù]œ™\Ü
-NÚYŠŠ\™\Ü™\ÛÛ˜[˜ÙJŠ_JJNÂˆØİ[Y[œ]Y\TÙ[XİÜ[
-	ÖÙ]KXÚ]IÊK™›Ü‘XXÚ
-O˜Y]™[\İ[™\Š	ØÛXÚÉË
-
-OO›Ü[Ú]
-™]\Ù]˜Ú]
-JJNÂˆØİ[Y[œ]Y\TÙ[XİÜŠ	ÈØÛÜÙPÚ]	ÊOË˜Y]™[\İ[™\Š	ØÛXÚÉË
-
-OOÜİ]K˜Ú][[Üİ]K˜Ú]Y\ÜØYÙ\ÏV×NÜ™[™\Š
-_JNÂˆØİ[Y[œ]Y\TÙ[XİÜŠ	ÈÜÙ[™\ÙÉÊOË˜Y]™[\İ[™\Š	ØÛXÚÉË
-
-OOØÛÛœİ[YØİ[Y[œ]Y\TÙ[XİÜŠ	ÈÛ\ÙÉÊNØÛÛœİY[˜[YNÙ[˜[YOIÉÎÜÙ[™Y\ÜØYÙJŠ_JNÂˆØİ[Y[œ]Y\TÙ[XİÜŠ	ÈÛ\ÙÉÊOË˜Y]™[\İ[™\Š	ÚÙ^YİÛ‰ËOOÚYŠKšÙ^OOOIÑ[\‰É‰ˆYKœÚYÙ^J^ÙKœ™]™[Y˜][
-
-NÙØİ[Y[œ]Y\TÙ[XİÜŠ	ÈÜÙ[™\ÙÉÊK˜ÛXÚÊ
-__JNÂˆØİ[Y[œ]Y\TÙ[Xİâ‚r6FDg&–VæBr“òæFDWfVçDÆ—7FVæW"‚v6Æ–6²rÂ‚“Óç&WVW7Dg&–VæB‡7FFRæ6†BçW6W%öÓÓ×7FFRçW6W"æ–C÷7FFRæ6†BçW6W%ö#§7FFRæ6†BçW6W%ö’“°¢Fö7VÖVçBçVW'•6VÆV7F÷$ÆÂ‚u¶FFÖ66WEÒr’æf÷$V6‚‡ƒÓç‚æFDWfVçDÆ—7FVæW"‚v6Æ–6²rÂ‚“Óç&W7öæE&WVW7B‡‚æFF6WBæ66WBÇG'VR’’“°¢Fö7VÖVçBçVW'•6VÆV7F÷$ÆÂ‚u¶FF×&V¦V7EÒr’æf÷$V6‚‡ƒÓç‚æFDWfVçDÆ—7FVæW"‚v6Æ–6²rÂ‚“Óç&W7öæE&WVW7B‡‚æFF6WBç&V¦V7BÆfÇ6R’’“°¢Fö7VÖVçBçVW'•6VÆV7F÷"‚r6VF—E&öf–ÆRr“òæFDWfVçDÆ—7FVæW"‚v6Æ–6²rÂ‚“Óç·7FFRæÖöFÃÒw&öf–ÆRs·&VæFW"‚—Ò“°¢Fö7VÖVçBçVW'•6VÆV7Fø œÍ…Ù•AÉ½™¥±”œ¤ü¹…‘‘Ù•¹Ñ1¥ÍÑ•¹•È ±¥¬œ° ¤ôùÕÁ‘…Ñ•AÉ½™¥±”¡‘½Õµ•¹Ğ¹ÅÕ•ÉåM•±•Ñ½È œ¹¥­¹…µ”œ¤¹Ù…±Õ”±‘½Õµ•¹Ğ¹ÅÕ•ÉåM•±•Ñ½È œ‰¥¼œ¤¹Ù…±Õ”¤¤ì(€‘½Õµ•¹Ğ¹ÅÕ•ÉåM•±•Ñ½È œµ½‘…±	œœ¤ü¹…‘‘Ù•¹Ñ1¥ÍÑ•¹•È ±¥¬œ±”ôùí¥˜¡”¹Ñ…É•Ğ¹¥ôôôµ½‘…±	œœ¥íÍÑ…Ñ”¹µ½‘…°õ¹Õ±°íÉ•¹‘•È ¥õô¤ì(€‘½Õµ•¹Ğ¹ÅÕ•ÉåM•±•Ñ½È œ±½½ÕĞœ¤ü¹…‘‘Ù•¹Ñ1¥ÍÑ•¹•È ±¥¬œ±Í¥¹=ÕĞ¤ì(€‘½Õµ•¹Ğ¹ÅÕ•ÉåM•±•Ñ½É±° m‘…Ñ„µÑ½±”µÍ•±™tœ¤¹™½É… ¡àôùà¹…‘‘Ù•¹Ñ1¥ÍÑ•¹•È ±¥¬œ° ¤ôùÑ½±•A½ÍĞ¡à¹‘…Ñ…Í•Ğ¹Ñ½±•M•±˜°Í•±™}½¹±äœ±à¹‘…Ñ…Í•Ğ¹Ù…±Õ”ôôôœÄœ¤¤¤ì(€‘½Õµ•¹Ğ¹ÅÕ•ÉåM•±•Ñ½É±° m‘…Ñ„µÑ½±”µÁ¥¹tœ¤¹™½É… ¡àôùà¹…‘‘Ù•¹Ñ1¥ÍÑ•¹•È ±¥¬œ° ¤ôùÑ½±•A½ÍĞ¡à¹‘…Ñ…Í•Ğ¹Ñ½±•A¥¸°¥Í}Á¥¹¹•œ±à¹‘…Ñ…Í•Ğ¹Ù…±Õ”ôôôœÄœ¤¤¤ì)ô()‰½½Ğ ¤¹…Ñ ¡•ÉÈôùí½¹Í½±”¹•ÉÉ½È¡•ÉÈ¤íÑ½…ÍĞ Ÿ–*ƒ¢ö÷–’Ç¢Ò—¾ò3¢¾ß¢7–B;¦7¢¾Tœ¥ô¤ì((ğ½ÍÉ¥ÁĞø(ğ½‰½‘äø(ğ½¡Ñµ°ø
+$('#enterAuth')?.addEventListener('click',()=>{S.phase='auth';render()});
+document.querySelectorAll('[data-mode]').forEach(x=>x.addEventListener('click',()=>{S.mode=x.dataset.mode;render()}));
+$('#authGo')?.addEventListener('click',auth);
+document.querySelectorAll('[data-tab]').forEach(x=>x.addEventListener('click',()=>{S.tab=x.dataset.tab;S.chat=null;render()}));
+$('#publish')?.addEventListener('click',publish);
+$('#refresh')?.addEventListener('click',async()=>{await refresh();render()});
+document.querySelectorAll('[data-chat]').forEach(x=>x.addEventListener('click',()=>openChat(x.dataset.chat)));
+document.querySelectorAll('[data-res]').forEach(x=>x.addEventListener('click',()=>{const r=S.res.find(a=>a.id===x.dataset.res);if(r){S.overlay={type:'res',r};render()}}));
+document.querySelectorAll('[data-accept]').forEach(x=>x.addEventListener('click',()=>acceptReq(x.dataset.accept,true)));
+document.querySelectorAll('[data-reject]').forEach(x=>x.addEventListener('click',()=>acceptReq(x.dataset.reject,false)));
+$('#settings')?.addEventListener('click',()=>{S.overlay='settings';render()});
+$('#closeOverlay')?.addEventListener('click',()=>{S.overlay=null;render()});
+$('#theme')?.addEventListener('click',()=>{const n=document.documentElement.dataset.theme==='dark'?'light':'dark';document.documentElement.dataset.theme=n;localStorage.kehua_theme=n;render()});
+$('#editProfile')?.addEventListener('click',()=>{S.overlay='edit';render()});
+$('#saveProfile')?.addEventListener('click',saveProfile);
+$('#logout')?.addEventListener('click',()=>sb.auth.signOut());
+$('#closeChat')?.addEventListener('click',()=>{S.chat=null;render()});
+$('#sendMsg')?.addEventListener('click',sendMsg);
+$('#lightRes')?.addEventListener('click',()=>{if(S.overlay?.r)light(S.overlay.r)});
+$('#dismissRes')?.addEventListener('click',async()=>{if(S.overlay?.r)await sb.from('orig_resonances').update({status:'dismissed'}).eq('id',S.overlay.r.id);S.overlay=null;await loadRes();render()});
+}
+boot();
+</script>
+</body></html>
