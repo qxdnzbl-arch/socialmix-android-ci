@@ -1,5 +1,5 @@
 import http from "node:http";
-const TARGET="https://kehua-original-live.onrender.com";
+const TARGET="https://kehua-original.onrender.com";
 const RPC="https://nvwdtfnhsyfdopaxdylx.supabase.co/rest/v1/rpc/kehua_prod_selftest";
 const KEY="sb_publishable_S4IE-ziO7WQ_JAK9tuQGgQ_cszwKBWB";
 let result={ok:false,stage:"starting"};
