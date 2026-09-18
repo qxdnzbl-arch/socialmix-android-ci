@@ -56,12 +56,24 @@ jobs:
             adb shell monkey -p com.qxdnzbl.kehua -c android.intent.category.LAUNCHER 1
             sleep 4
             adb shell pidof com.qxdnzbl.kehua
+            mkdir -p qa-captures
+            adb exec-out screencap -p > qa-captures/login.png
+            adb shell input tap 540 1980
+            sleep 2
+            adb exec-out screencap -p > qa-captures/home.png
+            adb shell input tap 540 2190
+            sleep 2
+            adb exec-out screencap -p > qa-captures/messages.png
+            adb shell input tap 900 2190
+            sleep 2
+            adb exec-out screencap -p > qa-captures/profile.png
 
       - name: Prepare verified APK
         if: success()
         run: |
           mkdir -p deliverable
           cp app/build/outputs/apk/debug/app-debug.apk deliverable/Kehua-Phase1.apk
+          cp qa-captures/*.png deliverable/
           sha256sum deliverable/Kehua-Phase1.apk | tee deliverable/SHA256.txt
 
       - name: Upload verified APK
