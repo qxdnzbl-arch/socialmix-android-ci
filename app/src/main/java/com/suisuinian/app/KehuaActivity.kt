@@ -18,13 +18,12 @@ import androidx.activity.ComponentActivity
 class KehuaActivity : ComponentActivity() {
     companion object {
         const val PROD_URL = "https://nvwdtfnhsyfdopaxdylx.supabase.co/functions/v1/kehua-original-web"
+        const val BUNDLED_BASE_URL = "https://nvwdtfnhsyfdopaxdylx.supabase.co/functions/v1/kehua-original-web/"
     }
 
     lateinit var webView: WebView
         private set
     @Volatile var lastFinishedUrl: String? = null
-        private set
-    @Volatile var lastPageTitle: String? = null
         private set
 
     private var fileCallback: ValueCallback<Array<Uri>>? = null
@@ -64,9 +63,9 @@ class KehuaActivity : ComponentActivity() {
                         true
                     }
                 }
+
                 override fun onPageFinished(view: WebView, url: String) {
                     lastFinishedUrl = url
-                    lastPageTitle = view.title
                     super.onPageFinished(view, url)
                 }
             }
@@ -97,7 +96,13 @@ class KehuaActivity : ComponentActivity() {
         }
 
         setContentView(webView)
-        if (savedInstanceState == null) webView.loadUrl(PROD_URL) else webView.restoreState(savedInstanceState)
+        if (savedInstanceState == null) {
+            val html = assets.open("kehua.html").bufferedReader(Charsets.UTF_8).use { it.readText() }
+            webView.loadDataWithBaseURL(BUNDLED_BASE_URL, html, "text/html", "UTF-8", PROD_URL)
+        } else {
+            webView.restoreState(savedInstanceState)
+        }
+
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
                 if (webView.canGoBack()) webView.goBack() else finish()
@@ -113,7 +118,9 @@ class KehuaActivity : ComponentActivity() {
     @Deprecated("WebChromeClient file chooser compatibility")
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         if (requestCode == fileChooserCode) {
-            val result = if (resultCode == Activity.RESULT_OK) WebChromeClient.FileChooserParams.parseResult(resultCode, data) else null
+            val result = if (resultCode == Activity.RESULT_OK) {
+                WebChromeClient.FileChooserParams.parseResult(resultCode, data)
+            } else null
             fileCallback?.onReceiveValue(result)
             fileCallback = null
             return
