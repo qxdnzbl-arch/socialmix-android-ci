@@ -1,0 +1,170 @@
+name: Kehua Original Multi-platform Acceptance
+
+on:
+  push:
+    branches: [kehua-original-rebuild-v1]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  android:
+    name: Android original-evidence APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - name: Enforce evidence authority
+        run: |
+          grep -q '状态：ACTIVE' KEHUA-REVIVAL-AUTHORITY.md
+          grep -q '紫色胶囊式底部选中态' KEHUA-REVIVAL-AUTHORITY.md
+          grep -q '此前自创' SPEC.md
+          grep -q '此刻，说你想说的话～' app/src/main/assets/kehua.html
+          grep -q '共鸣已到达。请签收～！' app/src/main/assets/kehua.html
+          grep -q '正在寻找共鸣，请稍等～' app/src/main/assets/kehua.html
+          ! grep -q 'class="pill"' app/src/main/assets/kehua.html
+          ! grep -q '我说过的话' app/src/main/assets/kehua.html
+          ! grep -Eq 'service_role|sb_secret_' app/src/main/assets/kehua.html
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+      - name: Build APK and test APK
+        run: gradle --no-daemon :app:assembleDebug :app:assembleDebugAndroidTest
+      - name: Enable KVM
+        run: |
+          if [ -e /dev/kvm ]; then sudo chmod 666 /dev/kvm; fi
+      - name: Installed Android acceptance
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          target: google_apis
+          profile: pixel_6
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none
+          script: |
+            adb uninstall com.qxdnzbl.kehua || true
+            gradle --no-daemon :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.suisuinian.app.KehuaReleaseAcceptanceTest
+            adb install -r app/build/outputs/apk/debug/app-debug.apk
+            adb shell am force-stop com.qxdnzbl.kehua || true
+            adb shell monkey -p com.qxdnzbl.kehua -c android.intent.category.LAUNCHER 1
+            sleep 4
+            adb shell pidof com.qxdnzbl.kehua
+      - name: Prepare Android candidate
+        if: success()
+        run: |
+          mkdir -p build/android-artifacts
+          cp app/build/outputs/apk/debug/app-debug.apk build/android-artifacts/Kehua-Original-Android-Candidate.apk
+          sha256sum build/android-artifacts/Kehua-Original-Android-Candidate.apk > build/android-artifacts/SHA256.txt
+          printf '%s\n' 'EVIDENCE-LOCKED CANDIDATE — final public release still requires original phone OTP and final user visual confirmation.' > build/android-artifacts/STATUS.txt
+      - uses: actions/upload-artifact@v4
+        if: success()
+        with:
+          name: Kehua-Original-Android-Candidate
+          path: build/android-artifacts/
+          if-no-files-found: error
+
+  windows:
+    name: Windows original-evidence installer
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+      - name: Verify shared original UI
+        shell: pwsh
+        run: |
+          $a = Get-Content app/src/main/assets/kehua.html -Raw
+          $b = Get-Content native/windows/KehuaWindows/Resources/kehua.html -Raw
+          if ($a -ne $b) { throw "Windows UI is not byte-identical to Android UI" }
+          if ($b -notmatch "此刻，说你想说的话～") { throw "original home heading missing" }
+          if ($b -match 'class="pill"|我说过的话|service_role|sb_secret_') { throw "rejected UI or secret found" }
+      - name: Restore and publish
+        shell: pwsh
+        run: |
+          dotnet restore native/windows/KehuaWindows/KehuaWindows.csproj
+          dotnet publish native/windows/KehuaWindows/KehuaWindows.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=false -o build/windows-publish
+      - name: Smoke launch
+        shell: pwsh
+        run: |
+          $p = Start-Process -FilePath (Resolve-Path build/windows-publish/Kehua.exe) -PassThru
+          Start-Sleep -Seconds 8
+          if ($p.HasExited) { throw "Windows app exited during smoke test" }
+          Stop-Process -Id $p.Id -Force
+      - name: Build installer
+        shell: pwsh
+        run: |
+          choco install innosetup --no-progress -y
+          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" native/windows/installer.iss
+          if (!(Test-Path build/windows-installer/Kehua-Windows-Setup-x64.exe)) { throw "installer missing" }
+          (Get-FileHash build/windows-installer/Kehua-Windows-Setup-x64.exe -Algorithm SHA256).Hash.ToLower() + "  Kehua-Windows-Setup-x64.exe" | Out-File build/windows-installer/SHA256.txt -Encoding ascii
+          "UNSIGNED CANDIDATE — trusted public release still requires Authenticode signing." | Out-File build/windows-installer/STATUS.txt -Encoding utf8
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Kehua-Original-Windows-Candidate
+          path: |
+            build/windows-installer/Kehua-Windows-Setup-x64.exe
+            build/windows-installer/SHA256.txt
+            build/windows-installer/STATUS.txt
+          if-no-files-found: error
+
+  apple:
+    name: Apple original-evidence candidates
+    runs-on: macos-15
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install XcodeGen
+        run: brew install xcodegen
+      - name: Verify shared original UI
+        run: |
+          cmp app/src/main/assets/kehua.html native/apple/Resources/kehua.html
+          grep -q '此刻，说你想说的话～' native/apple/Resources/kehua.html
+          grep -q '共鸣已到达。请签收～！' native/apple/Resources/kehua.html
+          if grep -Eq 'class="pill"|我说过的话|service_role|sb_secret_' native/apple/Resources/kehua.html; then exit 1; fi
+      - name: Generate Xcode project
+        working-directory: native/apple
+        run: xcodegen generate
+      - name: Build macOS Release app
+        run: |
+          xcodebuild -project native/apple/KehuaNative.xcodeproj -scheme KehuaMac -configuration Release -derivedDataPath build/apple-mac CODE_SIGNING_ALLOWED=NO build
+          APP="build/apple-mac/Build/Products/Release/可话.app"
+          test -d "$APP"
+          /usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" "$APP/Contents/Info.plist" | grep -q "com.qxdnzbl.kehua.macos"
+          test -x "$APP/Contents/MacOS/可话"
+      - name: Package macOS DMG
+        run: |
+          mkdir -p build/apple-artifacts
+          hdiutil create -volname "可话" -srcfolder "build/apple-mac/Build/Products/Release/可话.app" -ov -format UDZO "build/apple-artifacts/Kehua-macOS-unsigned.dmg"
+      - name: Build iOS simulator app
+        run: |
+          xcodebuild -project native/apple/KehuaNative.xcodeproj -scheme KehuaIOS -configuration Release -sdk iphonesimulator -destination "generic/platform=iOS Simulator" -derivedDataPath build/apple-ios-sim CODE_SIGNING_ALLOWED=NO build
+          IOS_APP="build/apple-ios-sim/Build/Products/Release-iphonesimulator/可话.app"
+          test -d "$IOS_APP"
+          /usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" "$IOS_APP/Info.plist" | grep -q "com.qxdnzbl.kehua"
+      - name: Create unsigned iOS device archive candidate
+        run: |
+          xcodebuild archive -project native/apple/KehuaNative.xcodeproj -scheme KehuaIOS -configuration Release -destination "generic/platform=iOS" -archivePath build/apple-artifacts/Kehua-iOS-unsigned.xcarchive CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO
+          test -d build/apple-artifacts/Kehua-iOS-unsigned.xcarchive
+          ditto -c -k --sequesterRsrc --keepParent build/apple-artifacts/Kehua-iOS-unsigned.xcarchive build/apple-artifacts/Kehua-iOS-unsigned.xcarchive.zip
+          printf '%s\n' 'UNSIGNED CANDIDATES — App Store requires Apple Developer signing/upload/review; macOS public distribution requires Developer ID + notarization.' > build/apple-artifacts/STATUS.txt
+      - name: Hash Apple artifacts
+        run: |
+          cd build/apple-artifacts
+          shasum -a 256 Kehua-macOS-unsigned.dmg Kehua-iOS-unsigned.xcarchive.zip > SHA256.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Kehua-Original-Apple-Candidates
+          path: |
+            build/apple-artifacts/Kehua-macOS-unsigned.dmg
+            build/apple-artifacts/Kehua-iOS-unsigned.xcarchive.zip
+            build/apple-artifacts/SHA256.txt
+            build/apple-artifacts/STATUS.txt
+          if-no-files-found: error
