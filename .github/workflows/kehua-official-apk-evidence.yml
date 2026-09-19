@@ -1,0 +1,34 @@
+name: Kehua Official APK Evidence
+
+on:
+  push:
+    branches: [kehua-original-evidence-rebuild]
+    paths:
+      - ".github/workflows/kehua-official-apk-evidence.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  collect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download published Android package
+        shell: bash
+        run: |
+          set -euxo pipefail
+          mkdir -p apk-evidence
+          curl -L --fail --retry 3 -A 'Mozilla/5.0'             'https://api.ddooo.com/down/170053'             -o apk-evidence/kehua-published.apk
+          file apk-evidence/kehua-published.apk
+          test "$(stat -c%s apk-evidence/kehua-published.apk)" -gt 10000000
+          md5sum apk-evidence/kehua-published.apk | tee apk-evidence/MD5.txt
+          sha256sum apk-evidence/kehua-published.apk | tee apk-evidence/SHA256.txt
+          unzip -p apk-evidence/kehua-published.apk AndroidManifest.xml >/dev/null
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Kehua-Published-APK-Evidence
+          path: apk-evidence
+          if-no-files-found: error
