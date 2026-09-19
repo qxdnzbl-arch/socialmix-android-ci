@@ -11,6 +11,9 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
+import java.io.File
+import java.io.FileOutputStream
+import android.graphics.Bitmap
 
 @RunWith(AndroidJUnit4::class)
 class KehuaReleaseAcceptanceTest {
@@ -50,6 +53,37 @@ class KehuaReleaseAcceptanceTest {
             assertTrue("JavaScript did not render login UI: " + visibleText, visibleText.contains("可话") && visibleText.contains("登录"))
             assertFalse("Rejected lavender nav pill returned", source.contains("class=\\\"pill"))
             assertFalse("Rejected home feed label returned", source.contains("我说过的话"))
+        }
+    }
+
+    @Test
+    fun renderOriginalHomeVisualFixtureForArtifactReview() {
+        ActivityScenario.launch(KehuaActivity::class.java).use { scenario ->
+            val ready = CountDownLatch(1)
+            var visibleText = ""
+            scenario.onActivity { activity ->
+                activity.webView.postDelayed({
+                    activity.webView.evaluateJavascript(
+                        "rpc=async function(name,args){if(name==='kehua_prod_home')return {new_count:1,my_posts:[],resonances:[]};return {}};renderShell();switchTab(0).then(function(){document.body.dataset.visualReady='1'});'visual-started';"
+                    ) {
+                        activity.webView.postDelayed({
+                            activity.webView.evaluateJavascript(
+                                "(document.getElementById('app')&&document.getElementById('app').innerText||'').slice(0,2000)"
+                            ) { text ->
+                                visibleText = text.orEmpty()
+                                val bitmap: Bitmap = InstrumentationRegistry.getInstrumentation().uiAutomation.takeScreenshot()
+                                val out = File(activity.filesDir, "acceptance-original-home.png")
+                                FileOutputStream(out).use { stream -> bitmap.compress(Bitmap.CompressFormat.PNG, 100, stream) }
+                                ready.countDown()
+                            }
+                        }, 1200)
+                    }
+                }, 2500)
+            }
+            assertTrue("Visual fixture was not captured", ready.await(15, TimeUnit.SECONDS))
+            assertTrue("Original heading missing from visual fixture: " + visibleText, visibleText.contains("此刻，说你想说的话～"))
+            assertTrue("Original resonance status missing from visual fixture: " + visibleText, visibleText.contains("共鸣已到达。请签收～！"))
+            assertFalse("Rejected home feed returned in visual fixture", visibleText.contains("我说过的话"))
         }
     }
 
