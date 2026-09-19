@@ -54,8 +54,12 @@ These are immutable visual references, not decorative inspiration:
 
 - Marketing headline: 说想说的话
 - Marketing subtitle: 记录你真实的想法和感受
-- Home writing prompt shown in original marketing: 此刻，有什么想说～
+- Home writing prompt shown in original marketing: 此刻，说你想说的话～
+- Current official 1.13.3 home screenshot uses the exact heading “此刻，说你想说的话～”, a full-screen blurred pastel/photo background, a large rounded composer and a three-icon bottom navigation without text labels.
 - Original interaction uses a red/pink insertion caret/primary accent.
+- Current official resonance viewer is full-screen: close control at top-left, item count at top-right, matched content shown before identity, and a bottom sun-shaped “点亮” control; after 点亮, identity and relationship context appear.
+- Current official 消息 page has a horizontal strip of circular friend/latest-dynamic avatars with pink rings above the conversation list, plus top-right controls and the same three-icon bottom navigation.
+- Current 1.13.3 marketing/screenshots demonstrate video dynamics in addition to text/image records.
 - Original has separate light/dark visual modes. The Microsoft Store screenshot explicitly presents 深色模式 with “无论何时，说你想说的话”.
 - The implementation must be visually checked against the reference screenshots, not merely described as “grey-purple/pink”.
 
@@ -105,7 +109,7 @@ These are immutable visual references, not decorative inspiration:
 
 - “我的恢复码 / 重新生成” profile row.
 - Direct profile-page “注销账号” row when the original flow places deletion under 设置 → 账号与安全.
-- Rewording “此刻，有什么想说～” into invented copy.
+- Rewording the current official heading “此刻，说你想说的话～” into invented copy.
 - Public feed/广场.
 - Generic social-media follower/like counters not evidenced by original.
 - Arbitrary platform-specific redesigns.
