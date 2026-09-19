@@ -1,0 +1,37 @@
+name: Kehua Real Screenshot Evidence
+
+on:
+  push:
+    branches: [kehua-original-evidence-rebuild]
+    paths:
+      - ".github/workflows/kehua-real-screenshot-evidence.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  collect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download real Kehua screenshots
+        shell: bash
+        run: |
+          set -euxo pipefail
+          mkdir -p evidence
+          curl -L --fail --retry 3 -A 'Mozilla/5.0' 'https://pic.downxia.com/upload/2023/0504/20230504031040491.jpg' -o evidence/2023-publish-step-1.jpg
+          curl -L --fail --retry 3 -A 'Mozilla/5.0' 'https://pic.downxia.com/upload/2023/0504/20230504031050525.jpg' -o evidence/2023-publish-step-2.jpg
+          curl -L --fail --retry 3 -A 'Mozilla/5.0' 'https://pic.downxia.com/upload/2023/0504/20230504031102360.jpg' -o evidence/2023-publish-step-3.jpg
+          curl -L --fail --retry 3 -A 'Mozilla/5.0' 'https://pic.downxia.com/upload/2021/1030/20211030014849654.png' -o evidence/2021-appshot-1.png
+          curl -L --fail --retry 3 -A 'Mozilla/5.0' 'https://pic.downxia.com/upload/2021/1030/20211030014849700.png' -o evidence/2021-appshot-2.png
+          curl -L --fail --retry 3 -A 'Mozilla/5.0' 'https://pic.downxia.com/upload/2021/1030/20211030014850346.png' -o evidence/2021-appshot-3.png
+          curl -L --fail --retry 3 -A 'Mozilla/5.0' 'https://pic.downxia.com/upload/2021/1030/20211030014850855.png' -o evidence/2021-appshot-4.png
+          file evidence/*
+          sha256sum evidence/* > evidence/SHA256.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Kehua-Real-Screenshot-Evidence
+          path: evidence
+          if-no-files-found: error
