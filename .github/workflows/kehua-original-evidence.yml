@@ -47,76 +47,41 @@ jobs:
           fetch 'https://img.downkuai.com/uppic/20211109/28dae1ea9fc49c9aafb77a9cfc34e6e5.jpg' evidence/android/tutorial-resonance.jpg
           fetch 'https://img.downkuai.com/uppic/20211109/08f29962343eccc12233bb156358a172.jpg' evidence/android/tutorial-light.jpg
 
-          # Additional archived walkthrough screenshots.
-          for item in             '202210170903511523.jpg:32r-01.jpg'             '202210170904099468.jpg:32r-02.jpg'             '202210170904165303.jpg:32r-03.jpg'             '202210170904244906.jpg:32r-04.jpg'; do
-            src="${item%%:*}"; out="${item##*:}"
-            fetch "https://img.32r.com/uppic/221017/${src}" "evidence/android/${out}"
-          done
+          fetch 'https://img.32r.com/uppic/221017/202210170903511523.jpg' evidence/android/32r-01.jpg
+          fetch 'https://img.32r.com/uppic/221017/202210170904099468.jpg' evidence/android/32r-02.jpg
+          fetch 'https://img.32r.com/uppic/221017/202210170904165303.jpg' evidence/android/32r-03.jpg
+          fetch 'https://img.32r.com/uppic/221017/202210170904244906.jpg' evidence/android/32r-04.jpg
 
-          # Archive image URLs from the 1.13.1 walkthrough page for later visual inspection.
-          python3 - <<'PY'
-import html.parser, urllib.request, urllib.parse, os, re
-url='https://www.downxia.com/downinfo/364219.html'
-req=urllib.request.Request(url, headers={'User-Agent':'Mozilla/5.0'})
-data=urllib.request.urlopen(req, timeout=30).read().decode('utf-8','ignore')
-class P(html.parser.HTMLParser):
-    def __init__(self): super().__init__(); self.items=[]
-    def handle_starttag(self, tag, attrs):
-        if tag!='img': return
-        d=dict(attrs)
-        src=d.get('data-original') or d.get('data-src') or d.get('src')
-        if not src: return
-        alt=d.get('alt','')
-        self.items.append((alt, urllib.parse.urljoin(url,src)))
-p=P(); p.feed(data)
-os.makedirs('evidence/downxia', exist_ok=True)
-seen=set(); n=0
-with open('evidence/meta/downxia-images.txt','w',encoding='utf-8') as idx:
-    for alt,u in p.items:
-        if u in seen: continue
-        seen.add(u); idx.write(f'{alt}\t{u}\n')
-        if '可话' not in alt and '364219' not in u: continue
-        try:
-            req=urllib.request.Request(u, headers={'User-Agent':'Mozilla/5.0'})
-            body=urllib.request.urlopen(req, timeout=30).read()
-            if len(body)<5000: continue
-            ext='.png' if body[:8]==b'\x89PNG\r\n\x1a\n' else '.jpg' if body[:2]==b'\xff\xd8' else ''
-            if not ext: continue
-            n+=1
-            open(f'evidence/downxia/{n:02d}{ext}','wb').write(body)
-        except Exception:
-            pass
-print('downloaded', n)
-PY
+          sha256sum evidence/apple/* evidence/android/* > evidence/meta/SHA256.txt
 
-          sha256sum evidence/apple/* evidence/android/* evidence/downxia/* 2>/dev/null > evidence/meta/SHA256.txt || true
-
-      - name: Try current Android 1.13.3 binary reference
+      - name: Try verified Android 1.13.3 binary mirrors
         shell: bash
         run: |
           set -u
           UA='Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/128 Safari/537.36'
-          URLS=('https://get.downkuai.com/download/149436' 'https://api.32r.com/down/119515')
-          rm -f evidence/android/kehua-original-1.13.3.apk
-          for URL in "${URLS[@]}"; do
+          EXPECTED='AF374CA61B3ED51E0A0D5C20166D1275'
+          echo "expected_md5=$EXPECTED" > evidence/meta/apk.txt
+          for URL in             'https://get.downkuai.com/download/149436'             'https://api.32r.com/down/119515'
+          do
+            rm -f evidence/android/kehua-original-1.13.3.apk
             if curl -A "$UA" -L --fail --retry 1 --connect-timeout 20 --max-time 180 "$URL" -o evidence/android/kehua-original-1.13.3.apk; then
-              break
+              ACTUAL="$(md5sum evidence/android/kehua-original-1.13.3.apk | awk '{print toupper($1)}')"
+              echo "candidate=$URL actual_md5=$ACTUAL" >> evidence/meta/apk.txt
+              if [ "$ACTUAL" = "$EXPECTED" ]; then
+                echo "verified_binary=true" >> evidence/meta/apk.txt
+                unzip -l evidence/android/kehua-original-1.13.3.apk > evidence/meta/apk-files.txt || true
+                break
+              fi
             fi
-            rm -f evidence/android/kehua-original-1.13.3.apk
           done
-          if [ -f evidence/android/kehua-original-1.13.3.apk ]; then
-            ACTUAL="$(md5sum evidence/android/kehua-original-1.13.3.apk | awk '{print toupper($1)}')"
-            echo "expected_md5=AF374CA61B3ED51E0A0D5C20166D1275" | tee evidence/meta/apk.txt
-            echo "actual_md5=$ACTUAL" | tee -a evidence/meta/apk.txt
-            if [ "$ACTUAL" != "AF374CA61B3ED51E0A0D5C20166D1275" ]; then
-              echo "APK mirror content did not match verified listing; deleting untrusted file." | tee -a evidence/meta/apk.txt
-              rm -f evidence/android/kehua-original-1.13.3.apk
-            else
-              unzip -l evidence/android/kehua-original-1.13.3.apk > evidence/meta/apk-files.txt || true
-            fi
+          if [ ! -f evidence/android/kehua-original-1.13.3.apk ]; then
+            echo "verified_binary=false" >> evidence/meta/apk.txt
           else
-            echo "binary_download_unavailable=true" | tee evidence/meta/apk.txt
-            rm -f evidence/android/kehua-original-1.13.3.apk
+            ACTUAL="$(md5sum evidence/android/kehua-original-1.13.3.apk | awk '{print toupper($1)}')"
+            if [ "$ACTUAL" != "$EXPECTED" ]; then
+              rm -f evidence/android/kehua-original-1.13.3.apk
+              echo "verified_binary=false" >> evidence/meta/apk.txt
+            fi
           fi
 
       - name: Evidence integrity gate
@@ -128,7 +93,7 @@ PY
           for f in evidence/apple/* evidence/android/*.png evidence/android/*.jpg; do
             file "$f" | grep -Eq 'PNG image|JPEG image'
           done
-          grep -q '此刻，有什么想说～' SPEC.md
+          grep -q '此刻，说你想说的话～' SPEC.md
           grep -q 'Explicitly forbidden inventions' SPEC.md
           grep -q 'Do not use “account + password + recovery code”' SPEC.md
 
