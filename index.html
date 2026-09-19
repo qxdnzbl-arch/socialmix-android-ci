@@ -30,7 +30,8 @@ body.dark .home-shell{background:
  radial-gradient(circle at 88% 8%,rgba(69,58,76,.26),transparent 32%),
  linear-gradient(155deg,#18181f,#111116)}
 .home-date{font-size:14px;color:var(--muted);letter-spacing:.02em}
-.home-prompt{margin-top:25vh;font-size:29px;line-height:1.28;font-weight:760;letter-spacing:-.03em;max-width:310px}
+.home-title{margin-top:18px;font-size:31px;font-weight:800;letter-spacing:-.04em;line-height:1.2}.home-title .cursor{display:inline-block;width:4px;height:34px;background:var(--pink);vertical-align:-5px;margin-left:4px;border-radius:2px;animation:blink 1s steps(1) infinite}.home-sub{font-size:15px;color:var(--muted);margin-top:10px}
+.home-prompt{margin-top:18vh;font-size:29px;line-height:1.28;font-weight:760;letter-spacing:-.03em;max-width:310px}
 .home-prompt .cursor{display:inline-block;width:3px;height:31px;background:var(--pink);vertical-align:-5px;margin-left:4px;border-radius:2px;animation:blink 1s steps(1) infinite}
 @keyframes blink{50%{opacity:0}}
 .composer{margin-top:20px;background:var(--glass);border-radius:25px;padding:18px 18px 14px;box-shadow:0 12px 35px rgba(22,22,28,.06);backdrop-filter:blur(12px)}
@@ -211,7 +212,7 @@ function tabs(){const n=state.resonances.filter(r=>r.status==='new').length+stat
 function homeView(){
   const fresh=state.resonances.filter(r=>r.status==='new').length;
   const ds=new Intl.DateTimeFormat('zh-CN',{month:'long',day:'numeric',weekday:'short'}).format(new Date());
-  return `<main class="home-shell"><div class="home-date">${ds}</div><div class="home-prompt">此刻，<br>有什么想说～<span class="cursor"></span></div><div class="composer"><textarea id="composer" maxlength="1000" placeholder=""></textarea><div class="compose-tools"><button class="tool" id="visibility">${state.selfOnly?'仅自己':'公开'}</button><span style="font-size:11px;color:var(--muted)" id="counter">0/1000</span><button class="send" id="publish" disabled>发表</button></div></div>${fresh?`<button class="res-notice" id="openRes"><div><b>共鸣已到达。请签收～！</b><small>${fresh} 条新的共鸣</small></div><span>›</span></button>`:''}</main>`
+  return `<main class="home-shell"><div class="home-date">${ds}</div><div class="home-title">说想说的话<span class="cursor"></span></div><div class="home-sub">记录你真实的想法和感受</div><div class="home-prompt">此刻，<br>有什么想说～</div><div class="composer"><textarea id="composer" maxlength="1000" placeholder=""></textarea><div class="compose-tools"><button class="tool" id="visibility">${state.selfOnly?'仅自己':'公开'}</button><span style="font-size:11px;color:var(--muted)" id="counter">0/1000</span><button class="send" id="publish" disabled>发表</button></div></div>${fresh?`<button class="res-notice" id="openRes"><div><b>共鸣已到达。请签收～！</b><small>${fresh} 条新的共鸣</small></div><span>›</span></button>`:''}</main>`
 }
 function postCard(p){return `<article class="post"><div class="post-body">${esc(p.content)}</div><div class="post-meta"><span>${when(p.created_at)}</span><span>${p.self_only?'仅自己可见':p.is_pinned?'已置顶':''}</span></div><div class="post-actions"><button data-toggle-self="${p.id}" data-value="${p.self_only?'0':'1'}">${p.self_only?'恢复共鸣':'仅自己'}</button><button data-toggle-pin="${p.id}" data-value="${p.is_pinned?'0':'1'}">${p.is_pinned?'取消置顶':'置顶'}</button></div></article>`}
 function friendPostCard(p){return `<button class="friend-story" data-friend-post="${p.user_id}"><span class="story-ring"><span>${esc((p.nickname||'友')[0])}</span></span><span>${esc((p.nickname||'好友').slice(0,6))}</span></button>`}
