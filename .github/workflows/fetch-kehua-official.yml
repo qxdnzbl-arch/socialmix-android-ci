@@ -1,0 +1,25 @@
+name: Fetch Kehua official screenshots
+on:
+  push:
+    branches: [kehua-original-production]
+    paths:
+      - .github/workflows/fetch-kehua-official.yml
+  workflow_dispatch:
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download App Store screenshots
+        run: |
+          mkdir -p refs
+          curl -fL --retry 3 'https://is1-ssl.mzstatic.com/image/thumb/Purple211/v4/a1/c0/26/a1c02662-ddff-c602-5ecd-ee1999f2ff78/c1396ded-94c8-4478-ad24-f242552f6d24_5.png/1242x2208.png' -o refs/1.png
+          curl -fL --retry 3 'https://is1-ssl.mzstatic.com/image/thumb/Purple211/v4/60/53/e2/6053e2e8-1220-b10d-6e23-f43d9d8556a1/c8b1ec9f-6cce-426c-9c10-83ca10a94b12_6.png/1242x2208.png' -o refs/2.png
+          curl -fL --retry 3 'https://is1-ssl.mzstatic.com/image/thumb/PurpleSource211/v4/05/e6/97/05e697ca-1827-0469-c0c4-bf2329e5c2a1/3bbe07b2-5a09-4f7f-bcc7-ff03018862d5_20230811-184749.png/1242x2208.png' -o refs/3.png
+          curl -fL --retry 3 'https://is1-ssl.mzstatic.com/image/thumb/Purple211/v4/00/9e/d3/009ed38c-06c8-cc6b-5b41-699e493d426a/d2fd9404-965a-4f5a-b17a-f2fe6958d3f4_9.png/1242x2208.png' -o refs/4.png
+          file refs/*
+          sha256sum refs/*
+      - uses: actions/upload-artifact@v4
+        with:
+          name: kehua-official-appstore-screens
+          path: refs
+          retention-days: 1
