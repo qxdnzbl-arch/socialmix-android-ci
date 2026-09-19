@@ -1,0 +1,79 @@
+name: Kehua Original Editor Runtime
+
+on:
+  push:
+    branches: [kehua-original-evidence-rebuild]
+    paths:
+      - ".github/workflows/kehua-original-editor-runtime.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  capture:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: android-actions/setup-android@v3
+      - name: Prepare exact 1.13.3 APK
+        shell: bash
+        run: |
+          set -euxo pipefail
+          sudo apt-get update -y
+          sudo apt-get install -y apktool
+          curl -L --fail --retry 3 -A 'Mozilla/5.0' \
+            'https://gyxz3.zxcmk.com/com.app.tideswing.apk' -o kehua.apk
+          echo 'af374ca61b3ed51e0a0d5c20166d1275  kehua.apk' | md5sum -c -
+          apktool d -f kehua.apk -o decoded
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('decoded/AndroidManifest.xml')
+          s=p.read_text()
+          old='android:name="com.app.tideswing.ui.activity.HomeInputActivity" android:screenOrientation="portrait"'
+          new='android:name="com.app.tideswing.ui.activity.HomeInputActivity" android:exported="true" android:screenOrientation="portrait"'
+          assert old in s
+          p.write_text(s.replace(old,new,1))
+          PY
+          apktool b decoded -o kehua-editor-runtime-unsigned.apk
+          keytool -genkeypair -v -keystore runtime.keystore -storepass android -keypass android -alias runtime \
+            -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Runtime Evidence" >/dev/null 2>&1
+          "$ANDROID_HOME/build-tools/35.0.0/zipalign" -f 4 kehua-editor-runtime-unsigned.apk kehua-editor-runtime-aligned.apk
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" sign --ks runtime.keystore --ks-pass pass:android --key-pass pass:android \
+            --out kehua-editor-runtime.apk kehua-editor-runtime-aligned.apk
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Capture original HomeInputActivity
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          profile: pixel_6
+          disable-animations: true
+          script: |
+            set -euxo pipefail
+            mkdir -p runtime-evidence
+            adb install -r kehua-editor-runtime.apk
+            adb logcat -c
+            adb shell am start -W -n com.app.tideswing/com.app.tideswing.ui.activity.HomeInputActivity || true
+            sleep 6
+            adb shell screencap -p /sdcard/kehua-editor-original.png
+            adb pull /sdcard/kehua-editor-original.png runtime-evidence/kehua-editor-original.png
+            adb shell uiautomator dump /sdcard/editor.xml || true
+            adb pull /sdcard/editor.xml runtime-evidence/editor.xml || true
+            adb logcat -d > runtime-evidence/logcat.txt
+            file runtime-evidence/kehua-editor-original.png
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: Kehua-1.13.3-Original-Editor-Runtime
+          path: runtime-evidence
+          if-no-files-found: warn
