@@ -21,12 +21,15 @@ jobs:
         run: |
           set -euxo pipefail
           mkdir -p apk-evidence
-          curl -L --fail --retry 3 -A 'Mozilla/5.0'             'https://api.ddooo.com/down/170053'             -o apk-evidence/kehua-published.apk
+          curl -L --fail --retry 3 -A 'Mozilla/5.0'             'https://gyxz3.zxcmk.com/com.app.tideswing.apk'             -o apk-evidence/kehua-published.apk
           file apk-evidence/kehua-published.apk
           test "$(stat -c%s apk-evidence/kehua-published.apk)" -gt 10000000
           md5sum apk-evidence/kehua-published.apk | tee apk-evidence/MD5.txt
+          grep -qi '^af374ca61b3ed51e0a0d5c20166d1275' apk-evidence/MD5.txt
           sha256sum apk-evidence/kehua-published.apk | tee apk-evidence/SHA256.txt
+          unzip -l apk-evidence/kehua-published.apk > apk-evidence/ZIP-LIST.txt
           unzip -p apk-evidence/kehua-published.apk AndroidManifest.xml >/dev/null
+          echo 'Source metadata: package com.app.tideswing, version 1.13.3, published MD5 AF374CA61B3ED51E0A0D5C20166D1275' > apk-evidence/SOURCE.txt
       - uses: actions/upload-artifact@v4
         with:
           name: Kehua-Published-APK-Evidence
