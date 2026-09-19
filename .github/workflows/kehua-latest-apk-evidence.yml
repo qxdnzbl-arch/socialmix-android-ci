@@ -1,0 +1,62 @@
+name: Kehua Latest APK Evidence
+
+on:
+  push:
+    branches: [kehua-original-evidence-rebuild]
+    paths:
+      - ".github/workflows/kehua-latest-apk-evidence.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download latest published APK
+        shell: bash
+        run: |
+          set -euxo pipefail
+          mkdir -p evidence
+          curl -L --fail --retry 3 -A 'Mozilla/5.0'             'https://d.apkpure.com/b/APK/com.app.tideswing?version=latest'             -o evidence/kehua-1.13.3.apk
+          file evidence/kehua-1.13.3.apk
+          test "$(stat -c%s evidence/kehua-1.13.3.apk)" -gt 50000000
+          md5sum evidence/kehua-1.13.3.apk | tee evidence/MD5.txt
+          sha256sum evidence/kehua-1.13.3.apk | tee evidence/SHA256.txt
+      - name: Verify package and signature
+        shell: bash
+        run: |
+          set -euxo pipefail
+          sudo apt-get update
+          sudo apt-get install -y aapt apksigner
+          aapt dump badging evidence/kehua-1.13.3.apk | tee evidence/badging.txt
+          grep -q "package: name='com.app.tideswing'" evidence/badging.txt
+          grep -q "versionName='1.13.3'" evidence/badging.txt
+          apksigner verify --print-certs evidence/kehua-1.13.3.apk | tee evidence/signature.txt
+      - name: Decompile and search interaction evidence
+        shell: bash
+        run: |
+          set -euxo pipefail
+          curl -L --fail --retry 3             'https://github.com/skylot/jadx/releases/download/v1.5.1/jadx-1.5.1.zip'             -o /tmp/jadx.zip
+          unzip -q /tmp/jadx.zip -d /tmp/jadx
+          /tmp/jadx/bin/jadx -d /tmp/kehua-jadx evidence/kehua-1.13.3.apk || true
+          mkdir -p evidence/search
+          for kw in '我想说' '他人可见' '仅自己可见' '发布' '图片' '视频' '共鸣' '正在寻找' '点亮' '15秒' '9张'; do
+            grep -R -n -F "$kw" /tmp/kehua-jadx 2>/dev/null | head -n 80 > "evidence/search/${kw}.txt" || true
+          done
+          find /tmp/kehua-jadx/resources -type f \( -name '*.xml' -o -name '*.json' -o -name '*.html' -o -name '*.js' \)             | sed 's#^/tmp/kehua-jadx/##' | head -n 4000 > evidence/resource-files.txt
+          grep -R -n -E '我想说|他人可见|仅自己可见|正在寻找共鸣|共鸣已|点亮' /tmp/kehua-jadx/resources 2>/dev/null             | head -n 1000 > evidence/resource-keyword-hits.txt || true
+      - name: Export manifest and UI assets index
+        shell: bash
+        run: |
+          set -euxo pipefail
+          unzip -l evidence/kehua-1.13.3.apk | tee evidence/apk-file-list.txt
+          grep -Ei 'layout|drawable|mipmap|assets|flutter|react|web|png|webp|jpg|ttf' evidence/apk-file-list.txt             | head -n 5000 > evidence/ui-assets-index.txt || true
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Kehua-Latest-APK-Evidence
+          path: evidence
+          if-no-files-found: error
