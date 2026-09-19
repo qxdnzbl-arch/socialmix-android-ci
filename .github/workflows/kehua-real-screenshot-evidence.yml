@@ -28,6 +28,15 @@ jobs:
           curl -L --fail --retry 3 -A 'Mozilla/5.0' 'https://pic.downxia.com/upload/2021/1030/20211030014849700.png' -o evidence/2021-appshot-2.png
           curl -L --fail --retry 3 -A 'Mozilla/5.0' 'https://pic.downxia.com/upload/2021/1030/20211030014850346.png' -o evidence/2021-appshot-3.png
           curl -L --fail --retry 3 -A 'Mozilla/5.0' 'https://pic.downxia.com/upload/2021/1030/20211030014850855.png' -o evidence/2021-appshot-4.png
+
+          curl -L --fail --retry 3 -A 'Mozilla/5.0' 'https://img.downkuai.com/uppic/20241107/317e37dbc55dfa2313b7e756cd9c25c9.png' -o evidence/2024-downkuai-1.png
+          curl -L --fail --retry 3 -A 'Mozilla/5.0' 'https://img.downkuai.com/uppic/20241107/29c6f44f2407d671c529d77aed88a364.png' -o evidence/2024-downkuai-2.png
+          curl -L --fail --retry 3 -A 'Mozilla/5.0' 'https://img.downkuai.com/uppic/20241107/66c7358589585f807e8ed1fa7d8d3de0.png' -o evidence/2024-downkuai-3.png
+          curl -L --fail --retry 3 -A 'Mozilla/5.0' 'https://img.downkuai.com/uppic/20241107/463ab5aecf4060a4a1ca5b4ea624dbe6.png' -o evidence/2024-downkuai-4.png
+          curl -L --fail --retry 3 -A 'Mozilla/5.0' 'https://img.ddooo.com/uppic/20240803/9171363ff3109c05d3763e48a4d01aa1.png' -o evidence/2024-ddooo-1.png
+          curl -L --fail --retry 3 -A 'Mozilla/5.0' 'https://img.ddooo.com/uppic/20240803/2375433188cfb335ff2cce81fb996ba1.png' -o evidence/2024-ddooo-2.png
+          curl -L --fail --retry 3 -A 'Mozilla/5.0' 'https://img.ddooo.com/uppic/20240803/25206490cc470c07a928091cd9367d32.png' -o evidence/2024-ddooo-3.png
+          curl -L --fail --retry 3 -A 'Mozilla/5.0' 'https://img.ddooo.com/uppic/20240803/e3cf155dc28e0992c2dac39b10a5c54d.png' -o evidence/2024-ddooo-4.png
           file evidence/*
           sha256sum evidence/* > evidence/SHA256.txt
       - uses: actions/upload-artifact@v4
