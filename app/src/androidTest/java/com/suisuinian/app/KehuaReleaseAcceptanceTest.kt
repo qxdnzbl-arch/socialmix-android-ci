@@ -11,6 +11,9 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
+import java.io.File
+import java.io.FileOutputStream
+import android.graphics.Bitmap
 
 @RunWith(AndroidJUnit4::class)
 class KehuaReleaseAcceptanceTest {
@@ -68,9 +71,11 @@ class KehuaReleaseAcceptanceTest {
                                 "(document.getElementById('app')&&document.getElementById('app').innerText||'').slice(0,2000)"
                             ) { text ->
                                 visibleText = text.orEmpty()
-                                InstrumentationRegistry.getInstrumentation().uiAutomation
-                                    .executeShellCommand("screencap -p /sdcard/acceptance-original-home.png")
-                                    .close()
+                                val bitmap: Bitmap = InstrumentationRegistry.getInstrumentation().uiAutomation.takeScreenshot()
+                                val out = File(activity.getExternalFilesDir(null), "acceptance-original-home.png")
+                                FileOutputStream(out).use { stream ->
+                                    bitmap.compress(Bitmap.CompressFormat.PNG, 100, stream)
+                                }
                                 ready.countDown()
                             }
                         }, 1200)
