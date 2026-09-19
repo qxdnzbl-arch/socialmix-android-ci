@@ -1,0 +1,81 @@
+name: Kehua Official UI Decompile
+
+on:
+  push:
+    branches: [kehua-original-evidence-rebuild]
+    paths:
+      - ".github/workflows/kehua-official-ui-decompile.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  decompile:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fetch exact published 1.13.3 APK
+        shell: bash
+        run: |
+          set -euxo pipefail
+          mkdir -p work/out
+          curl -L --fail --retry 3 -A 'Mozilla/5.0' \
+            'https://gyxz3.zxcmk.com/com.app.tideswing.apk' \
+            -o work/kehua-1.13.3.apk
+          echo 'af374ca61b3ed51e0a0d5c20166d1275  work/kehua-1.13.3.apk' | md5sum -c -
+      - name: Install decompilers
+        shell: bash
+        run: |
+          set -euxo pipefail
+          sudo apt-get update -y
+          sudo apt-get install -y apktool
+          curl -L --fail --retry 3 \
+            'https://github.com/skylot/jadx/releases/download/v1.5.2/jadx-1.5.2.zip' \
+            -o /tmp/jadx.zip
+          unzip -q /tmp/jadx.zip -d /tmp/jadx
+          chmod +x /tmp/jadx/bin/jadx
+      - name: Decode resources and source
+        shell: bash
+        run: |
+          set -euxo pipefail
+          apktool d -f work/kehua-1.13.3.apk -o work/apktool
+          /tmp/jadx/bin/jadx -d work/jadx --no-debug-info work/kehua-1.13.3.apk
+      - name: Collect original home and publishing evidence
+        shell: bash
+        run: |
+          set -euxo pipefail
+          mkdir -p work/out/layout work/out/drawable work/out/values work/out/source
+          for f in \
+            activity_home.xml fragment_home.xml fragment_home2.xml \
+            activity_home_input.xml home_foot_view.xml home_foot_view2.xml \
+            input_footer_view.xml input_video_view.xml fragment_home_card_layout.xml \
+            fragment_home_card_layout_bak.xml; do
+            test -f "work/apktool/res/layout/$f" && cp "work/apktool/res/layout/$f" work/out/layout/
+          done
+          for f in \
+            shape_home_bottom_bg.xml shape_home_input_bg.xml shape_home_input_mask_bg.xml \
+            shape_home_notify_bg.xml post_input_bar_bgd_gradient.xml home_bg_bottom_mask.xml; do
+            find work/apktool/res -type f -name "$f" -exec cp {} work/out/drawable/ \; | true
+          done
+          cp work/apktool/res/values/strings.xml work/out/values/
+          cp work/apktool/res/values/colors.xml work/out/values/ || true
+          cp work/apktool/res/values/dimens.xml work/out/values/ || true
+          cp work/apktool/AndroidManifest.xml work/out/
+          grep -RIlE 'class .*Home(Input)?Activity|class .*Home.*Fragment|activity_home_input|fragment_home2|home_foot_view2|input_video_view' work/jadx/sources \
+            | head -80 > work/out/source-files.txt || true
+          while IFS= read -r f; do
+            [ -n "$f" ] || continue
+            rel="${f#work/jadx/sources/}"
+            mkdir -p "work/out/source/$(dirname "$rel")"
+            cp "$f" "work/out/source/$rel"
+          done < work/out/source-files.txt
+          grep -RInE '我想说|他人可见|仅自己可见|共鸣已到达|正在寻找共鸣|视频|图片|发布|点亮' \
+            work/apktool/res/values work/out/source > work/out/relevant-text.txt || true
+          find work/out -type f -maxdepth 10 -print | sort > work/out/FILES.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Kehua-1.13.3-Official-UI-Evidence
+          path: work/out
+          if-no-files-found: error
