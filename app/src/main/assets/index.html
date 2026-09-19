@@ -8,20 +8,93 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="default" />
   <meta name="apple-mobile-web-app-title" content="可话" />
   <link rel="manifest" href="./manifest.webmanifest" />
-  <meta name="description" content="可话复原体验：记录真实想法，遇见有共鸣的人。" />
+  <meta name="description" content="可话：说你想说的话，遇见有共鸣的人。" />
   <style>
-:root{--ink:#202124;--muted:#92959d;--line:#ececef;--paper:#fff;--soft:#f7f7f8;--accent:#ff3e68;--accent-soft:#fff0f5;--danger:#e24b4b;--ok:#2f9f70;--shadow:0 10px 30px rgba(25,25,30,.08);font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",Inter,system-ui,sans-serif;color:var(--ink);background:#fff}
-*{box-sizing:border-box}html,body{margin:0;min-height:100%;background:#fff}button,input,textarea{font:inherit}button{border:0;background:none;color:inherit}.app-shell{min-height:100dvh;max-width:520px;margin:0 auto;background:#fff;position:relative;padding-bottom:78px}.topbar{height:58px;display:flex;align-items:center;justify-content:space-between;padding:0 20px;border-bottom:1px solid rgba(236,236,239,.7);position:sticky;top:0;background:rgba(255,255,255,.94);backdrop-filter:blur(14px);z-index:5}.brand{font-size:19px;font-weight:700;letter-spacing:.12em}.ghost{font-size:13px;color:var(--muted);padding:8px}.screen{padding:26px 22px 100px}.hero{padding-top:32px}.hero h1{font-size:30px;line-height:1.25;margin:0 0 8px;font-weight:750;letter-spacing:-.02em}.hero h1::after{content:"";display:inline-block;width:3px;height:31px;background:var(--accent);margin-left:4px;vertical-align:-5px;border-radius:3px}.hero p{margin:0 0 42px;color:#777b84;font-size:15px}.prompt{font-size:23px;line-height:1.3;font-weight:700;margin:0 0 16px}.composer{background:var(--soft);border-radius:22px;padding:18px 18px 14px}.composer textarea{border:0;outline:0;background:transparent;width:100%;resize:none;min-height:128px;font-size:17px;line-height:1.65;color:var(--ink)}.composer textarea::placeholder{color:#b6b8bf}.composer-foot{display:flex;align-items:center;justify-content:space-between;border-top:1px solid #e8e8eb;padding-top:12px}.counter{font-size:12px;color:#adb0b7}.primary{background:var(--ink);color:#fff;border-radius:999px;padding:10px 18px;font-weight:650}.primary:disabled{opacity:.35}.accent{background:var(--accent);color:#fff}.notice{margin:18px 0;background:var(--accent-soft);border-radius:16px;padding:14px 16px;display:flex;align-items:center;justify-content:space-between;gap:12px}.notice strong{font-size:14px}.notice span{font-size:12px;color:#9b5d72}.section-title{font-size:13px;color:#a0a3aa;margin:26px 2px 10px}.card{border:1px solid var(--line);border-radius:20px;padding:17px 18px;margin:10px 0;background:#fff}.card-body{white-space:pre-wrap;font-size:16px;line-height:1.65}.meta{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:12px;color:var(--muted);font-size:12px}.row{display:flex;align-items:center;gap:10px}.row.between{justify-content:space-between}.pill{padding:7px 12px;border-radius:999px;background:var(--soft);font-size:12px}.pill.accent{background:var(--accent-soft);color:var(--accent)}.tabbar{position:fixed;left:50%;bottom:0;transform:translateX(-50%);width:min(520px,100%);height:72px;padding-bottom:env(safe-area-inset-bottom);background:rgba(255,255,255,.96);backdrop-filter:blur(16px);border-top:1px solid var(--line);display:grid;grid-template-columns:repeat(3,1fr);z-index:8}.tab{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;color:#a2a5ad;font-size:11px}.tab b{font-size:19px;line-height:1}.tab.active{color:var(--ink)}.dot{width:6px;height:6px;background:var(--accent);border-radius:50%;position:absolute;margin-left:18px;margin-top:-15px}.empty{padding:70px 20px;text-align:center;color:#a2a5ad;line-height:1.8}.auth{min-height:100dvh;display:flex;flex-direction:column;justify-content:center;padding:34px 30px}.auth .logo{font-size:40px;font-weight:800;letter-spacing:.18em;margin-bottom:8px}.auth .sub{color:#92959d;margin-bottom:46px}.field{width:100%;border:0;border-bottom:1px solid var(--line);padding:15px 2px;outline:0;font-size:17px;margin-bottom:12px}.auth .primary{width:100%;margin-top:14px;padding:14px}.hint{font-size:12px;color:#a4a6ad;margin-top:18px;line-height:1.6}.profile-head{display:flex;gap:14px;align-items:center}.avatar{width:58px;height:58px;border-radius:50%;background:linear-gradient(145deg,#fff0f5,#f1f1f4);display:grid;place-items:center;font-size:22px;font-weight:750;color:var(--accent)}.profile-name{font-size:20px;font-weight:750}.profile-bio{color:var(--muted);font-size:13px;margin-top:4px}.link-btn{color:var(--accent);font-weight:650;padding:8px 0}.danger{color:var(--danger)}.chat{position:fixed;inset:0;background:#fff;z-index:20;max-width:520px;margin:0 auto;display:flex;flex-direction:column}.chat-head{height:58px;border-bottom:1px solid var(--line);display:flex;align-items:center;padding:0 14px;gap:10px}.chat-head button{padding:10px}.chat-title{font-weight:700;flex:1}.chat-body{flex:1;overflow:auto;padding:18px 14px}.bubble{max-width:78%;padding:10px 13px;border-radius:16px;margin:8px 0;background:var(--soft);line-height:1.55;white-space:pre-wrap}.bubble.me{margin-left:auto;background:var(--accent-soft)}.chat-send{display:flex;gap:8px;padding:10px 12px calc(10px + env(safe-area-inset-bottom));border-top:1px solid var(--line)}.chat-send input{flex:1;border:1px solid var(--line);border-radius:999px;padding:11px 14px;outline:0}.toast{position:fixed;left:50%;bottom:94px;transform:translate(-50%,10px);background:rgba(26,26,28,.92);color:#fff;padding:9px 14px;border-radius:999px;font-size:13px;opacity:0;pointer-events:none;transition:.2s;z-index:99;max-width:80%;text-align:center}.toast.show{opacity:1;transform:translate(-50%,0)}.modal{position:fixed;inset:0;background:rgba(0,0,0,.28);z-index:30;display:grid;place-items:end center}.sheet{width:min(520px,100%);background:#fff;border-radius:24px 24px 0 0;padding:20px 20px calc(22px + env(safe-area-inset-bottom));box-shadow:var(--shadow)}.sheet h3{margin:0 0 14px}.sheet .field{margin-bottom:8px}.muted{color:var(--muted)}.small{font-size:12px}.badge{min-width:20px;height:20px;padding:0 6px;border-radius:10px;background:var(--accent);color:#fff;font-size:11px;display:grid;place-items:center}.divider{height:1px;background:var(--line);margin:16px 0}.actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}.actions button{padding:9px 12px;border-radius:999px;background:var(--soft);font-size:12px}.actions .hot{background:var(--accent-soft);color:var(--accent)}
-@media(min-width:700px){body{background:#f5f5f6}.app-shell{min-height:100vh;box-shadow:0 0 50px rgba(20,20,26,.08)}.chat{left:50%;right:auto;width:520px;transform:translateX(-50%)}}
-
+:root{
+  --bg:#efeff4;--paper:#fff;--ink:#17171a;--muted:#8c8d94;--line:rgba(29,29,34,.10);
+  --pink:#ff3b6b;--pink-soft:#fff0f4;--glass:rgba(255,255,255,.90);
+  --safe:env(safe-area-inset-bottom,0px);
+  font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;min-height:100%;background:var(--bg);color:var(--ink)}
+body.dark{--bg:#111116;--paper:#1b1b21;--ink:#f4f4f6;--muted:#92929a;--line:rgba(255,255,255,.10);--glass:rgba(24,24,30,.92);--pink-soft:#351923}
+button,input,textarea{font:inherit;color:inherit}button{border:0;background:none;cursor:pointer}
+.app-shell{max-width:520px;min-height:100dvh;margin:auto;position:relative;background:var(--bg);overflow-x:hidden;padding-bottom:calc(72px + var(--safe))}
+.home-shell{min-height:calc(100dvh - 72px - var(--safe));position:relative;padding:44px 26px 120px;background:
+ radial-gradient(circle at 16% 18%,rgba(255,255,255,.75),transparent 34%),
+ radial-gradient(circle at 92% 8%,rgba(218,222,242,.88),transparent 34%),
+ linear-gradient(155deg,#f3f2f6 0%,#e8e8ef 54%,#f4eef2 100%)}
+body.dark .home-shell{background:
+ radial-gradient(circle at 18% 12%,rgba(80,82,100,.23),transparent 33%),
+ radial-gradient(circle at 88% 8%,rgba(69,58,76,.26),transparent 32%),
+ linear-gradient(155deg,#18181f,#111116)}
+.home-date{font-size:14px;color:var(--muted);letter-spacing:.02em}
+.home-title{margin-top:18px;font-size:31px;font-weight:800;letter-spacing:-.04em;line-height:1.2}.home-title .cursor{display:inline-block;width:4px;height:34px;background:var(--pink);vertical-align:-5px;margin-left:4px;border-radius:2px;animation:blink 1s steps(1) infinite}.home-sub{font-size:15px;color:var(--muted);margin-top:10px}
+.home-prompt{margin-top:18vh;font-size:29px;line-height:1.28;font-weight:760;letter-spacing:-.03em;max-width:310px}
+.home-prompt .cursor{display:inline-block;width:3px;height:31px;background:var(--pink);vertical-align:-5px;margin-left:4px;border-radius:2px;animation:blink 1s steps(1) infinite}
+@keyframes blink{50%{opacity:0}}
+.composer{margin-top:20px;background:var(--glass);border-radius:25px;padding:18px 18px 14px;box-shadow:0 12px 35px rgba(22,22,28,.06);backdrop-filter:blur(12px)}
+.composer textarea{width:100%;min-height:142px;border:0;outline:0;resize:none;background:transparent;font-size:17px;line-height:1.65}
+.composer textarea::placeholder{color:#a5a6ac}
+.compose-tools{display:flex;align-items:center;gap:8px;border-top:1px solid var(--line);padding-top:11px}
+.tool{font-size:13px;color:var(--muted);padding:8px 10px;border-radius:18px;background:rgba(127,127,140,.08)}
+.compose-tools .send{margin-left:auto;background:var(--pink);color:#fff;font-weight:700;padding:9px 18px;border-radius:20px}
+.compose-tools .send:disabled{opacity:.35}
+.res-notice{position:absolute;left:24px;right:24px;bottom:92px;padding:15px 17px;background:var(--glass);border-radius:19px;display:flex;align-items:center;justify-content:space-between;box-shadow:0 10px 32px rgba(30,30,40,.08);font-size:15px}
+.res-notice small{display:block;color:var(--muted);margin-top:4px}
+.tabbar{position:fixed;z-index:30;left:50%;bottom:0;transform:translateX(-50%);width:min(520px,100%);height:calc(68px + var(--safe));padding:6px 38px var(--safe);display:grid;grid-template-columns:repeat(3,1fr);background:var(--glass);border-top:1px solid var(--line);backdrop-filter:blur(18px)}
+.tab{position:relative;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;color:#96979f;font-size:10px}
+.tab .ti{font-size:23px;line-height:1}.tab.active{color:var(--ink)}.dot{position:absolute;top:7px;margin-left:21px;width:6px;height:6px;border-radius:50%;background:var(--pink)}
+.page{min-height:calc(100dvh - 72px - var(--safe));background:var(--bg);padding-bottom:28px}
+.page-head{height:68px;display:flex;align-items:center;padding:0 20px;position:sticky;top:0;z-index:8;background:var(--glass);backdrop-filter:blur(16px);border-bottom:1px solid var(--line)}
+.page-head h1{font-size:27px;margin:0;font-weight:780;letter-spacing:-.03em}.page-head .right{margin-left:auto;font-size:23px;padding:10px}
+.section-label{font-size:13px;color:var(--muted);padding:22px 22px 9px}
+.friend-strip{display:flex;gap:14px;overflow:auto;padding:4px 20px 14px;scrollbar-width:none}.friend-strip::-webkit-scrollbar{display:none}
+.friend-story{width:70px;flex:none;text-align:center;font-size:11px;color:var(--muted)}
+.story-ring{width:58px;height:58px;border-radius:50%;padding:2px;background:linear-gradient(135deg,var(--pink),#ffafc2);margin:auto auto 6px}
+.story-ring>span{width:100%;height:100%;border-radius:50%;background:var(--paper);display:grid;place-items:center;font-size:20px;font-weight:750}
+.list{background:var(--paper);border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
+.list-row{width:100%;display:flex;align-items:center;gap:13px;min-height:74px;padding:12px 20px;text-align:left;border-bottom:1px solid var(--line)}
+.list-row:last-child{border-bottom:0}.avatar{width:46px;height:46px;border-radius:50%;background:linear-gradient(145deg,#e7d9df,#d8dde9);display:grid;place-items:center;font-weight:750;flex:none}
+.row-main{min-width:0;flex:1}.row-title{font-weight:700;font-size:16px}.row-sub{font-size:12px;color:var(--muted);margin-top:5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.row-time{font-size:11px;color:var(--muted)}
+.empty{padding:54px 24px;text-align:center;color:var(--muted);line-height:1.7}
+.profile-cover{height:190px;background:linear-gradient(155deg,#d8d6df,#eceaf0);position:relative}
+body.dark .profile-cover{background:linear-gradient(155deg,#2b2a33,#1e1d24)}
+.profile-cover .gear{position:absolute;right:16px;top:16px;width:44px;height:44px;border-radius:22px;background:rgba(255,255,255,.72);font-size:21px}
+body.dark .profile-cover .gear{background:rgba(25,25,30,.78)}
+.profile-body{padding:0 22px 100px}.profile-top{display:flex;align-items:flex-end;gap:14px;margin-top:-40px;position:relative}
+.big-avatar{width:88px;height:88px;border:5px solid var(--bg);border-radius:50%;background:linear-gradient(145deg,#eadde2,#d7dce8);display:grid;place-items:center;font-size:32px;font-weight:800}
+.profile-name{font-size:23px;font-weight:790;margin-bottom:11px}.profile-bio{color:var(--muted);margin:14px 0 20px}
+.stats{display:flex;gap:26px;padding:14px 0 18px;border-bottom:1px solid var(--line)}.stats b{font-size:19px}.stats span{font-size:12px;color:var(--muted);margin-left:4px}
+.post{padding:18px 0;border-bottom:1px solid var(--line)}.post-body{font-size:16px;line-height:1.7;white-space:pre-wrap}.post-meta{font-size:11px;color:var(--muted);margin-top:10px;display:flex;justify-content:space-between}
+.post-actions{display:flex;gap:10px;margin-top:10px}.post-actions button{font-size:12px;color:var(--muted);padding:6px 9px;background:rgba(127,127,140,.08);border-radius:14px}
+.subscreen,.chat{position:fixed;z-index:60;inset:0;max-width:520px;margin:auto;background:var(--bg);display:flex;flex-direction:column}
+.subhead{height:62px;display:flex;align-items:center;border-bottom:1px solid var(--line);padding:0 12px;background:var(--glass);backdrop-filter:blur(16px)}
+.back{width:44px;height:44px;font-size:31px}.subhead h2{flex:1;text-align:center;font-size:17px;margin:0}.subhead .slot{width:44px}
+.res-stage{flex:1;overflow:hidden;display:flex;flex-direction:column;padding:28px 22px 22px;background:linear-gradient(160deg,#f0eef3,#e8e8ef)}
+body.dark .res-stage{background:linear-gradient(160deg,#18171e,#111116)}
+.res-kicker{text-align:center;color:var(--muted);font-size:13px}.res-card{margin:auto 0;background:var(--paper);border-radius:28px;padding:30px 25px;min-height:46vh;box-shadow:0 18px 50px rgba(25,25,32,.08);display:flex;flex-direction:column}
+.res-card .text{font-size:20px;line-height:1.75;white-space:pre-wrap;margin:auto 0}.res-card .small{color:var(--muted);font-size:12px}
+.res-actions{display:flex;align-items:center;gap:12px;margin-top:20px}.res-actions .light{flex:1;height:51px;border-radius:26px;background:var(--pink);color:#fff;font-size:17px;font-weight:750}.res-actions .skip{width:51px;height:51px;border-radius:26px;background:var(--paper);font-size:20px}
+.settings-list{margin-top:14px;background:var(--paper);border-top:1px solid var(--line);border-bottom:1px solid var(--line)}.settings-row{width:100%;min-height:58px;padding:0 20px;display:flex;align-items:center;border-bottom:1px solid var(--line);text-align:left}.settings-row:last-child{border:0}.settings-row span:last-child{margin-left:auto;color:var(--muted)}
+.auth{min-height:100dvh;padding:70px 34px 44px;display:flex;flex-direction:column;background:#fff;color:#18181b}
+.auth-logo{font-size:72px;font-weight:900;font-style:italic;color:var(--pink);letter-spacing:-8px;line-height:1;margin-top:14vh}.auth-sub{font-size:18px;letter-spacing:7px;color:#98999f;margin:20px 0 auto;padding-left:5px}
+.field{width:100%;height:54px;border:0;border-bottom:1px solid #e7e7eb;background:transparent;outline:0;font-size:16px;margin:5px 0}.auth .primary{width:100%;height:52px;border-radius:26px;background:var(--pink);color:#fff;font-weight:750;margin-top:18px}.hint{font-size:11px;color:#a4a5aa;text-align:center;margin-top:14px;line-height:1.6}
+.modal{position:fixed;z-index:90;inset:0;background:rgba(0,0,0,.28);display:flex;align-items:flex-end;justify-content:center}.sheet{width:min(520px,100%);background:#fff;color:#18181b;border-radius:24px 24px 0 0;padding:24px 22px calc(25px + var(--safe))}.sheet h3{margin:0 0 14px}.sheet .primary{width:100%;height:50px;border-radius:25px;background:var(--pink);color:#fff;font-weight:750;margin-top:12px}
+.chat-body{flex:1;overflow:auto;padding:16px 14px}.bubble{max-width:78%;padding:11px 13px;border-radius:16px;margin:8px 0;background:var(--paper);line-height:1.55;white-space:pre-wrap}.bubble.me{margin-left:auto;background:#ffdce5;color:#282329}
+.chat-send{display:flex;gap:8px;padding:10px 12px calc(10px + var(--safe));border-top:1px solid var(--line);background:var(--glass)}.chat-send input{flex:1;height:42px;border:0;border-radius:21px;background:var(--paper);padding:0 14px;outline:0}.chat-send button{padding:0 16px;border-radius:20px;background:var(--pink);color:#fff}
+.toast{position:fixed;z-index:120;left:50%;bottom:95px;transform:translateX(-50%);background:rgba(26,26,30,.92);color:#fff;padding:9px 14px;border-radius:18px;font-size:13px;max-width:82%;text-align:center}
+@media(min-width:700px){body{background:#dddde2}.app-shell{box-shadow:0 0 45px rgba(20,20,30,.10)}}
 </style>
   <title>可话</title>
 </head>
 <body>
-  <div id="app" class="app-shell" aria-live="polite"></div>
+  <div id="app" class="app-shell" aria-live="polite"><main class="auth"><div class="auth-logo">~!</div><div class="auth-sub">说你想说的话</div><input class="field" autocomplete="email" placeholder="手机号（含国家区号）或邮箱"><button class="primary">获取验证码</button><div class="hint">登录即表示你同意可话的服务与隐私规则<br>同一账号的数据会在不同设备同步</div></main></div>
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
   <script type="module">
-import { createClient } from './supabase.mjs';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.116.0';
 
 const SUPABASE_URL = 'https://nvwdtfnhsyfdopaxdylx.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_S4IE-ziO7WQ_JAK9tuQGgQ_cszwKBWB';
@@ -29,7 +102,7 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_KEY, {auth:{persistSession:
 const app=document.querySelector('#app');
 const toastEl=document.querySelector('#toast');
 
-const state={session:null,user:null,tab:'home',profile:null,posts:[],resonances:[],conversations:[],requests:[],chat:null,chatMessages:[],friendPosts:[],modal:null,loading:false};
+const state={session:null,user:null,tab:'home',profile:null,posts:[],resonances:[],conversations:[],requests:[],chat:null,chatMessages:[],friendPosts:[],modal:null,loading:false,selfOnly:false,resIndex:0};
 let subscriptions=[];
 const esc=s=>String(s??'').replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));
 const when=v=>new Intl.DateTimeFormat('zh-CN',{month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'}).format(new Date(v));
@@ -105,7 +178,7 @@ async function verifyOtp(identity,token){
 }
 async function publish(content){
   content=content.trim(); if(!content)return; if(content.length>1000)return toast('最多1000字');
-  const {error}=await supabase.from('orig_posts').insert({user_id:state.user.id,content});if(error)return toast(error.message);await loadPosts();render();toast('已经说出去啦');
+  const {error}=await supabase.from('orig_posts').insert({user_id:state.user.id,content,self_only:state.selfOnly});if(error)return toast(error.message);state.selfOnly=false;await loadPosts();render();toast('正在为你寻找共鸣～');
 }
 async function openResonance(id){await supabase.from('orig_resonances').update({status:'opened'}).eq('id',id);await loadResonances();render()}
 async function lightResonance(r){
@@ -133,33 +206,53 @@ async function togglePost(id,key,value){const {error}=await supabase.from('orig_
 async function reportResonance(r){const reason=prompt('简单写一下举报原因');if(!reason)return;const {error}=await supabase.from('orig_reports').insert({reporter_id:state.user.id,reported_user_id:r.candidate_user_id,post_id:r.candidate_post_id,reason});if(error)return toast(error.message);toast('已提交举报')}
 async function signOut(){await supabase.auth.signOut();state.session=null;state.user=null;state.profile=null;state.posts=[];state.resonances=[];state.conversations=[];state.requests=[];state.chat=null;cleanupSubs();render()}
 
-function authView(){return `<main class="auth"><div class="logo">可话</div><div class="sub">说你想说的话</div><input id="identity" class="field" autocomplete="email" placeholder="手机号（含国家区号）或邮箱"><button class="primary accent" id="sendOtp" ${state.loading?'disabled':''}>${state.loading?'发送中…':'获取验证码'}</button><div class="hint">登录后，同一账号在不同设备上的记录、共鸣、聊天和好友会自动同步。</div></main>${state.modal==='otp'?otpSheet():''}`}
-function otpSheet(){const identity=esc(sessionStorage.getItem('kehua_identity')||'');return `<div class="modal"><div class="sheet"><h3>输入验证码</h3><div class="small muted">已发送到 ${identity}</div><input id="otp" class="field" inputmode="numeric" maxlength="8" placeholder="验证码"><button class="primary accent" id="verifyOtp">确认登录</button></div></div>`}
-function topbar(){return `<header class="topbar"><div class="brand">可话</div><button class="ghost" data-act="refresh">刷新</button></header>`}
-function tabs(){const n=state.resonances.filter(r=>r.status==='new').length+state.requests.length;return `<nav class="tabbar"><button class="tab ${state.tab==='home'?'active':''}" data-tab="home"><b>⌂</b><span>首页</span></button><button class="tab ${state.tab==='messages'?'active':''}" data-tab="messages"><b>◌</b><span>消息</span>${n?'<i class="dot"></i>':''}</button><button class="tab ${state.tab==='me'?'active':''}" data-tab="me"><b>○</b><span>我的</span></button></nav>`}
-function homeView(){const fresh=state.resonances.filter(r=>r.status==='new').length;return `<main class="screen"><section class="hero"><h1>说想说的话</h1><p>记录你真实的想法和感受</p><div class="prompt">此刻，<br>有什么想说～</div><div class="composer"><textarea id="composer" maxlength="1000" placeholder="在这里写下你的想法…"></textarea><div class="composer-foot"><span class="counter" id="counter">0 / 1000</span><button class="primary accent" id="publish" disabled>发表</button></div></div></section>${fresh?`<button class="notice" data-tab="messages"><div><strong>共鸣已到达。请签收～！</strong><br><span>有 ${fresh} 条新的共鸣</span></div><b>›</b></button>`:''}<div class="section-title">我说过的话</div>${state.posts.length?state.posts.map(postCard).join(''):`<div class="empty">说出第一句话后，<br>这里会留下你的记录。</div>`}</main>`}
-function postCard(p){return `<article class="card"><div class="card-body">${esc(p.content)}</div><div class="meta"><span>${when(p.created_at)}</span><span>${p.self_only?'仅自己可见':p.is_pinned?'已置顶':''}</span></div><div class="actions"><button data-toggle-self="${p.id}" data-value="${p.self_only?'0':'1'}">${p.self_only?'恢复共鸣':'仅自己可见'}</button><button data-toggle-pin="${p.id}" data-value="${p.is_pinned?'0':'1'}">${p.is_pinned?'取消置顶':'置顶'}</button></div></article>`}
-function friendPostCard(p){return `<article class="card"><div class="card-body">${esc(p.content)}</div><div class="meta"><span>${esc(p.nickname||'好友')}</span><span>${when(p.created_at)}</span></div></article>`}
-function messagesView(){return `<main class="screen"><div class="section-title">好友最新动态</div>${state.friendPosts.length?state.friendPosts.map(friendPostCard).join(''):`<div class="empty" style="padding:25px">成为好友后，对方最新动态会出现在这里。</div>`}<div class="section-title">共鸣</div>${state.resonances.length?state.resonances.map(resCard).join(''):`<div class="empty">发出一句话后，<br>共鸣会在这里到达。</div>`}<div class="section-title">聊天</div>${state.conversations.length?state.conversations.map(c=>`<button class="card row between" style="width:100%;text-align:left" data-chat="${c.id}"><div><div style="font-weight:700">${esc(c.peer?.nickname||'可话er')}</div><div class="small muted">点开继续聊天</div></div><b>›</b></button>`).join(''):`<div class="empty" style="padding:25px">点亮一个共鸣，就能开启聊天。</div>`}${state.requests.length?`<div class="section-title">好友申请</div>${state.requests.map(r=>`<div class="card"><div>有人想和你成为好友</div><div class="actions"><button class="hot" data-accept="${r.id}">通过</button><button data-reject="${r.id}">拒绝</button></div></div>`).join('')}`:''}</main>`}
-function resCard(r){const p=r.orig_posts||{};const prof=r.orig_profiles||{};return `<article class="card" data-open-res="${r.id}"><div class="card-body">${esc(p.content||'这条共鸣暂时不可见')}</div><div class="meta"><span>${esc(prof.nickname||'某个懂你的人')}</span><span>${when(r.created_at)}</span></div><div class="actions"><button class="hot" data-light="${r.id}">${r.status==='lit'?'已点亮':'点亮'}</button><button data-report="${r.id}">举报</button></div></article>`}
-function meView(){return `<main class="screen"><div class="profile-head"><div class="avatar">${esc((state.profile?.nickname||'可')[0])}</div><div style="flex:1"><div class="profile-name">${esc(state.profile?.nickname||'可话er')}</div><div class="profile-bio">${esc(state.profile?.bio||'还没有写介绍')}</div></div><button class="link-btn" id="editProfile">编辑</button></div><div class="divider"></div><div class="row between"><span>我的记录</span><b>${state.posts.length}</b></div><div class="divider"></div><div class="row between"><span>点亮过的共鸣</span><b>${state.resonances.filter(r=>r.status==='lit').length}</b></div><div class="divider"></div><button class="link-btn danger" id="logout">退出登录</button></main>${state.modal==='profile'?profileSheet():''}`}
-function profileSheet(){return `<div class="modal" id="modalBg"><div class="sheet"><h3>编辑资料</h3><input class="field" id="nickname" maxlength="24" value="${esc(state.profile?.nickname||'')}" placeholder="昵称"><input class="field" id="bio" maxlength="120" value="${esc(state.profile?.bio||'')}" placeholder="简单介绍一下自己"><button class="primary accent" id="saveProfile">保存</button></div></div>`}
-function chatView(){if(!state.chat)return'';return `<section class="chat"><header class="chat-head"><button id="closeChat">‹</button><div class="chat-title">${esc(state.chat.peer?.nickname||'可话er')}</div><button class="link-btn" id="addFriend">加好友</button></header><div class="chat-body">${state.chatMessages.length?state.chatMessages.map(m=>`<div class="bubble ${m.sender_id===state.user.id?'me':''}">${esc(m.body)}</div>`).join(''):`<div class="empty">已经点亮彼此，<br>说句话吧～</div>`}</div><div class="chat-send"><input id="msg" maxlength="4000" placeholder="说点什么…"><button class="primary accent" id="sendMsg">发送</button></div></section>`}
+function authView(){return `<main class="auth"><div class="auth-logo">~!</div><div class="auth-sub">说你想说的话</div><input id="identity" class="field" autocomplete="email" placeholder="手机号（含国家区号）或邮箱"><button class="primary" id="sendOtp" ${state.loading?'disabled':''}>${state.loading?'发送中…':'获取验证码'}</button><div class="hint">登录即表示你同意可话的服务与隐私规则<br>同一账号的数据会在不同设备同步</div></main>${state.modal==='otp'?otpSheet():''}`}
+function otpSheet(){const identity=esc(sessionStorage.getItem('kehua_identity')||'');return `<div class="modal"><div class="sheet"><h3>输入验证码</h3><div style="font-size:12px;color:#92939a">已发送到 ${identity}</div><input id="otp" class="field" inputmode="numeric" maxlength="8" placeholder="验证码"><button class="primary" id="verifyOtp">确认登录</button></div></div>`}
+function tabs(){const n=state.resonances.filter(r=>r.status==='new').length+state.requests.length;return `<nav class="tabbar"><button class="tab ${state.tab==='home'?'active':''}" data-tab="home"><span class="ti">⌂</span><span>首页</span></button><button class="tab ${state.tab==='messages'?'active':''}" data-tab="messages"><span class="ti">◌</span><span>消息</span>${n?'<i class="dot"></i>':''}</button><button class="tab ${state.tab==='me'?'active':''}" data-tab="me"><span class="ti">○</span><span>我的</span></button></nav>`}
+function homeView(){
+  const fresh=state.resonances.filter(r=>r.status==='new').length;
+  const ds=new Intl.DateTimeFormat('zh-CN',{month:'long',day:'numeric',weekday:'short'}).format(new Date());
+  return `<main class="home-shell"><div class="home-date">${ds}</div><div class="home-title">说想说的话<span class="cursor"></span></div><div class="home-sub">记录你真实的想法和感受</div><div class="home-prompt">此刻，<br>有什么想说～</div><div class="composer"><textarea id="composer" maxlength="1000" placeholder=""></textarea><div class="compose-tools"><button class="tool" id="visibility">${state.selfOnly?'仅自己':'公开'}</button><span style="font-size:11px;color:var(--muted)" id="counter">0/1000</span><button class="send" id="publish" disabled>发表</button></div></div>${fresh?`<button class="res-notice" id="openRes"><div><b>共鸣已到达。请签收～！</b><small>${fresh} 条新的共鸣</small></div><span>›</span></button>`:''}</main>`
+}
+function postCard(p){return `<article class="post"><div class="post-body">${esc(p.content)}</div><div class="post-meta"><span>${when(p.created_at)}</span><span>${p.self_only?'仅自己可见':p.is_pinned?'已置顶':''}</span></div><div class="post-actions"><button data-toggle-self="${p.id}" data-value="${p.self_only?'0':'1'}">${p.self_only?'恢复共鸣':'仅自己'}</button><button data-toggle-pin="${p.id}" data-value="${p.is_pinned?'0':'1'}">${p.is_pinned?'取消置顶':'置顶'}</button></div></article>`}
+function friendPostCard(p){return `<button class="friend-story" data-friend-post="${p.user_id}"><span class="story-ring"><span>${esc((p.nickname||'友')[0])}</span></span><span>${esc((p.nickname||'好友').slice(0,6))}</span></button>`}
+function messagesView(){
+  const latest=[]; const seen=new Set();
+  state.friendPosts.forEach(p=>{if(!seen.has(p.user_id)){seen.add(p.user_id);latest.push(p)}});
+  const chatRows=state.conversations.map(c=>`<button class="list-row" data-chat="${c.id}"><span class="avatar">${esc((c.peer?.nickname||'可')[0])}</span><span class="row-main"><span class="row-title">${esc(c.peer?.nickname||'可话er')}</span><span class="row-sub">点开继续聊天</span></span><span class="row-time">›</span></button>`).join('');
+  return `<main class="page"><header class="page-head"><h1>消息</h1><button class="right" id="refresh">↻</button></header>${latest.length?`<div class="section-label">好友最新动态</div><div class="friend-strip">${latest.map(friendPostCard).join('')}</div>`:''}<div class="section-label">聊天</div><div class="list">${chatRows||'<div class="empty">点亮一个共鸣，就能开启聊天。</div>'}</div>${state.resonances.some(r=>r.status==='new')?`<div class="section-label">共鸣</div><div class="list"><button class="list-row" id="openRes"><span class="avatar" style="color:#fff;background:var(--pink)">~!</span><span class="row-main"><span class="row-title">新的共鸣</span><span class="row-sub">共鸣已到达。请签收～！</span></span><span class="row-time">›</span></button></div>`:''}${state.requests.length?`<div class="section-label">好友申请</div><div class="list">${state.requests.map(r=>`<div class="list-row"><span class="avatar">友</span><span class="row-main"><span class="row-title">有人想和你成为好友</span><span class="row-sub"><button style="color:var(--pink);margin-right:16px" data-accept="${r.id}">通过</button><button data-reject="${r.id}">拒绝</button></span></span></div>`).join('')}</div>`:''}</main>`
+}
+function meView(){
+  const nick=state.profile?.nickname||'可话er';
+  return `<main class="page"><section class="profile-cover"><button class="gear" id="settings">⚙</button></section><section class="profile-body"><div class="profile-top"><div class="big-avatar">${esc(nick[0])}</div><div class="profile-name">${esc(nick)}</div></div><div class="profile-bio">${esc(state.profile?.bio||'')}</div><div class="stats"><div><b>${state.posts.length}</b><span>记录</span></div><div><b>${state.resonances.filter(r=>r.status==='lit').length}</b><span>点亮</span></div></div><div class="section-label" style="padding-left:0">我说过的</div>${state.posts.length?state.posts.map(postCard).join(''):'<div class="empty">还没有说过什么</div>'}</section></main>`
+}
+function profileSheet(){return `<div class="modal" id="modalBg"><div class="sheet"><h3>编辑个人资料</h3><input class="field" id="nickname" maxlength="24" value="${esc(state.profile?.nickname||'')}" placeholder="昵称"><input class="field" id="bio" maxlength="120" value="${esc(state.profile?.bio||'')}" placeholder="个性签名"><button class="primary" id="saveProfile">保存</button></div></div>`}
+function settingsView(){return `<section class="subscreen"><header class="subhead"><button class="back" id="closeSub">‹</button><h2>设置</h2><span class="slot"></span></header><div class="settings-list"><button class="settings-row" id="editProfile"><span>编辑个人资料</span><span>›</span></button><button class="settings-row" id="theme"><span>深色模式</span><span>${document.body.classList.contains('dark')?'已开启':'›'}</span></button><button class="settings-row"><span>账号与安全</span><span>›</span></button><button class="settings-row"><span>隐私设置</span><span>›</span></button><button class="settings-row"><span>消息通知</span><span>›</span></button><button class="settings-row"><span>给可话反馈</span><span>›</span></button><button class="settings-row"><span>关于可话</span><span>›</span></button></div><div class="settings-list"><button class="settings-row" id="logout" style="color:#e55261"><span>退出登录</span></button></div></section>`}
+function resonanceView(){
+  const list=state.resonances.filter(r=>r.status!=='lit'); if(!list.length){state.modal=null;return''}
+  state.resIndex=Math.min(state.resIndex,list.length-1); const r=list[state.resIndex],p=r.orig_posts||{};
+  return `<section class="subscreen"><header class="subhead"><button class="back" id="closeSub">‹</button><h2>共鸣</h2><span class="slot"></span></header><div class="res-stage"><div class="res-kicker">${state.resIndex+1} / ${list.length}</div><article class="res-card"><div class="small">与你此刻的表达产生了共鸣</div><div class="text">${esc(p.content||'这条共鸣暂时不可见')}</div><div class="small">${when(r.created_at)}</div></article><div class="res-actions"><button class="skip" id="nextRes">›</button><button class="light" data-light="${r.id}">点亮</button></div></div></section>`
+}
+function chatView(){if(!state.chat)return'';return `<section class="chat"><header class="subhead"><button class="back" id="closeChat">‹</button><h2>${esc(state.chat.peer?.nickname||'可话er')}</h2><button class="slot" id="addFriend" style="color:var(--pink);font-size:12px">加好友</button></header><div class="chat-body">${state.chatMessages.length?state.chatMessages.map(m=>`<div class="bubble ${m.sender_id===state.user.id?'me':''}">${esc(m.body)}</div>`).join(''):'<div class="empty">已经点亮彼此，<br>说句话吧～</div>'}</div><div class="chat-send"><input id="msg" maxlength="4000" placeholder="说点什么…"><button id="sendMsg">发送</button></div></section>`}
+function subView(){if(state.modal==='settings')return settingsView();if(state.modal==='profile')return profileSheet();if(state.modal==='resonance')return resonanceView();return''}
+
 function render(){
   if(!state.user){app.innerHTML=authView();bind();return}
-  const body=state.tab==='home'?homeView():state.tab==='messages'?messagesView():meView();app.innerHTML=topbar()+body+tabs()+chatView();bind()
+  const body=state.tab==='home'?homeView():state.tab==='messages'?messagesView():meView();
+  app.innerHTML=body+tabs()+chatView()+subView();bind()
 }
 function bind(){
   document.querySelector('#sendOtp')?.addEventListener('click',()=>sendOtp(document.querySelector('#identity').value));
   document.querySelector('#verifyOtp')?.addEventListener('click',()=>verifyOtp(sessionStorage.getItem('kehua_identity')||'',document.querySelector('#otp').value.trim()));
-  document.querySelectorAll('[data-tab]').forEach(x=>x.addEventListener('click',()=>{state.tab=x.dataset.tab;render()}));
-  document.querySelector('[data-act="refresh"]')?.addEventListener('click',async()=>{await refreshAll();render();toast('已经刷新')});
-  const comp=document.querySelector('#composer'); const pub=document.querySelector('#publish');
-  comp?.addEventListener('input',()=>{document.querySelector('#counter').textContent=`${comp.value.length} / 1000`;pub.disabled=!comp.value.trim()});
+  document.querySelectorAll('[data-tab]').forEach(x=>x.addEventListener('click',()=>{state.tab=x.dataset.tab;state.modal=null;render()}));
+  document.querySelector('#refresh')?.addEventListener('click',async()=>{await refreshAll();render();toast('已经刷新')});
+  const comp=document.querySelector('#composer'),pub=document.querySelector('#publish');
+  comp?.addEventListener('input',()=>{document.querySelector('#counter').textContent=`${comp.value.length}/1000`;pub.disabled=!comp.value.trim()});
   pub?.addEventListener('click',async()=>{const v=comp.value;pub.disabled=true;await publish(v)});
-  document.querySelectorAll('[data-open-res]').forEach(x=>x.addEventListener('click',e=>{if(e.target.closest('button'))return;openResonance(x.dataset.openRes)}));
-  document.querySelectorAll('[data-light]').forEach(x=>x.addEventListener('click',e=>{e.stopPropagation();const r=state.resonances.find(v=>v.id===x.dataset.light);if(r)lightResonance(r)}));
-  document.querySelectorAll('[data-report]').forEach(x=>x.addEventListener('click',e=>{e.stopPropagation();const r=state.resonances.find(v=>v.id===x.dataset.report);if(r)reportResonance(r)}));
+  document.querySelector('#visibility')?.addEventListener('click',()=>{state.selfOnly=!state.selfOnly;render();setTimeout(()=>document.querySelector('#composer')?.focus(),20)});
+  document.querySelectorAll('#openRes').forEach(x=>x.addEventListener('click',()=>{state.modal='resonance';state.resIndex=0;render()}));
+  document.querySelector('#nextRes')?.addEventListener('click',()=>{const n=state.resonances.filter(r=>r.status!=='lit').length;state.resIndex=(state.resIndex+1)%Math.max(1,n);render()});
+  document.querySelectorAll('[data-light]').forEach(x=>x.addEventListener('click',()=>{const r=state.resonances.find(v=>v.id===x.dataset.light);if(r)lightResonance(r)}));
   document.querySelectorAll('[data-chat]').forEach(x=>x.addEventListener('click',()=>openChat(x.dataset.chat)));
   document.querySelector('#closeChat')?.addEventListener('click',()=>{state.chat=null;state.chatMessages=[];render()});
   document.querySelector('#sendMsg')?.addEventListener('click',()=>{const el=document.querySelector('#msg');const v=el.value;el.value='';sendMessage(v)});
@@ -167,13 +260,17 @@ function bind(){
   document.querySelector('#addFriend')?.addEventListener('click',()=>requestFriend(state.chat.user_a===state.user.id?state.chat.user_b:state.chat.user_a));
   document.querySelectorAll('[data-accept]').forEach(x=>x.addEventListener('click',()=>respondRequest(x.dataset.accept,true)));
   document.querySelectorAll('[data-reject]').forEach(x=>x.addEventListener('click',()=>respondRequest(x.dataset.reject,false)));
+  document.querySelector('#settings')?.addEventListener('click',()=>{state.modal='settings';render()});
+  document.querySelector('#closeSub')?.addEventListener('click',()=>{state.modal=null;render()});
   document.querySelector('#editProfile')?.addEventListener('click',()=>{state.modal='profile';render()});
   document.querySelector('#saveProfile')?.addEventListener('click',()=>updateProfile(document.querySelector('#nickname').value,document.querySelector('#bio').value));
   document.querySelector('#modalBg')?.addEventListener('click',e=>{if(e.target.id==='modalBg'){state.modal=null;render()}});
+  document.querySelector('#theme')?.addEventListener('click',()=>{const d=!document.body.classList.contains('dark');document.body.classList.toggle('dark',d);localStorage.setItem('kh_theme',d?'dark':'light');render()});
   document.querySelector('#logout')?.addEventListener('click',signOut);
   document.querySelectorAll('[data-toggle-self]').forEach(x=>x.addEventListener('click',()=>togglePost(x.dataset.toggleSelf,'self_only',x.dataset.value==='1')));
   document.querySelectorAll('[data-toggle-pin]').forEach(x=>x.addEventListener('click',()=>togglePost(x.dataset.togglePin,'is_pinned',x.dataset.value==='1')));
 }
+document.body.classList.toggle('dark',localStorage.getItem('kh_theme')==='dark');
 
 boot().catch(err=>{console.error(err);toast('加载失败，请稍后重试')});
 
