@@ -39,6 +39,15 @@ class KehuaOriginalActivity : ComponentActivity() {
                 loader.shouldInterceptRequest(request.url)
 
             override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean = false
+
+            override fun onPageFinished(view: WebView, url: String) {
+                super.onPageFinished(view, url)
+                view.evaluateJavascript(
+                    "(function(){const t=document.body&&document.body.innerText||'';return t.includes('获取验证码')&&t.includes('手机号');})()"
+                ) { ok ->
+                    view.contentDescription = if (ok == "true") "KEHUA_RENDER_OK" else "KEHUA_RENDER_PENDING"
+                }
+            }
         }
 
         if (savedInstanceState == null) web.loadUrl(APP_URL) else web.restoreState(savedInstanceState)
