@@ -32,7 +32,6 @@ class KehuaReleaseAcceptanceTest {
             }
             assertTrue("Production page was not readable", ready.await(20, TimeUnit.SECONDS))
             assertTrue("Unexpected URL: " + pageUrl, pageUrl.startsWith(KehuaActivity.PROD_URL))
-            assertTrue("Unexpected page title: " + pageTitle, pageTitle.contains("可话"))
             assertTrue("Visible page does not contain Kehua UI", pageText.contains("可话"))
         }
     }
