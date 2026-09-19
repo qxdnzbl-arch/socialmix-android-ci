@@ -15,8 +15,8 @@ targets:
     sources:
       - path: Shared
       - path: iOS
-    resources:
-      - path: Resources
+      - path: Resources/kehua.html
+        buildPhase: resources
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.qxdnzbl.kehua
@@ -35,8 +35,8 @@ targets:
     sources:
       - path: Shared
       - path: macOS
-    resources:
-      - path: Resources
+      - path: Resources/kehua.html
+        buildPhase: resources
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.qxdnzbl.kehua.macos
