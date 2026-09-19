@@ -44,6 +44,11 @@ jobs:
             echo '=== relevant source strings ==='
             grep -RInE '发布|动态|视频|图片|相册|仅自己|自己可见|公开|可见范围|共鸣|我想说|想说的话|选择图片|选择视频|谁可以看|点亮'               inspect/jadx/sources/com/app/tideswing inspect/jadx/resources 2>/dev/null | head -1500 || true
           } > inspect/flow-evidence.txt
+          mkdir -p inspect/relevant
+          for f in             inspect/jadx/sources/com/app/tideswing/ui/activity/HomeInputActivity.java             inspect/jadx/sources/com/app/tideswing/ui/fragment/HomeFragment.java             inspect/jadx/sources/com/app/tideswing/anim/HomeInputAnimator.java             inspect/jadx/resources/res/layout/activity_home_input.xml             inspect/jadx/resources/res/layout/fragment_home.xml             inspect/jadx/resources/res/layout/fragment_home2.xml             inspect/jadx/resources/res/layout/input_video_view.xml             inspect/jadx/resources/res/layout/home_foot_view2.xml             inspect/jadx/resources/res/values/strings.xml
+          do
+            [ -f "$f" ] && cp "$f" inspect/relevant/
+          done
       - uses: actions/upload-artifact@v4
         with:
           name: Kehua-1.13.3-Flow-Inspection
@@ -52,4 +57,5 @@ jobs:
             inspect/tideswing-files.txt
             inspect/flow-evidence.txt
             inspect/jadx.log
+            inspect/relevant
           if-no-files-found: error
