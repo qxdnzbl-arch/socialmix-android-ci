@@ -13,23 +13,50 @@ permissions:
 jobs:
   collect:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
-      - name: Collect verified original references
+      - name: Collect latest verified Kehua references
         shell: bash
         run: |
           set -euxo pipefail
-          mkdir -p evidence
-          curl -L --fail --retry 3             'https://raw.githubusercontent.com/SkeathyTomas/img/main/img/%E5%BE%AE%E4%BF%A1%E5%9B%BE%E7%89%87_20220216004426.jpg'             -o evidence/original-home-v1.7.6.jpg
-          curl -L --fail --retry 3             'https://raw.githubusercontent.com/SkeathyTomas/img/main/img/image-20220218001548382.png'             -o evidence/original-finding-resonance-v1.7.6.png
-          curl -L --fail --retry 3             'https://is5-ssl.mzstatic.com/image/thumb/PurpleSource126/v4/31/cc/d2/31ccd2ab-0c86-4dca-1bff-5fc7b4913043/6f025b78-22df-4587-b354-25786bfc3328_2.png/600x0w.webp'             -o evidence/original-light-conversation.webp
-          curl -L --fail --retry 3             'https://is4-ssl.mzstatic.com/image/thumb/PurpleSource126/v4/67/76/59/677659ce-5a4a-3c9f-2467-df290d924249/597602f6-8ed2-4ae3-9018-86fbe03778c5_3.png/600x0w.webp'             -o evidence/original-dynamic-messages.webp
-          curl -L --fail --retry 3             'https://skeathytomas.github.io/post/%E8%81%8A%E4%B8%80%E8%81%8A%E7%A4%BE%E4%BA%A4%E2%80%94%E2%80%94%E5%8F%AF%E8%AF%9Dapp%E4%BA%A7%E5%93%81%E4%BD%93%E9%AA%8C%E6%89%8B%E8%AE%B0/'             -o evidence/source-article.html
-          sha256sum evidence/* > evidence/SHA256.txt
-          file evidence/*
+          mkdir -p evidence/latest-appstore evidence/latest-android evidence/archive
+
+          # Official App Store metadata + current screenshots
+          curl -L --fail --retry 3 -A 'Mozilla/5.0'             'https://itunes.apple.com/lookup?id=1501478660&country=cn'             -o evidence/latest-appstore/itunes-lookup.json
+          python3 - <<'PY'
+          import json, pathlib, urllib.request
+          p=pathlib.Path('evidence/latest-appstore/itunes-lookup.json')
+          data=json.loads(p.read_text())
+          r=data['results'][0]
+          meta={k:r.get(k) for k in ['trackName','version','currentVersionReleaseDate','artistName','bundleId','description','releaseNotes']}
+          pathlib.Path('evidence/latest-appstore/metadata.json').write_text(json.dumps(meta,ensure_ascii=False,indent=2))
+          urls=(r.get('screenshotUrls') or [])+(r.get('ipadScreenshotUrls') or [])
+          pathlib.Path('evidence/latest-appstore/screenshot-urls.txt').write_text('\n'.join(urls))
+          for i,u in enumerate(urls,1):
+              req=urllib.request.Request(u,headers={'User-Agent':'Mozilla/5.0'})
+              with urllib.request.urlopen(req,timeout=30) as resp:
+                  pathlib.Path(f'evidence/latest-appstore/screenshot-{i:02d}.jpg').write_bytes(resp.read())
+          PY
+
+          # Recent Android 1.13.x screenshots indexed on the current 1.13.3 download page (2024-11-07 assets)
+          for pair in             '01 https://img.downkuai.com/uppic/20241107/317e37dbc55dfa2313b7e756cd9c25c9.png'             '02 https://img.downkuai.com/uppic/20241107/29c6f44f2407d671c529d77aed88a364.png'             '03 https://img.downkuai.com/uppic/20241107/66c7358589585f807e8ed1fa7d8d3de0.png'             '04 https://img.downkuai.com/uppic/20241107/463ab5aecf4060a4a1ca5b4ea624dbe6.png'
+          do
+            set -- $pair
+            curl -L --fail --retry 3 -A 'Mozilla/5.0' "$2" -o "evidence/latest-android/downkuai-$1.png"
+          done
+
+          # Latest Android package candidate, used only for UI/flow inspection after hash/package/version checks.
+          curl -L --fail --retry 3 -A 'Mozilla/5.0'             'https://get.downkuai.com/download/149436'             -o evidence/latest-android/kehua-1.13.3.apk || true
+
+          # Preserve older verified flow evidence only as historical reference.
+          curl -L --fail --retry 3             'https://raw.githubusercontent.com/SkeathyTomas/img/main/img/%E5%BE%AE%E4%BF%A1%E5%9B%BE%E7%89%87_20220216004426.jpg'             -o evidence/archive/original-home-v1.7.6.jpg
+          curl -L --fail --retry 3             'https://raw.githubusercontent.com/SkeathyTomas/img/main/img/image-20220218001548382.png'             -o evidence/archive/original-finding-resonance-v1.7.6.png
+
+          find evidence -type f -maxdepth 3 -print -exec file {} \;
+          sha256sum $(find evidence -type f | sort) > evidence/SHA256.txt
       - uses: actions/upload-artifact@v4
         with:
-          name: Kehua-Original-Evidence
+          name: Kehua-Latest-Original-Evidence
           path: evidence
           if-no-files-found: error
