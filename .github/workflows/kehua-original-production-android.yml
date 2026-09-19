@@ -13,7 +13,7 @@ jobs:
       - uses: actions/checkout@v4
       - name: Verify public production endpoint
         run: |
-          curl --fail --retry 5 --retry-delay 3 -sS 'https://nvwdtfnhsyfdopaxdylx.supabase.co/storage/v1/object/public/kehua-original-public/index.html' -o /tmp/kehua.html; grep -q '<title>可话</title>' /tmp/kehua.html; grep -q 'orig_posts' /tmp/kehua.html; grep -q 'orig_messages' /tmp/kehua.html
+          curl --fail --retry 5 --retry-delay 3 -sS 'https://kehua-original-production.onrender.com' -o /tmp/kehua.html; grep -q '<title>可话</title>' /tmp/kehua.html; grep -q '此刻' /tmp/kehua.html; grep -q '共鸣已到达' /tmp/kehua.html; grep -q 'orig_posts' /tmp/kehua.html; grep -q 'orig_messages' /tmp/kehua.html
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
