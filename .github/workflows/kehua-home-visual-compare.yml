@@ -1,0 +1,89 @@
+name: Kehua Home Visual Compare
+
+on:
+  push:
+    branches: [kehua-original-rebuild-v1]
+    paths:
+      - "app/src/main/assets/kehua.html"
+      - ".github/workflows/kehua-home-visual-compare.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  visual:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install Playwright
+        run: |
+          npm init -y >/dev/null 2>&1
+          npm install playwright@1.55.0
+          npx playwright install --with-deps chromium
+      - name: Render actual bundled client with production-shaped fixtures
+        shell: bash
+        run: |
+          set -euxo pipefail
+          mkdir -p visual
+          python3 -m http.server 8000 --directory app/src/main/assets >/tmp/kehua-http.log 2>&1 &
+          cat > /tmp/capture.mjs <<'EOF'
+          import { chromium } from 'playwright';
+          import assert from 'node:assert/strict';
+          const browser = await chromium.launch({headless:true});
+          const page = await browser.newPage({viewport:{width:390,height:844}, deviceScaleFactor:1});
+          await page.addInitScript(() => localStorage.setItem('kehua_original_session_v1','fixture-token'));
+          await page.route('**/rest/v1/rpc/**', async route => {
+            const name = route.request().url().split('/rpc/')[1]?.split('?')[0] || '';
+            let body = {};
+            if(name==='kehua_prod_me') body={user:{id:'me',nickname:'可话用户',login:'kehua',bio:'',background_data:null}};
+            else if(name==='kehua_prod_home') body={new_count:0,my_posts:[],resonances:[]};
+            else if(name==='kehua_prod_create_post') body={ok:true,id:'p1'};
+            else body={items:[],ok:true};
+            await route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(body)});
+          });
+          await page.goto('http://127.0.0.1:8000/kehua.html',{waitUntil:'networkidle'});
+          await page.waitForSelector('.kehua-home-card',{state:'visible'});
+          const boxes = await page.evaluate(() => {
+            const q=s=>document.querySelector(s);
+            const box=s=>{const r=q(s).getBoundingClientRect();return {x:r.x,y:r.y,w:r.width,h:r.height}};
+            return {
+              bg:box('.kehua-home-bg'), title:box('.kehua-home-title'),
+              card:box('.kehua-home-card'),
+              dateSize:getComputedStyle(q('.kehua-home-date')).fontSize,
+              titleSize:getComputedStyle(q('.kehua-home-title h1')).fontSize,
+              homeTextarea:!!q('.kehua-home textarea'),
+              homePublish:[...document.querySelectorAll('.kehua-home button')].some(x=>x.textContent.trim()==='发布')
+            };
+          });
+          assert.equal(boxes.bg.h,400);
+          assert.ok(Math.abs(boxes.card.x-20)<1 && Math.abs(boxes.card.w-350)<1);
+          assert.equal(boxes.dateSize,'12px');
+          assert.equal(boxes.titleSize,'21px');
+          assert.equal(boxes.homeTextarea,false);
+          assert.equal(boxes.homePublish,false);
+          await page.screenshot({path:'visual/home.png'});
+          await page.click('.kehua-home-card');
+          await page.waitForSelector('.post-editor');
+          const editor = await page.evaluate(() => {
+            const q=s=>document.querySelector(s), b=s=>{const r=q(s).getBoundingClientRect();return {x:r.x,y:r.y,w:r.width,h:r.height}};
+            return {textarea:b('.post-editor textarea'),publish:b('.post-editor-publish'),toolbar:b('.post-editor-toolbar'),placeholder:q('.post-editor textarea').getAttribute('placeholder')};
+          });
+          assert.ok(Math.abs(editor.textarea.x-24)<1);
+          assert.ok(editor.textarea.y>=159 && editor.textarea.y<=161);
+          assert.ok(Math.abs(editor.publish.w-54)<1 && Math.abs(editor.publish.h-32)<1);
+          assert.ok(Math.abs(editor.toolbar.h-48)<1);
+          assert.equal(editor.placeholder,'我想说...');
+          await page.screenshot({path:'visual/editor.png'});
+          await browser.close();
+          EOF
+          node /tmp/capture.mjs
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Kehua-Home-Visual-Compare
+          path: visual
+          if-no-files-found: error
