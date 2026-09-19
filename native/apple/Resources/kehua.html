@@ -62,6 +62,45 @@ button,input,textarea{font:inherit}button{cursor:pointer}button:disabled{opacity
 .original-post{padding:19px 2px;border-bottom:1px solid #ededf0}.original-post .postbody{font-size:16px}.original-post .meta{margin-top:10px}
 .settings-row{min-height:58px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid #efeff1}.settings-row button{border:0;background:none;height:44px;color:#666}
 .context-card{background:#fff;border-radius:18px;padding:15px;margin:14px 14px 4px}.context-title{font-size:11px;color:#aaa;margin-bottom:8px}.privacy-line{text-align:center;font-size:11px;color:#aaa;margin:12px 0}
+
+/* Kehua 1.13.3 home/publish reconstruction locked to official APK layouts.
+   Visual proportions validated against real 2024 Kehua screenshots; no inline composer on home. */
+.kehua-home{position:relative;min-height:calc(100dvh - 68px);background:#ecebf2;overflow:hidden}
+.kehua-home-bg{position:absolute;z-index:0;left:0;right:0;top:0;height:400px;background:linear-gradient(180deg,#cbd9fa 0%,#e8dff1 52%,#f3e4e8 80%,#ecebf2 100%);background-size:cover;background-position:center center}
+.kehua-home-bg:after{content:"";position:absolute;left:0;right:0;bottom:-1px;height:200px;background:linear-gradient(180deg,rgba(236,235,242,0),#ecebf2)}
+.kehua-home-content{position:relative;z-index:1;padding-top:280px}
+.kehua-home-title{margin:0 48px 12px 40px}
+.kehua-home-date{font-size:12px;line-height:1.4;color:rgba(0,0,0,.55);margin-bottom:2px}
+.kehua-home-title h1{font-size:21px;line-height:1.35;margin:0;font-weight:700;letter-spacing:0;color:rgba(0,0,0,.88)}
+.kehua-home-card{position:relative;margin:0 20px 16px;min-height:280px;background:#fff;border:0;border-radius:20px;padding:16px 20px 0;text-align:left;width:calc(100% - 40px);overflow:hidden;color:rgba(0,0,0,.78)}
+.kehua-home-card-text{font-size:15px;line-height:1.3;min-height:54px;color:rgba(0,0,0,.78);white-space:pre-wrap;word-break:break-word}
+.kehua-home-card-text.placeholder{color:rgba(0,0,0,.20)}
+.kehua-home-card-mask{pointer-events:none;position:absolute;left:0;right:0;bottom:0;height:144px;background:linear-gradient(180deg,rgba(255,255,255,0),#fff 88%);border-radius:0 0 20px 20px}
+.kehua-home-foot{height:100px;display:flex;align-items:flex-start;justify-content:center;padding-top:15px;font-size:13px;color:#aaa}
+.kehua-home-notice{position:fixed;z-index:19;left:50%;bottom:calc(80px + env(safe-area-inset-bottom));transform:translateX(-50%);height:40px;min-width:140px;border:0;border-radius:20px;background:#f8f7fa;color:#f34161;padding:0 16px;font-size:15px;display:flex;align-items:center;justify-content:center;gap:8px;box-shadow:0 2px 9px rgba(0,0,0,.03)}
+.kehua-home-notice svg{width:16px;height:16px;stroke:#f34161;stroke-width:2;fill:none}
+.kehua-pending-note{position:fixed;z-index:19;left:50%;bottom:calc(80px + env(safe-area-inset-bottom));transform:translateX(-50%);height:40px;border-radius:20px;background:#f8f7fa;color:#f34161;border:0;padding:0 16px;font-size:14px;white-space:nowrap}
+.post-editor{position:fixed;z-index:80;inset:0;background:#fff;color:rgba(0,0,0,.78);max-width:430px;margin:0 auto;overflow:hidden}
+.post-editor-content{position:absolute;inset:0 0 48px;background:#fff;overflow:auto}
+.post-editor-close{position:absolute;z-index:4;left:12px;top:calc(env(safe-area-inset-top) + 8px);width:40px;height:40px;border:0;background:transparent;padding:4px;display:grid;place-items:center}
+.post-editor-close img{width:32px;height:32px;object-fit:contain}
+.post-editor-publish{position:absolute;z-index:4;right:20px;top:calc(env(safe-area-inset-top) + 8px);width:54px;height:32px;border:0;border-radius:20px;background:rgba(0,0,0,.06);color:rgba(0,0,0,.30);font-size:15px}
+.post-editor-publish.ready{background:#2d2d2f;color:#fff}
+.post-editor textarea{display:block;width:calc(100% - 48px);min-height:156px;margin:160px 24px 0;padding:0 0 50px;border:0;outline:0;resize:none;background:transparent;font-size:15px;line-height:1.3;color:rgba(0,0,0,.78)}
+.post-editor textarea::placeholder{color:rgba(0,0,0,.20)}
+.post-editor-media{margin:-14px 24px 82px;display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+.post-editor-media .media-thumb{aspect-ratio:1;border-radius:8px;overflow:hidden;background:#f1f0f5;position:relative}
+.post-editor-media img,.post-editor-media video{width:100%;height:100%;object-fit:cover}
+.post-editor-toolbar{position:absolute;z-index:3;left:0;right:0;bottom:0;height:48px;background:#fff;display:flex;align-items:center;padding-left:8px;border-top:1px solid rgba(0,0,0,.03)}
+.post-tool{width:40px;height:40px;border:0;background:transparent;display:grid;place-items:center;padding:4px}
+.post-tool img{width:32px;height:32px;object-fit:contain}
+.post-visibility{margin-left:auto;margin-right:12px;height:28px;padding:4px 8px;border:1px solid rgba(0,0,0,.22);border-radius:16px;background:#fff;color:rgba(0,0,0,.56);font-size:12px}
+.visibility-sheet{position:fixed;z-index:100;inset:0;background:rgba(0,0,0,.35);display:flex;align-items:flex-end;justify-content:center}
+.visibility-sheet-inner{width:min(430px,100%);background:#fff;border-radius:18px 18px 0 0;padding:10px 16px calc(14px + env(safe-area-inset-bottom))}
+.visibility-choice{width:100%;height:54px;border:0;border-bottom:1px solid #eee;background:#fff;font-size:16px;color:#222}
+.visibility-choice:last-child{border-bottom:0}
+@media(min-width:700px){.post-editor{top:18px;bottom:18px;border-radius:24px}.kehua-home-notice,.kehua-pending-note{bottom:98px}}
+
 </style>
 </head>
 <body><div id="app"></div>
@@ -77,7 +116,7 @@ const safeImg=s=>typeof s==='string'&&/^data:image\/(jpeg|png|webp);base64,/i.te
 const initials=s=>(String(s||'可').trim().slice(0,1)||'可');
 function avatar(user,size=''){const img=safeImg(user&&user.avatar_data);return '<div class="avatar '+size+'">'+(img?'<img alt="" src="'+esc(img)+'">':esc(initials(user&&user.nickname)))+'</div>'}
 function fmt(t){try{const d=new Date(t);return d.toLocaleString('zh-CN',{month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'})}catch{return ''}}
-function today(){return new Date().toLocaleDateString('zh-CN',{month:'long',day:'numeric',weekday:'long'})}
+function today(){const d=new Date(),w=['星期日','星期一','星期二','星期三','星期四','星期五','星期六'];return (d.getMonth()+1)+'月'+d.getDate()+'日 '+w[d.getDay()]}
 async function rpc(name,args={}){
  const res=await fetch(BASE+'/rest/v1/rpc/'+name,{method:'POST',headers:{apikey:KEY,'Content-Type':'application/json'},body:JSON.stringify(args)});
  let j;try{j=await res.json()}catch{throw new Error('网络返回异常')}
@@ -131,19 +170,72 @@ async function switchTab(i){
 async function renderHome(){
  homeData=await rpc('kehua_prod_home',{p_token:token});const s=document.getElementById('screen');
  const count=homeData.new_count||0,bg=safeImg(meData&&meData.user&&meData.user.background_data);
- const status=pendingPost
-   ? '<div class="original-status"><span class="star">⭐</span><span><strong>正在寻找共鸣，请稍等～</strong><p>'+esc(pendingPost.content).slice(0,90)+'</p></span></div>'
-   : (count?'<button class="original-status" id="notice"><span class="star">⭐</span><span><strong>共鸣已到达。请签收～！</strong><p>找到 '+count+' 条与你此刻相关的动态</p></span></button>':'');
- s.innerHTML='<main class="screen homebg '+(bg?'has-art':'')+'">'+(bg?'<div class="home-art" style="background-image:url('+JSON.stringify(bg)+')"></div>':'')+'<div class="hero"><div class="date">'+esc(today())+'</div><h1>此刻，说你想说的话～</h1><div class="composer"><textarea id="postText" maxlength="1200" placeholder="我想说..."></textarea><div id="imagePreview"></div><div class="compose-foot"><div style="display:flex;gap:8px"><label class="filebtn" aria-label="添加图片">＋<input id="postImage" type="file" accept="image/jpeg,image/png,image/webp" hidden></label><label class="checkbox"><input type="checkbox" id="privatePost">仅自己可见</label></div><button class="roundbtn" id="publish">发布</button></div></div></div>'+status+'</main>';
- document.getElementById('publish').onclick=publishPost;
- const fi=document.getElementById('postImage');fi.onchange=async()=>{if(!fi.files[0])return;try{const data=await imageToData(fi.files[0],1280,.82);fi.dataset.data=data;document.getElementById('imagePreview').innerHTML='<img class="postimg" src="'+esc(data)+'" alt="待发布图片">'}catch(e){toast(e.message);fi.value=''}};
+ const mine=(homeData.my_posts||[])[0]||null;
+ const cardText=mine&&mine.content?esc(mine.content):'我想说...';
+ const cardClass=mine&&mine.content?'kehua-home-card-text':'kehua-home-card-text placeholder';
+ const bgStyle=bg?' style="background-image:url('+JSON.stringify(bg)+')"':'';
+ const notice=pendingPost
+   ? '<button class="kehua-pending-note" disabled>正在寻找共鸣，请稍等～</button>'
+   : (count?'<button class="kehua-home-notice" id="notice"><svg viewBox="0 0 24 24"><path d="M5 8l7 7 7-7"/></svg><span>'+count+' 条新共鸣</span></button>':'');
+ s.innerHTML='<main class="screen kehua-home"><div class="kehua-home-bg"'+bgStyle+'></div><div class="kehua-home-content"><div class="kehua-home-title"><div class="kehua-home-date">'+esc(today())+'</div><h1>此刻，说你想说的话～</h1></div><button class="kehua-home-card" id="openComposer"><div class="'+cardClass+'">'+cardText+'</div><div class="kehua-home-card-mask"></div></button><div class="kehua-home-foot">这里是共鸣出现的地方</div></div>'+notice+'</main>';
+ document.getElementById('openComposer').onclick=()=>openPostEditor();
  if(count&&!pendingPost)document.getElementById('notice').onclick=()=>openResonance(0);
 }
-function postCard(p){const img=safeImg(p.media_data);return '<article class="card"><div class="postbody">'+esc(p.content)+'</div>'+(img?'<img class="postimg" src="'+esc(img)+'" alt="">':'')+'<div class="meta"><span>'+esc(fmt(p.created_at))+(p.is_private?' · 仅自己':'')+'</span><span>'+(p.light_count?('♡ '+p.light_count):'')+' <button class="linkbtn" data-delpost="'+esc(p.id)+'" style="padding:0 4px">删除</button></span></div></article>'}
-async function publishPost(){
- const b=document.getElementById('publish'),t=document.getElementById('postText'),f=document.getElementById('postImage');if(!t.value.trim()){toast('先写点想说的话');return}b.disabled=true;
- try{const content=t.value.trim();await rpc('kehua_prod_create_post',{p_token:token,p_content:t.value,p_media_data:f.dataset.data||null,p_private:document.getElementById('privatePost').checked});pendingPost={content};await renderHome();setTimeout(async()=>{pendingPost=null;if(currentTab===0)await renderHome()},6000)}catch(e){toast(e.message)}finally{b.disabled=false}
+
+function openPostEditor(){
+ const o=document.createElement('div');o.className='post-editor';
+ o.dataset.visibility='0';
+ o.innerHTML='<div class="post-editor-content"><button class="post-editor-close" id="editorClose" aria-label="关闭"><img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAGAAAABgCAMAAADVRocKAAAAh1BMVEX49vn39/fv7//6+vr29vj49vr5+Pv29vr39/v39fn38/f39Pf5+Pr49vj49vv59fn4+Pj4+Pv19fn59/v39/f39/n38/v5+fn49/r////4+Pr49/r49vr09PT29vj39/f4+Pn6+Pv5+fsAAAD39/r09Pr49vr5+Pqtra+VlJYyMTKura/49/q2C6toAAAAKHRSTlOvQBAwsJCvkECAQGDvcI9QcI9QfyCAQFC/EG/fzzBwYK+PfwBgMO/PrnIuxAAAAjhJREFUaN7t2dtW6jAQBuBSrUcQhYCJg9lbxQhl3v/5xOWNbZqZyYGlF51LKf9HEnuaVG8nrmoERmAERqAcYN7ty38APBZ86Be7LgoYqx32S29VGeCYjoHS23zALB0SBUuVBTDx30QGsAYUFCwSAfOAwrozKYACFBeoeGDtMKKm81jgCSNrFge8YnQtY4AnTKiZHJhjUt1IAeXSgKmSAQYwscCIgAdMrjsJsMCMuhEAkAP4k1QVOAN+1jUHKMgDpoYBMgfgD6EquQJDQ+gBt5hdMxLQ+YCmAIUFyhDAbQlgRgC6BKAJoER+7/+oA1wNHH44UGGDnz4HATuQ0Lb7cP6+bQ/MInSAS//gXUsIx/x25/+5CQI6ELIP5w99dB4ENjEx4Q8gCEDMDw0PLQxgxFQQU4exwFAYlR8P+HFkfgLQD6TzMXKR/UgmH1KAn6FMPm6CwAVKBC6/eznlLhW+wOYTlwqLvMDnExe7M+QFPr/7/NgBaicRuHzMuWXuBfnULdOy98Pdjj1kSwB1iXuy+s0HL8EcRc5QH6hdbj4wT9erUz++5w7Ba4t4r1CrsgPwgRpKrsDQW+YkB5hLXsQv0/Mb0Zt+fepWQnIzxAmbIcnL8ChvSN2fuCGVdDZcxzUF78v8fqKtuYhaaTf5e43Z4/kgPuOapNby1zTJmuOTjP2DFUu4lcnaoFA0wcWL9nD+hbdYrGG/LdokUgOGk6TH7KNNbKM339tcUDX22Qi/N241jsAIjMBfAD4B4S5qtEvRTdQAAAAASUVORK5CYII=" alt=""></button><button class="post-editor-publish" id="editorPublish">发布</button><textarea id="editorText" maxlength="5000" placeholder="我想说..."></textarea><div class="post-editor-media" id="editorMedia"></div></div><div class="post-editor-toolbar"><button class="post-tool" id="styleTool" aria-label="背景样式"><img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAGAAAABgCAQAAABIkb+zAAAE+ElEQVR42u2az2vjRhTHP9kEGYIEJcrFLkt9KAqU+OS9JFASWEguzSm3/pG5JKeckksDpc7FoXS9h3qhxMsShbIyBQkWerB3PLJGo5FsES3M9xJFcsT7znvf98sBCwsLCwsLCwsLC4uK2GyoXQ7b+GyQFH1wo4HGBwR05tcRE/5g+u0QcDnFz9wdMPg2QsjljO8U9zvApPkEXM7wcp51SPikerDVIAJvJPMfGRHh0xP3+rxTSXqzQed/LK4vuSdkyidGvGZ7bukXVRi9agyBU0myC0MTLonn123VnzWFQCByT7SUcRJG86vd5hJw6Yvru8zTRBS3xhJYSHXEWFGVNXjViPPvSfGfRXf+86mpBGT5RpmnfeGd52YSyJcvwL6kjkETCbhaA+WnQ4V3GkBAlu9I0Vq0hHfumihivXyPBbmIq2ZmIZ18+2ImgGt1+Lw0AZ18g5Q2wibWAZ18XQ4k8Q6aWcjy5Wsk3pcmoJPvoYl4X5pAvnz7onXQivdlCeTL11i8ZUZKBw8HmBafx4ryLSFeMwIOPQJpUo35wFjR8K5Hvk5KvPdmL9vSntS5eOEMLQICIn7jQw3yTVfe2Ox1m9qTeq283+LH/D2NgXw9qdMfi3mrz0+SeEPT1+kI+DkEZnsat5IXAun8oUVvfhRdfpb8MjJ/oY7Av2zjE/MXfzJkRMiWdHq7OPxT0nyHt0tBCR3aRLwVwTzk9zKvLLsb9fhFInFZMpD6Iv9EOTu4iAvT6C/2gAoJD7hiweGVcTauVL4uGNPJeCPiiv/KGVSlkN0KiXX0G4NMiyBX3wlXGfp35StNtUo8lELKXL7dpeobcZOiMKhSYaoRiMx2Nin5qqqvK60LR2aVt0orkTVmEQzTws92cGnhKaqvI63TC9vmdRHwCNgX4nvSxmw7NRYuKLlz2odVKm91Am06dJe+/nnQZJxjhfGz6utzw4Q+wSriLVMHHAK6CnPyv7nakdoyNcZS1z+oFv2mBPbpK4yJuZdyUVnz01SuV2lttwpKjyoQYh54yI1Zl1PJ/EeGPBPRYoc9KWgW+ex2td5c54EuR0snGfOevwvah2NhZsztUmb3OEmpKOZi1SFpQ2P+Ser3Ee8MOh+XX4VxV8qm+CQ18646HOWGkMtRyviB4Um9EVf3OT39DecifT6uPp++yu1bWuIkL7kxdnRbxPYwtx1c5Jy9ugi0pb7lokTL7IuzfdDmHe33jusgsJe7tSmqGIgarWvJPwrCtXng6/mPSr3NM+yRPouRshYCjtR41YOkZC9bkoAvlaFyiKVqrMNupi1fexaqhmdp36DDTr0EktLjStYDnjbVfn06qYdAlHF12dimoNlYJNSaPBBVzNMmHutLdTisSwNjaelULY0+5RA8KPrier0E4LCUDnxNMHnscy4tFofrUEBeMzdhMj97n4MSHfueMH8COLTwcdnFx13KS6Hp+rxqO93mTBL1ZeH2AeAHsXlLiKRymEVYfYhfRt5qcQpiFmvRow3EmcDw6Iq7jjSJbbKtqQRDrvmyrtKjm8iOMu1uTEgiDG7PjZyteA9Si/O8OvE+75826piJb5lKOWPmC9WqpMdE277FTAl5IuR5XYFjOtQPiKS8rS9fQz7zPT7gkBCTEBERSlWlFpjshQK60hybrdtX9Zq4OoFZ8OzQwaeFK859FhYTLCwsLCwsLCwsLCwsLKrgf9Z5STqT9TxzAAAAAElFTkSuQmCC" alt=""></button><label class="post-tool" aria-label="拍照"><img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAGAAAABgCAQAAABIkb+zAAAEpklEQVR42u2azWsbRxjGf6mFFooX2qzBrCC1cqhEQYJQFYoKRTolF/eS/JE9+eRCIYWiXGooLBRkKFoIkamRIHhD6OqiBUMPWY9GkjWakUZeQec5rez5et55P2cGHBwcHBwcHBwcHBz+r3hkeTyfEzzF/6dcke4rAZ8uoUa7mMgeiQOLyz8l0GoZUOWKzM60n1kj0MI32iv2i0CNmlH7kOo+2YDPqZB/RKTcp1b+lfEz032xgR+oCAO9ULYcU8mpHvAlb/dDhWbqkyml/wk9Yb4ngvYDqZBHQJWQw5We/oK+xjhN2iujxAcSRgztE/Bo0FCGKEg40xztpzXxIiUm1osVejbQ4DlPKCnbZPyi7dvH1JUze1SokpHYIdDmuzWLh4xzPmrve8Y/fEV5zZ5XKXO9vQp1Fzx8QrK0uSlXG7jE6lLk9gkW/hbT245Am6Yktz6XNnz3mpjSoC7tTl/tmA/WOMjvJb39lSG3O8+PM655y5EIjMdkvN+MgE9X+J2Y17bSLy0SMb5QpmP+Xi24A6W/rgrpv37wSmUoxexbxqualZQKdCePnuHkHidUCPKQN2VCwoixYRXQ41VuC83VtldS+Ig7LRwYTVyhtRCmPDwCasalTEo/T/3KBIxMVegbjvOv37W13+NH2oq6IKCJT6I9XsIzKXIY7sCRGCTVln1Ho6ipEfIbN5rGnOSmHJrbQCAI6Oak3aXJU9I8CQznvNtL3jDQ3IMg72NMoCw0US+qdudynSHxnNl5VGlxKH53QItCurAaIy9kEj07kuSje5LqKQMGNGmJpbQZ2TibsFMTn4qAN+FMURP0OWMiZPp8X4r6mtDQCedrpJpyLigEUp5VKIGWFHpSDa3uST294gnM5B+vCjYLGAklKxsexuyEQF18Rdp9Isl7FU7gzsObHNpmIjkLtlWibQlUpOzRBAOhRH6xBA6lmGmCWXr8uFgCM/ndGPWb3jNCgYFsk5rLEuwR8IqRxLYE0qXkTw9H94xQCIEPS+5UDzPTnRRL4F+hzXWjfk+luFwogdn5ZWhgBT4nS+60MCN+J76+3SD9i4snEAslampeWFRECjfRLCx3SkC+ldEp6uXqLdp6ditxoC/sQL7sW7X8U6n8GewHAaRzU59XijqrwUux/IxzG1PbKepTLoRilGnTIFq4MfD4mqdzseKNnecGdgh8So87kqJ0gTEJU8DH5/GCk+1J3msvCMCAG15I6TWEK6LzhN624Ws32WjCuYZfjzmzt3zVDmR5euYb2UKPiNbKUn1MZLh4f136XVIsJsirVlOD7hFRISTApwxkpCSMNroIXHtCW1IcfgSi7J4akxjY8PHSNVNibgNXkvcuCo31OetqAjdSjuMXsnxfypmG5gQy6fysWwiB2R3pYDM32hd7EBZAYfaAcKJyzqpr1ltueSK8QYXxg90U+7yQDh0vVK5XfVP/nrK46vOp8zkfd07C4xkdvhC/L/lL1dzOYw97krf+2APmH3w8LC75Y10TnfdC10w4Mjz32R4Zf+pUbI+0N7dGfS7X3O3itR/2mL0brVIhINjZbmSkjBnmdYSDg4ODg4ODg4ODg4PDXuM/4/klw61jXEAAAAAASUVORK5CYII=" alt=""><input id="cameraFile" type="file" accept="image/*" capture="environment" hidden></label><label class="post-tool" aria-label="相册"><img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAGAAAABgCAQAAABIkb+zAAADuklEQVR42u2azWsaQRjGfzGiUFwoWSEolHhaLwYKWyjpJZ7aS3rq/9hbTx4KOXlqoCAUFIoLBQNBIXRDQS8uBHrQTHZ1dXfG3dHAPKcd3dXneef9mtkBAwMDAwMDAwMDAwMDAwODF4kj6SfK2DSoUaGcIY85D/iMGeUroEyLVqbEVzHFw2Oaj4AWbq7kn0X08NLefJz6Zy94R1GLW5dpUOIu2xlo40TGPr7MRCfCwsaOfOLRTfNgMaX1n+kH9Bkwz8HyFi2alJYjhzk32biQw3txPeE7Ix5zcZ2AO/5QxVqOTwm4312ARVuErsc1Qa7+H+BhCWc65XeSsZIFnNMQ1r/WEsQj6stZOOaRyfabCykc6Mk2XXShK+b5PClxJwloCI8cZpp1kipBf3lVWslN0gJq4mqgtcXph0y4Uxqtirw/jWkrHCymeDmk1QB/afvabjNgCwGr9K9wsQALl6scWgxfZMGdBJSEV672RXZEZiuHOIgyUM5C23PTprE2qAqwEsYHL2DVpWYvTcBqvz58aQL6kbz0oLlKSLfTcXm6wzlNKkp1oB5aVS9Ww33VOq++xgro0VN4ro4bKU5latRo4dFTEVHUPOMu7sbE3KAXaiFyjoGs6S9K1sXW7/c+A1H6U26ZAxZ1KqF7kHPM4l7oz+gyDn3XxBUiJCUU9kD/gW8R+jCkEyqFrowjFfZAvxOTdKeqEgoHQT9OgnMoAtLRX5dg5R3EZSxOgIBgxaPV6D9J+BzKSbkJqONyElmF3dKPkSFHX0mCvACbDzHr1DPOmNCNNAPy9BUkyMaAw9XGZXaNL6E9BDX667GQqQA3tM0Y3wx8pLkjfUkJRcV8AhOG+ASUqOKEZuUSqOxEfyFhmK4WFJXoR1sBn2GkGbiMLHU6uWzFSwtwQnl5Rmetcx8yjgm93Omnj4Ht9OP9VgN9+Sy0if66BE8Hfdk6sI3+QsJXGtgE+Fuq894EJNFfYCT/slqPC6Wjf3D7QsHe6FsrDBQFPJGea7f+po19SQFj8XNlzfbPSMCtuGppFdBaM6GigL+h94WWRvs7IvZGuwbx8/vCtjYBzz1v4q53chrtizmoaZLQFr3tLPnYTfKb+kceeSNCuc4k18MGFp9Ci6Kb5Hqe5rDHPSVOxR80ecW/XESUecslr8V4wK/kh178eaH0R84uONeYRgf8SHdj+iNnd8yoJr21zQQBP9Nv7x5JTrRDU27jSZq85HmwI4U/aVDHxs50NgKmTBjh61gEGRgYGBgYGBgYGBgYGGSB/8yiFedFGZhhAAAAAElFTkSuQmCC" alt=""><input id="mediaFile" type="file" accept="image/*,video/*" multiple hidden></label><button class="post-visibility" id="visibilityBtn">他人可见</button></div>';
+ document.body.appendChild(o);
+ const text=o.querySelector('#editorText'),publish=o.querySelector('#editorPublish'),gallery=o.querySelector('#mediaFile'),camera=o.querySelector('#cameraFile');
+ const updateReady=()=>publish.classList.toggle('ready',!!text.value.trim()||o.__media?.length);
+ text.addEventListener('input',updateReady);
+ text.focus();
+ o.querySelector('#editorClose').onclick=()=>o.remove();
+ o.querySelector('#visibilityBtn').onclick=()=>showVisibilitySheet(o);
+ o.querySelector('#styleTool').onclick=()=>toast('背景样式入口');
+ const onFiles=async files=>{
+   const list=[...files];if(!list.length)return;
+   const hasVideo=list.some(f=>f.type.startsWith('video/')),hasImage=list.some(f=>f.type.startsWith('image/'));
+   if(hasVideo&&hasImage){toast('视频与图片不能同时选择');return}
+   if(hasVideo&&list.length>1){toast('一次只能选择一个视频');return}
+   if(hasImage&&list.length>9){toast('最多选择9张图片');return}
+   o.__media=[];
+   const box=o.querySelector('#editorMedia');box.innerHTML='';
+   for(const file of list){
+     if(file.type.startsWith('image/')){
+       try{const data=await imageToData(file,1280,.82);o.__media.push({type:'image',data});box.insertAdjacentHTML('beforeend','<div class="media-thumb"><img src="'+esc(data)+'" alt=""></div>')}catch(e){toast(e.message)}
+     }else if(file.type.startsWith('video/')){
+       const url=URL.createObjectURL(file);o.__media.push({type:'video',file,url});box.insertAdjacentHTML('beforeend','<div class="media-thumb"><video src="'+esc(url)+'" muted playsinline></video></div>');
+     }
+   }
+   updateReady();
+ };
+ gallery.onchange=()=>onFiles(gallery.files);camera.onchange=()=>onFiles(camera.files);
+ publish.onclick=()=>publishFromEditor(o);
 }
+
+function showVisibilitySheet(editor){
+ const s=document.createElement('div');s.className='visibility-sheet';
+ s.innerHTML='<div class="visibility-sheet-inner"><button class="visibility-choice" data-v="0">他人可见</button><button class="visibility-choice" data-v="1">仅自己可见</button></div>';
+ document.body.appendChild(s);
+ s.onclick=e=>{if(e.target===s)s.remove()};
+ s.querySelectorAll('[data-v]').forEach(b=>b.onclick=()=>{editor.dataset.visibility=b.dataset.v;editor.querySelector('#visibilityBtn').textContent=b.dataset.v==='0'?'他人可见':'仅自己可见';s.remove()});
+}
+
+async function publishFromEditor(editor){
+ const b=editor.querySelector('#editorPublish'),t=editor.querySelector('#editorText'),media=editor.__media||[];
+ if(!t.value.trim()&&!media.length){toast('说句话或发图/视频试试？');return}
+ b.disabled=true;b.textContent='正在发布~';
+ try{
+   const image=media.find(x=>x.type==='image');
+   await rpc('kehua_prod_create_post',{p_token:token,p_content:t.value.trim(),p_media_data:image?image.data:null,p_private:editor.dataset.visibility==='1'});
+   pendingPost={content:t.value.trim()};editor.remove();await renderHome();
+   setTimeout(async()=>{pendingPost=null;if(currentTab===0)await renderHome()},6000);
+ }catch(e){toast(e.message);b.disabled=false;b.textContent='发布'}
+}
+
+function postCard(p){const img=safeImg(p.media_data);return '<article class="card"><div class="postbody">'+esc(p.content)+'</div>'+(img?'<img class="postimg" src="'+esc(img)+'" alt="">':'')+'<div class="meta"><span>'+esc(fmt(p.created_at))+(p.is_private?' · 仅自己':'')+'</span><span>'+(p.light_count?('♡ '+p.light_count):'')+' <button class="linkbtn" data-delpost="'+esc(p.id)+'" style="padding:0 4px">删除</button></span></div></article>'}
 function imageToData(file,max,q){return new Promise((resolve,reject)=>{if(file.size>8*1024*1024)return reject(new Error('原图不能超过8MB'));const r=new FileReader();r.onerror=()=>reject(new Error('图片读取失败'));r.onload=()=>{const im=new Image();im.onerror=()=>reject(new Error('图片格式不支持'));im.onload=()=>{let w=im.width,h=im.height;if(Math.max(w,h)>max){const k=max/Math.max(w,h);w=Math.round(w*k);h=Math.round(h*k)}const c=document.createElement('canvas');c.width=w;c.height=h;c.getContext('2d').drawImage(im,0,0,w,h);resolve(c.toDataURL('image/jpeg',q))};im.src=r.result};r.readAsDataURL(file)})}
 async function openResonance(index){
  if(!homeData)homeData=await rpc('kehua_prod_home',{p_token:token});const list=(homeData.resonances||[]).filter(x=>x.status!=='dismissed');if(!list.length){toast('暂时没有新的共鸣');return}
