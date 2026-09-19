@@ -46,13 +46,15 @@ class KehuaReleaseAcceptanceTest {
             assertTrue("Rendered client UI was not readable", visibleReady.await(20, TimeUnit.SECONDS))
             assertTrue("Unexpected base URL: " + pageUrl, pageUrl.startsWith(KehuaActivity.PROD_URL))
             assertTrue(source.contains("此刻，说你想说的话～"))
-            assertTrue(source.contains("共鸣已到达。请签收～！"))
+            assertTrue(source.contains("共鸣已到达，请签收～！"))
             assertTrue(source.contains("正在寻找共鸣，请稍等～"))
             assertTrue(source.contains("我的动态"))
             assertTrue(source.contains("点亮"))
             assertTrue("JavaScript did not render login UI: " + visibleText, visibleText.contains("可话") && visibleText.contains("登录"))
             assertFalse("Rejected lavender nav pill returned", source.contains("class=\\\"pill"))
             assertFalse("Rejected home feed label returned", source.contains("我说过的话"))
+            assertTrue("Home must open a separate composer activity-like screen", source.contains("openPostEditor"))
+            assertTrue("Official home card must not be the live editor", source.contains("kehua-home-card"))
         }
     }
 
@@ -84,7 +86,8 @@ class KehuaReleaseAcceptanceTest {
             }
             assertTrue("Visual fixture was not captured", ready.await(15, TimeUnit.SECONDS))
             assertTrue("Original heading missing from visual fixture: " + visibleText, visibleText.contains("此刻，说你想说的话～"))
-            assertTrue("Original resonance status missing from visual fixture: " + visibleText, visibleText.contains("共鸣已到达。请签收～！"))
+            assertTrue("Original compact resonance notice missing from visual fixture: " + visibleText, visibleText.contains("1 条新共鸣"))
+            assertFalse("Home must not expose publish controls before opening composer", visibleText.contains("发布"))
             assertFalse("Rejected home feed returned in visual fixture", visibleText.contains("我说过的话"))
         }
     }
