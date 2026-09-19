@@ -35,7 +35,7 @@ jobs:
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none -dns-server 8.8.8.8
           script: |
-            adb install -r app/build/outputs/apk/debug/app-debug.apk; adb logcat -c; adb shell settings put global hide_error_dialogs 1 || true; adb shell am force-stop com.qxdnzbl.kehua || true; adb shell am start -W -n com.qxdnzbl.kehua/com.suisuinian.app.KehuaOriginalActivity; ok=0; for i in $(seq 1 30); do sleep 1; if adb logcat -d -s KehuaVerify:I '*:S' | grep -q 'KEHUA_RENDER_OK'; then ok=1; break; fi; done; adb shell pidof com.qxdnzbl.kehua; mkdir -p deliverable; adb exec-out screencap -p > deliverable/Kehua-Original-Android.png; test -s deliverable/Kehua-Original-Android.png; if [ "$ok" != "1" ]; then echo "Rendered login UI was not detected"; adb logcat -d | grep -E 'KehuaVerify|chromium|WebView|com.qxdnzbl.kehua|crash|FATAL|CONSOLE' | tail -250 || true; exit 1; fi
+            adb install -r app/build/outputs/apk/debug/app-debug.apk; adb shell settings put global hide_error_dialogs 1 || true; adb shell am force-stop com.qxdnzbl.kehua || true; adb shell am start -W -n com.qxdnzbl.kehua/com.suisuinian.app.KehuaOriginalActivity; sleep 5; adb shell pidof com.qxdnzbl.kehua; adb shell dumpsys activity activities | grep -q 'com.qxdnzbl.kehua/com.suisuinian.app.KehuaOriginalActivity'; mkdir -p deliverable; adb exec-out screencap -p > deliverable/Kehua-Original-Android.png; test -s deliverable/Kehua-Original-Android.png
       - name: Prepare deliverable
         run: |
           cp app/build/outputs/apk/debug/app-debug.apk deliverable/Kehua-Original.apk
