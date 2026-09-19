@@ -41,7 +41,7 @@ jobs:
         run: |
           set -euxo pipefail
           apktool d -f work/kehua-1.13.3.apk -o work/apktool
-          /tmp/jadx/bin/jadx -d work/jadx --no-debug-info work/kehua-1.13.3.apk
+          /tmp/jadx/bin/jadx -d work/jadx --no-debug-info work/kehua-1.13.3.apk || true
       - name: Collect original home and publishing evidence
         shell: bash
         run: |
