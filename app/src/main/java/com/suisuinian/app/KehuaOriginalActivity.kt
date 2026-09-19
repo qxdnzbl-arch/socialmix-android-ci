@@ -2,6 +2,8 @@ package com.suisuinian.app
 
 import android.annotation.SuppressLint
 import android.os.Bundle
+import android.graphics.Color
+import android.view.View
 import android.util.Log
 import android.webkit.CookieManager
 import android.webkit.WebChromeClient
@@ -24,6 +26,8 @@ class KehuaOriginalActivity : ComponentActivity() {
             .build()
 
         web = WebView(this)
+        web.setBackgroundColor(Color.rgb(247, 247, 251))
+        web.setLayerType(View.LAYER_TYPE_SOFTWARE, null)
         setContentView(web)
         CookieManager.getInstance().setAcceptCookie(true)
         CookieManager.getInstance().setAcceptThirdPartyCookies(web, true)
@@ -44,12 +48,17 @@ class KehuaOriginalActivity : ComponentActivity() {
             override fun onPageFinished(view: WebView, url: String) {
                 super.onPageFinished(view, url)
                 view.postDelayed({
-                    if (url == APP_URL) {
-                        view.contentDescription = "KEHUA_RENDER_OK"
-                        Log.i("KehuaVerify", "KEHUA_RENDER_OK")
-                    } else {
-                        view.contentDescription = "KEHUA_RENDER_PENDING"
-                        Log.i("KehuaVerify", "KEHUA_RENDER_PENDING")
+                    view.evaluateJavascript(
+                        "(function(){return !!document.querySelector('.auth') && document.body.innerText.includes('获取验证码') && document.body.innerText.includes('说你想说的话');})()"
+                    ) { ok ->
+                        if (url == APP_URL && ok == "true") {
+                            view.contentDescription = "KEHUA_RENDER_OK"
+                            Log.i("KehuaVerify", "KEHUA_RENDER_OK")
+                            view.invalidate()
+                        } else {
+                            view.contentDescription = "KEHUA_RENDER_PENDING"
+                            Log.i("KehuaVerify", "KEHUA_RENDER_PENDING:" + ok)
+                        }
                     }
                 }, 1800)
             }
