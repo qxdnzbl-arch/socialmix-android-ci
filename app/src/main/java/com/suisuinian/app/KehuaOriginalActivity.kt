@@ -2,6 +2,7 @@ package com.suisuinian.app
 
 import android.annotation.SuppressLint
 import android.os.Bundle
+import android.util.Log
 import android.webkit.CookieManager
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceRequest
@@ -45,7 +46,13 @@ class KehuaOriginalActivity : ComponentActivity() {
                 view.evaluateJavascript(
                     "(function(){const t=document.body&&document.body.innerText||'';return t.includes('获取验证码')&&t.includes('手机号');})()"
                 ) { ok ->
-                    view.contentDescription = if (ok == "true") "KEHUA_RENDER_OK" else "KEHUA_RENDER_PENDING"
+                    if (ok == "true") {
+                        view.contentDescription = "KEHUA_RENDER_OK"
+                        Log.i("KehuaVerify", "KEHUA_RENDER_OK")
+                    } else {
+                        view.contentDescription = "KEHUA_RENDER_PENDING"
+                        Log.i("KehuaVerify", "KEHUA_RENDER_PENDING")
+                    }
                 }
             }
         }
