@@ -43,17 +43,19 @@ class KehuaOriginalActivity : ComponentActivity() {
 
             override fun onPageFinished(view: WebView, url: String) {
                 super.onPageFinished(view, url)
-                view.evaluateJavascript(
-                    "(function(){const t=document.body&&document.body.innerText||'';return t.includes('获取验证码')&&t.includes('手机号');})()"
-                ) { ok ->
-                    if (ok == "true") {
-                        view.contentDescription = "KEHUA_RENDER_OK"
-                        Log.i("KehuaVerify", "KEHUA_RENDER_OK")
-                    } else {
-                        view.contentDescription = "KEHUA_RENDER_PENDING"
-                        Log.i("KehuaVerify", "KEHUA_RENDER_PENDING")
+                view.postDelayed({
+                    view.evaluateJavascript(
+                        "(function(){const t=document.body&&document.body.innerText||'';return t.includes('获取验证码')&&t.includes('手机号');})()"
+                    ) { ok ->
+                        if (ok == "true") {
+                            view.contentDescription = "KEHUA_RENDER_OK"
+                            Log.i("KehuaVerify", "KEHUA_RENDER_OK")
+                        } else {
+                            view.contentDescription = "KEHUA_RENDER_PENDING"
+                            Log.i("KehuaVerify", "KEHUA_RENDER_PENDING")
+                        }
                     }
-                }
+                }, 1800)
             }
         }
 
