@@ -51,7 +51,7 @@ jobs:
             adb uninstall com.qxdnzbl.kehua || true
             gradle --no-daemon :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.suisuinian.app.KehuaReleaseAcceptanceTest
             mkdir -p build/android-artifacts
-            adb pull /sdcard/acceptance-original-home.png build/android-artifacts/acceptance-original-home.png
+            adb pull /sdcard/Android/data/com.qxdnzbl.kehua/files/acceptance-original-home.png build/android-artifacts/acceptance-original-home.png
             file build/android-artifacts/acceptance-original-home.png | grep -q 'PNG image data'
             adb install -r app/build/outputs/apk/debug/app-debug.apk
             adb shell am force-stop com.qxdnzbl.kehua || true
