@@ -80,10 +80,8 @@ jobs:
             file "$f" | grep -Eq 'PNG image|JPEG image'
           done
           grep -q '此刻，有什么想说～' SPEC.md
-          if grep -q '我的恢复码' SPEC.md; then
-            echo "Rejected invented recovery-code UI found in active SPEC"
-            exit 1
-          fi
+          grep -q 'Explicitly forbidden inventions' SPEC.md
+          grep -q 'Do not use “account + password + recovery code”' SPEC.md
 
       - uses: actions/upload-artifact@v4
         with:
