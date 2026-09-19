@@ -20,8 +20,37 @@ jobs:
           curl -fL --retry 3 'https://img.downkuai.com/uppic/20241107/29c6f44f2407d671c529d77aed88a364.png' -o refs/android-2024-2.png
           curl -fL --retry 3 'https://img.downkuai.com/uppic/20241107/66c7358589585f807e8ed1fa7d8d3de0.png' -o refs/android-2024-3.png
           curl -fL --retry 3 'https://img.downkuai.com/uppic/20241107/463ab5aecf4060a4a1ca5b4ea624dbe6.png' -o refs/android-2024-4.png
-          file refs/*
-          sha256sum refs/*
+          python - <<'PY'
+import os, re, urllib.request
+from html.parser import HTMLParser
+from urllib.parse import urljoin
+os.makedirs('refs/beihang',exist_ok=True)
+url='https://www.beihangsoft.cn/app/3240.html'
+req=urllib.request.Request(url,headers={'User-Agent':'Mozilla/5.0'})
+html=urllib.request.urlopen(req,timeout=30).read().decode('utf-8','ignore')
+open('refs/beihang/page.html','w',encoding='utf-8').write(html)
+class P(HTMLParser):
+    def __init__(self): super().__init__(); self.items=[]
+    def handle_starttag(self,tag,attrs):
+        if tag!='img': return
+        d=dict(attrs); src=d.get('src') or d.get('data-src') or d.get('data-original')
+        if src: self.items.append((d.get('alt',''),urljoin(url,src)))
+p=P(); p.feed(html)
+seen=set()
+for i,(alt,src) in enumerate(p.items):
+    if src in seen: continue
+    seen.add(src)
+    if '可话' not in alt and not re.search(r'app图片|3240',src,re.I): continue
+    ext=os.path.splitext(src.split('?')[0])[1] or '.jpg'
+    fn=f"refs/beihang/{i:02d}-{re.sub(r'[^0-9A-Za-z\u4e00-\u9fff-]+','_',alt)[:30]}{ext}"
+    try:
+        data=urllib.request.urlopen(urllib.request.Request(src,headers={'User-Agent':'Mozilla/5.0','Referer':url}),timeout=30).read()
+        open(fn,'wb').write(data)
+        print(fn, src, len(data))
+    except Exception as e: print('ERR',src,e)
+PY
+          file refs/* refs/beihang/* || true
+          sha256sum refs/*.png || true
       - uses: actions/upload-artifact@v4
         with:
           name: kehua-official-appstore-screens
