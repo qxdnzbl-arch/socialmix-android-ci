@@ -1,0 +1,55 @@
+name: Kehua APK Flow Inspect
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [kehua-original-evidence-rebuild]
+    paths:
+      - ".github/workflows/kehua-apk-flow-inspect.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download verified latest APK
+        shell: bash
+        run: |
+          set -euxo pipefail
+          mkdir -p inspect
+          curl -L --fail --retry 3 -A 'Mozilla/5.0'             'https://d.apkpure.net/b/APK/com.app.tideswing?version=latest'             -o inspect/kehua.apk
+          md5sum inspect/kehua.apk | tee inspect/md5.txt
+          grep -qi '^af374ca61b3ed51e0a0d5c20166d1275 ' inspect/md5.txt
+      - name: Install JADX
+        shell: bash
+        run: |
+          set -euxo pipefail
+          curl -L --fail --retry 3             'https://github.com/skylot/jadx/releases/download/v1.5.2/jadx-1.5.2.zip'             -o /tmp/jadx.zip
+          unzip -q /tmp/jadx.zip -d /tmp/jadx
+      - name: Decompile behavior evidence
+        shell: bash
+        run: |
+          set -euxo pipefail
+          mkdir -p inspect/jadx
+          /tmp/jadx/bin/jadx -d inspect/jadx inspect/kehua.apk >/tmp/jadx.log 2>&1 || true
+          cp /tmp/jadx.log inspect/jadx.log
+          find inspect/jadx/sources/com/app/tideswing -type f 2>/dev/null | sort > inspect/tideswing-files.txt || true
+          {
+            echo '=== class/file names ==='
+            grep -Ei 'publish|post|dynamic|moment|video|image|resonan|chat|home|main|visible|privacy' inspect/tideswing-files.txt | head -400 || true
+            echo '=== relevant source strings ==='
+            grep -RInE '发布|动态|视频|图片|相册|仅自己|自己可见|公开|可见范围|共鸣|我想说|想说的话|选择图片|选择视频|谁可以看|点亮'               inspect/jadx/sources/com/app/tideswing inspect/jadx/resources 2>/dev/null | head -1500 || true
+          } > inspect/flow-evidence.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Kehua-1.13.3-Flow-Inspection
+          path: |
+            inspect/md5.txt
+            inspect/tideswing-files.txt
+            inspect/flow-evidence.txt
+            inspect/jadx.log
+          if-no-files-found: error
