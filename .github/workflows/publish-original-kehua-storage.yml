@@ -40,11 +40,3 @@ jobs:
           grep -q '"ok":true' /tmp/e2e.json
           grep -q 'post write/read across two independent clients' /tmp/e2e.json
           grep -q 'message visible to peer' /tmp/e2e.json
-      - name: Capture e2e response
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: kehua-original-e2e-response
-          path: /tmp/e2e.json
-          if-no-files-found: warn
-          retention-days: 1
