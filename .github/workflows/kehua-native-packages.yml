@@ -1,0 +1,133 @@
+name: Kehua Native Packages
+
+on:
+  push:
+    branches:
+      - kehua-native-release-v1
+    paths:
+      - "native/**"
+      - "SPEC.md"
+      - ".github/workflows/kehua-native-packages.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  windows:
+    name: Windows installer
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Restore and publish
+        shell: pwsh
+        run: |
+          dotnet restore native/windows/KehuaWindows/KehuaWindows.csproj
+          dotnet publish native/windows/KehuaWindows/KehuaWindows.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=false -o build/windows-publish
+
+      - name: Static production checks
+        shell: pwsh
+        run: |
+          if (!(Test-Path build/windows-publish/Kehua.exe)) { throw "Kehua.exe missing" }
+          if (!(Test-Path build/windows-publish/Resources/kehua.html)) { throw "kehua.html missing" }
+          $html = Get-Content build/windows-publish/Resources/kehua.html -Raw
+          if ($html -notmatch "nvwdtfnhsyfdopaxdylx\.supabase\.co") { throw "production backend missing" }
+          if ($html -match "service_role|sb_secret_") { throw "secret key pattern found" }
+          if ($html -notmatch "可话") { throw "product identity missing" }
+
+      - name: Smoke launch
+        shell: pwsh
+        run: |
+          $p = Start-Process -FilePath (Resolve-Path build/windows-publish/Kehua.exe) -PassThru
+          Start-Sleep -Seconds 8
+          if ($p.HasExited) { throw "Windows app exited during smoke test" }
+          Stop-Process -Id $p.Id -Force
+
+      - name: Build Inno Setup installer
+        shell: pwsh
+        run: |
+          choco install innosetup --no-progress -y
+          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" native/windows/installer.iss
+          if (!(Test-Path build/windows-installer/Kehua-Windows-Setup-x64.exe)) { throw "installer missing" }
+
+      - name: Hash Windows artifacts
+        shell: pwsh
+        run: |
+          (Get-FileHash build/windows-installer/Kehua-Windows-Setup-x64.exe -Algorithm SHA256).Hash.ToLower() + "  Kehua-Windows-Setup-x64.exe" | Out-File build/windows-installer/SHA256.txt -Encoding ascii
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Kehua-Windows-Native
+          path: |
+            build/windows-installer/Kehua-Windows-Setup-x64.exe
+            build/windows-installer/SHA256.txt
+          if-no-files-found: error
+
+  apple:
+    name: Apple native candidates
+    runs-on: macos-15
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate Xcode project
+        working-directory: native/apple
+        run: xcodegen generate
+
+      - name: Static production checks
+        run: |
+          grep -q "nvwdtfnhsyfdopaxdylx.supabase.co" native/apple/Resources/kehua.html
+          grep -q "可话" native/apple/Resources/kehua.html
+          if grep -Eq "service_role|sb_secret_" native/apple/Resources/kehua.html; then
+            echo "secret key pattern found"
+            exit 1
+          fi
+
+      - name: Build macOS Release app
+        run: |
+          xcodebuild -project native/apple/KehuaNative.xcodeproj             -scheme KehuaMac             -configuration Release             -derivedDataPath build/apple-mac             CODE_SIGNING_ALLOWED=NO             build
+          APP="build/apple-mac/Build/Products/Release/可话.app"
+          test -d "$APP"
+          /usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" "$APP/Contents/Info.plist" | grep -q "com.qxdnzbl.kehua.macos"
+          test -x "$APP/Contents/MacOS/可话"
+
+      - name: Package macOS DMG
+        run: |
+          mkdir -p build/apple-artifacts
+          hdiutil create -volname "可话"             -srcfolder "build/apple-mac/Build/Products/Release/可话.app"             -ov -format UDZO "build/apple-artifacts/Kehua-macOS-unsigned.dmg"
+
+      - name: Build iOS simulator app
+        run: |
+          xcodebuild -project native/apple/KehuaNative.xcodeproj             -scheme KehuaIOS             -configuration Release             -sdk iphonesimulator             -destination "generic/platform=iOS Simulator"             -derivedDataPath build/apple-ios-sim             CODE_SIGNING_ALLOWED=NO             build
+          IOS_APP="build/apple-ios-sim/Build/Products/Release-iphonesimulator/可话.app"
+          test -d "$IOS_APP"
+          /usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" "$IOS_APP/Info.plist" | grep -q "com.qxdnzbl.kehua"
+
+      - name: Create unsigned iOS device archive candidate
+        run: |
+          xcodebuild archive -project native/apple/KehuaNative.xcodeproj             -scheme KehuaIOS             -configuration Release             -destination "generic/platform=iOS"             -archivePath build/apple-artifacts/Kehua-iOS-unsigned.xcarchive             CODE_SIGNING_ALLOWED=NO             CODE_SIGNING_REQUIRED=NO
+          test -d build/apple-artifacts/Kehua-iOS-unsigned.xcarchive
+          ditto -c -k --sequesterRsrc --keepParent             build/apple-artifacts/Kehua-iOS-unsigned.xcarchive             build/apple-artifacts/Kehua-iOS-unsigned.xcarchive.zip
+
+      - name: Hash Apple artifacts
+        run: |
+          cd build/apple-artifacts
+          shasum -a 256 Kehua-macOS-unsigned.dmg Kehua-iOS-unsigned.xcarchive.zip > SHA256.txt
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Kehua-Apple-Native-Candidates
+          path: |
+            build/apple-artifacts/Kehua-macOS-unsigned.dmg
+            build/apple-artifacts/Kehua-iOS-unsigned.xcarchive.zip
+            build/apple-artifacts/SHA256.txt
+          if-no-files-found: error
