@@ -17,7 +17,8 @@ class KehuaReleaseAcceptanceTest {
     @Test
     fun originalEvidenceLockedClientLoads() {
         ActivityScenario.launch(KehuaActivity::class.java).use { scenario ->
-            val ready = CountDownLatch(1)
+            val sourceReady = CountDownLatch(1)
+            val visibleReady = CountDownLatch(1)
             var source = ""
             var pageUrl = ""
             var visibleText = ""
@@ -25,15 +26,21 @@ class KehuaReleaseAcceptanceTest {
                 activity.webView.postDelayed({
                     pageUrl = activity.webView.url.orEmpty()
                     activity.webView.evaluateJavascript(
-                        "JSON.stringify({html:(document.documentElement&&document.documentElement.outerHTML||'').slice(0,120000),text:(document.body&&document.body.innerText||'').slice(0,3000)})"
+                        "(document.documentElement&&document.documentElement.outerHTML||'').slice(0,120000)"
                     ) { value ->
                         source = value.orEmpty()
+                        sourceReady.countDown()
+                    }
+                    activity.webView.evaluateJavascript(
+                        "(document.getElementById('app')&&document.getElementById('app').innerText||'').slice(0,3000)"
+                    ) { value ->
                         visibleText = value.orEmpty()
-                        ready.countDown()
+                        visibleReady.countDown()
                     }
                 }, 4500)
             }
-            assertTrue("Bundled client was not readable", ready.await(20, TimeUnit.SECONDS))
+            assertTrue("Bundled client source was not readable", sourceReady.await(20, TimeUnit.SECONDS))
+            assertTrue("Rendered client UI was not readable", visibleReady.await(20, TimeUnit.SECONDS))
             assertTrue("Unexpected base URL: " + pageUrl, pageUrl.startsWith(KehuaActivity.PROD_URL))
             assertTrue(source.contains("此刻，说你想说的话～"))
             assertTrue(source.contains("共鸣已到达。请签收～！"))
