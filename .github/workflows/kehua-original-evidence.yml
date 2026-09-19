@@ -47,7 +47,11 @@ jobs:
           done
 
           # Latest Android package candidate, used only for UI/flow inspection after hash/package/version checks.
-          curl -L --fail --retry 3 -A 'Mozilla/5.0'             'https://get.downkuai.com/download/149436'             -o evidence/latest-android/kehua-1.13.3.apk || true
+          curl -L --fail --retry 3 -A 'Mozilla/5.0' 'https://d.apkpure.net/b/APK/com.app.tideswing?version=latest' -o evidence/latest-android/kehua-1.13.3.apk || true
+          if [ -f evidence/latest-android/kehua-1.13.3.apk ]; then
+            file evidence/latest-android/kehua-1.13.3.apk
+            md5sum evidence/latest-android/kehua-1.13.3.apk > evidence/latest-android/apk-md5.txt
+          fi
 
           # Preserve older verified flow evidence only as historical reference.
           curl -L --fail --retry 3             'https://raw.githubusercontent.com/SkeathyTomas/img/main/img/%E5%BE%AE%E4%BF%A1%E5%9B%BE%E7%89%87_20220216004426.jpg'             -o evidence/archive/original-home-v1.7.6.jpg
