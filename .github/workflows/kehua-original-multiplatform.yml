@@ -140,6 +140,8 @@ jobs:
           test -d "$APP"
           /usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" "$APP/Contents/Info.plist" | grep -q "com.qxdnzbl.kehua.macos"
           test -x "$APP/Contents/MacOS/可话"
+          test -f "$APP/Contents/Resources/kehua.html"
+          grep -q '此刻，说你想说的话～' "$APP/Contents/Resources/kehua.html"
       - name: Package macOS DMG
         run: |
           mkdir -p build/apple-artifacts
@@ -150,10 +152,14 @@ jobs:
           IOS_APP="build/apple-ios-sim/Build/Products/Release-iphonesimulator/可话.app"
           test -d "$IOS_APP"
           /usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" "$IOS_APP/Info.plist" | grep -q "com.qxdnzbl.kehua"
+          test -f "$IOS_APP/kehua.html"
+          grep -q '此刻，说你想说的话～' "$IOS_APP/kehua.html"
       - name: Create unsigned iOS device archive candidate
         run: |
           xcodebuild archive -project native/apple/KehuaNative.xcodeproj -scheme KehuaIOS -configuration Release -destination "generic/platform=iOS" -archivePath build/apple-artifacts/Kehua-iOS-unsigned.xcarchive CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO
           test -d build/apple-artifacts/Kehua-iOS-unsigned.xcarchive
+          test -f "build/apple-artifacts/Kehua-iOS-unsigned.xcarchive/Products/Applications/可话.app/kehua.html"
+          grep -q '此刻，说你想说的话～' "build/apple-artifacts/Kehua-iOS-unsigned.xcarchive/Products/Applications/可话.app/kehua.html"
           ditto -c -k --sequesterRsrc --keepParent build/apple-artifacts/Kehua-iOS-unsigned.xcarchive build/apple-artifacts/Kehua-iOS-unsigned.xcarchive.zip
           printf '%s\n' 'UNSIGNED CANDIDATES — App Store requires Apple Developer signing/upload/review; macOS public distribution requires Developer ID + notarization.' > build/apple-artifacts/STATUS.txt
       - name: Hash Apple artifacts
