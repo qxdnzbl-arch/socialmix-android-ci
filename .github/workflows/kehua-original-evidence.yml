@@ -1,0 +1,93 @@
+name: Capture Original Kehua Evidence
+
+on:
+  push:
+    branches: [kehua-original-source-v1]
+    paths:
+      - "SPEC.md"
+      - ".github/workflows/kehua-original-evidence.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  capture:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Fetch verified visual references
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p evidence/apple evidence/android evidence/meta
+          UA='Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/128 Safari/537.36'
+
+          fetch() {
+            local url="$1"
+            local out="$2"
+            echo "Fetching $out"
+            curl -A "$UA" -L --fail --retry 3 --connect-timeout 20 --max-time 90 "$url" -o "$out"
+            test -s "$out"
+            file "$out" | tee -a evidence/meta/file-types.txt
+          }
+
+          fetch 'https://is1-ssl.mzstatic.com/image/thumb/Purple211/v4/a1/c0/26/a1c02662-ddff-c602-5ecd-ee1999f2ff78/c1396ded-94c8-4478-ad24-f242552f6d24_5.png/1242x2208.png' evidence/apple/01.png
+          fetch 'https://is1-ssl.mzstatic.com/image/thumb/Purple211/v4/60/53/e2/6053e2e8-1220-b10d-6e23-f43d9d8556a1/c8b1ec9f-6cce-426c-9c10-83ca10a94b12_6.png/1242x2208.png' evidence/apple/02.png
+          fetch 'https://is1-ssl.mzstatic.com/image/thumb/PurpleSource211/v4/05/e6/97/05e697ca-1827-0469-c0c4-bf2329e5c2a1/3bbe07b2-5a09-4f7f-bcc7-ff03018862d5_20230811-184749.png/1242x2208.png' evidence/apple/03.png
+          fetch 'https://is1-ssl.mzstatic.com/image/thumb/Purple211/v4/00/9e/d3/009ed38c-06c8-cc6b-5b41-699e493d426a/d2fd9404-965a-4f5a-b17a-f2fe6958d3f4_9.png/1242x2208.png' evidence/apple/04.png
+
+          fetch 'https://img.downkuai.com/uppic/20241107/317e37dbc55dfa2313b7e756cd9c25c9.png' evidence/android/store-01.png
+          fetch 'https://img.downkuai.com/uppic/20241107/29c6f44f2407d671c529d77aed88a364.png' evidence/android/store-02.png
+          fetch 'https://img.downkuai.com/uppic/20241107/66c7358589585f807e8ed1fa7d8d3de0.png' evidence/android/store-03.png
+          fetch 'https://img.downkuai.com/uppic/20241107/463ab5aecf4060a4a1ca5b4ea624dbe6.png' evidence/android/store-04.png
+          fetch 'https://img.downkuai.com/uppic/20211109/aaa2ea5f246adc630bab084de0f1c043.jpg' evidence/android/tutorial-home.jpg
+          fetch 'https://img.downkuai.com/uppic/20211109/28dae1ea9fc49c9aafb77a9cfc34e6e5.jpg' evidence/android/tutorial-resonance.jpg
+          fetch 'https://img.downkuai.com/uppic/20211109/08f29962343eccc12233bb156358a172.jpg' evidence/android/tutorial-light.jpg
+
+          sha256sum evidence/apple/* evidence/android/* > evidence/meta/SHA256.txt
+
+      - name: Try current Android 1.13.3 binary reference
+        shell: bash
+        run: |
+          set -u
+          UA='Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/128 Safari/537.36'
+          URL='https://get.downkuai.com/download/149436'
+          if curl -A "$UA" -L --fail --retry 2 --connect-timeout 20 --max-time 180 "$URL" -o evidence/android/kehua-original-1.13.3.apk; then
+            ACTUAL="$(md5sum evidence/android/kehua-original-1.13.3.apk | awk '{print toupper($1)}')"
+            echo "expected_md5=AF374CA61B3ED51E0A0D5C20166D1275" | tee evidence/meta/apk.txt
+            echo "actual_md5=$ACTUAL" | tee -a evidence/meta/apk.txt
+            if [ "$ACTUAL" != "AF374CA61B3ED51E0A0D5C20166D1275" ]; then
+              echo "APK mirror content did not match verified listing; deleting untrusted file." | tee -a evidence/meta/apk.txt
+              rm -f evidence/android/kehua-original-1.13.3.apk
+            else
+              unzip -l evidence/android/kehua-original-1.13.3.apk > evidence/meta/apk-files.txt || true
+            fi
+          else
+            echo "binary_download_unavailable=true" | tee evidence/meta/apk.txt
+            rm -f evidence/android/kehua-original-1.13.3.apk
+          fi
+
+      - name: Evidence integrity gate
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(find evidence/apple -type f | wc -l)" -eq 4
+          test "$(find evidence/android -type f \( -name '*.png' -o -name '*.jpg' \) | wc -l)" -eq 7
+          for f in evidence/apple/* evidence/android/*.png evidence/android/*.jpg; do
+            file "$f" | grep -Eq 'PNG image|JPEG image'
+          done
+          grep -q '此刻，有什么想说～' SPEC.md
+          if grep -q '我的恢复码' SPEC.md; then
+            echo "Rejected invented recovery-code UI found in active SPEC"
+            exit 1
+          fi
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Kehua-Original-Evidence
+          path: evidence/
+          if-no-files-found: error
+          retention-days: 30
