@@ -20,13 +20,15 @@ class KehuaReleaseAcceptanceTest {
             val ready = CountDownLatch(1)
             var source = ""
             var pageUrl = ""
+            var visibleText = ""
             scenario.onActivity { activity ->
                 activity.webView.postDelayed({
                     pageUrl = activity.webView.url.orEmpty()
                     activity.webView.evaluateJavascript(
-                        "(document.documentElement && document.documentElement.outerHTML || '').slice(0,120000)"
+                        "JSON.stringify({html:(document.documentElement&&document.documentElement.outerHTML||'').slice(0,120000),text:(document.body&&document.body.innerText||'').slice(0,3000)})"
                     ) { value ->
                         source = value.orEmpty()
+                        visibleText = value.orEmpty()
                         ready.countDown()
                     }
                 }, 4500)
@@ -38,6 +40,7 @@ class KehuaReleaseAcceptanceTest {
             assertTrue(source.contains("正在寻找共鸣，请稍等～"))
             assertTrue(source.contains("我的动态"))
             assertTrue(source.contains("点亮"))
+            assertTrue("JavaScript did not render login UI: " + visibleText, visibleText.contains("可话") && visibleText.contains("登录"))
             assertFalse("Rejected lavender nav pill returned", source.contains("class=\\\"pill"))
             assertFalse("Rejected home feed label returned", source.contains("我说过的话"))
         }
