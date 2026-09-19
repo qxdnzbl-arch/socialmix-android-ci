@@ -46,7 +46,7 @@ class KehuaReleaseAcceptanceTest {
             assertTrue("Rendered client UI was not readable", visibleReady.await(20, TimeUnit.SECONDS))
             assertTrue("Unexpected base URL: " + pageUrl, pageUrl.startsWith(KehuaActivity.PROD_URL))
             assertTrue(source.contains("此刻，说你想说的话～"))
-            assertTrue(source.contains("共鸣已到达，请签收～！"))
+            assertTrue(source.contains("条新共鸣"))
             assertTrue(source.contains("正在寻找共鸣，请稍等～"))
             assertTrue(source.contains("我的动态"))
             assertTrue(source.contains("点亮"))
