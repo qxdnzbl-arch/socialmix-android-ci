@@ -1,0 +1,1 @@
+{"name":"kehua-live-verifier","type":"module","scripts":{"start":"node verifier.mjs"}}
