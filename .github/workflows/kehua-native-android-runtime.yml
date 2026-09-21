@@ -22,8 +22,6 @@ jobs:
           distribution: temurin
           java-version: '17'
       - uses: gradle/actions/setup-gradle@v4
-        with:
-          gradle-version: '8.10.2'
       - name: build release directly from canonical source
         working-directory: kehua-native/android
         run: gradle :app:assembleRelease --stacktrace
@@ -33,10 +31,10 @@ jobs:
           ! unzip -p kehua-native/android/app/build/outputs/apk/release/app-release.apk classes.dex | strings | grep -E 'onrender\.com|render\.com'
       - uses: reactivecircus/android-emulator-runner@v2
         with:
-          api-level: 35
+          api-level: 30
           arch: x86_64
-          profile: pixel_6
-          disable-animations: true
+          profile: pixel_2
+          disable-animations: false
           script: |
             adb install -r kehua-native/android/app/build/outputs/apk/release/app-release.apk
             adb shell am start -W com.kehua.revival/.MainActivity | tee /tmp/am-start.txt
