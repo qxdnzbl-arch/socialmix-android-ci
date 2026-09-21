@@ -1,11 +1,25 @@
 {
-  "name":"可话",
-  "short_name":"可话",
-  "description":"想说的话，都聊得来。",
-  "start_url":"/",
-  "scope":"/",
-  "display":"standalone",
-  "background_color":"#f7f2ef",
-  "theme_color":"#f7f2ef",
-  "lang":"zh-CN"
+  "id": "/",
+  "name": "可话",
+  "short_name": "可话",
+  "description": "想说的话，都聊得来。",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#f7f2ef",
+  "theme_color": "#f7f2ef",
+  "lang": "zh-CN",
+  "categories": [
+    "social",
+    "lifestyle"
+  ],
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
 }
