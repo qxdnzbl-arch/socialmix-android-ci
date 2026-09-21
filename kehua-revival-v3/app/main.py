@@ -13,6 +13,7 @@ from .core import *
 ROOT=Path(__file__).resolve().parent
 app=FastAPI(title='说想说的话');app.mount('/static',StaticFiles(directory=ROOT/'static'),name='static')
 class AuthIn(BaseModel):username:str=Field(min_length=3,max_length=24);password:str=Field(min_length=6,max_length=72)
+class RecoveryIn(BaseModel):username:str=Field(min_length=3,max_length=24);recovery_code:str=Field(min_length=8,max_length=64);new_password:str=Field(min_length=6,max_length=72)
 class PostIn(BaseModel):body:str=Field(min_length=1,max_length=1200);image_data:Optional[str]=None;is_private:bool=False
 class MessageIn(BaseModel):body:str=Field(min_length=1,max_length=2000)
 class ProfileIn(BaseModel):nickname:str=Field(min_length=1,max_length=20);bio:str=Field(default='',max_length=120);avatar_data:Optional[str]=None
@@ -30,12 +31,19 @@ def register(p:AuthIn,db:Session=Depends(db_session)):
  username=p.username.strip().lower()
  if not username.replace('_','').isalnum():raise HTTPException(400,'用户名只用字母、数字或下划线')
  if db.scalar(select(User).where(User.username==username)):raise HTTPException(409,'这个用户名已经有人用了')
- u=User(username=username,password_hash=password_hash(p.password),nickname=username,avatar_seed=secrets.token_hex(5));db.add(u);db.flush();t=issue_session(db,u);return {'token':t,'user':user_json(u,True)}
+ recovery=secrets.token_hex(10).upper();u=User(username=username,password_hash=password_hash(p.password),recovery_hash=token_hash(recovery),nickname=username,avatar_seed=secrets.token_hex(5));db.add(u);db.flush();t=issue_session(db,u);return {'token':t,'recovery_code':recovery,'user':user_json(u,True)}
 @app.post('/api/auth/login')
 def login(p:AuthIn,db:Session=Depends(db_session)):
  u=db.scalar(select(User).where(User.username==p.username.strip().lower()))
  if not u or not u.password_hash or not verify_password(p.password,u.password_hash):raise HTTPException(401,'用户名或密码不对')
  return {'token':issue_session(db,u),'user':user_json(u,True)}
+@app.post('/api/auth/recover')
+def recover(p:RecoveryIn,db:Session=Depends(db_session)):
+ username=p.username.strip().lower();u=db.scalar(select(User).where(User.username==username))
+ if not u or not u.recovery_hash or not hmac.compare_digest(u.recovery_hash,token_hash(p.recovery_code.strip().upper())):raise HTTPException(401,'账号或恢复码不正确')
+ u.password_hash=password_hash(p.new_password);new_code=secrets.token_hex(10).upper();u.recovery_hash=token_hash(new_code)
+ for s in db.scalars(select(SessionToken).where(SessionToken.user_id==u.id)).all():db.delete(s)
+ db.flush();t=issue_session(db,u);return {'token':t,'recovery_code':new_code,'user':user_json(u,True)}
 @app.post('/api/auth/guest')
 def guest(db:Session=Depends(db_session)):
  t=secrets.token_urlsafe(32);u=User(nickname=f'未命名{random.randint(100,999)}',avatar_seed=secrets.token_hex(5));db.add(u);db.flush();db.add(SessionToken(user_id=u.id,token_hash=token_hash(t)));db.commit();return {'token':t,'user':user_json(u,True)}
@@ -52,6 +60,12 @@ def me(user:User=Depends(current_user),db:Session=Depends(db_session)):
   q=db.get(Post,l.target_post_id)
   if q:lit.append(serialize_post(q))
  return {**user_json(user,True),'posts':[serialize_post(x) for x in posts],'lit_posts':lit}
+@app.delete('/api/me')
+def delete_me(user:User=Depends(current_user),db:Session=Depends(db_session)):
+ db.delete(user);db.commit();return {'ok':True}
+@app.post('/api/me/recovery')
+def rotate_recovery(user:User=Depends(current_user),db:Session=Depends(db_session)):
+ code=secrets.token_hex(10).upper();user.recovery_hash=token_hash(code);db.commit();return {'recovery_code':code}
 @app.patch('/api/me')
 def update_me(p:ProfileIn,user:User=Depends(current_user),db:Session=Depends(db_session)):
  if p.avatar_data and (not p.avatar_data.startswith('data:image/') or len(p.avatar_data)>MAX_IMAGE_CHARS):raise HTTPException(400,'头像图片过大')
