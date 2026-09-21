@@ -28,3 +28,5 @@ jobs:
         with:
           name: kehua-1.13.3-ios-simulator
           path: kehua-native/ios/build/Build/Products/Debug-iphonesimulator/Kehua.app
+
+# trigger-faithful-build-20260922
