@@ -31,6 +31,8 @@ jobs:
             adb install -r kehua-native/android/app/build/outputs/apk/debug/app-debug.apk
             adb shell am start -W -n com.app.tideswing.qa/com.kehua.revival.MainActivity --ez qa_auto_login true > /tmp/am-start.txt
             sleep 8
+            adb shell input tap 320 910 || true
+            sleep 3
             adb shell pidof com.app.tideswing.qa > /tmp/pid.txt
             test -s /tmp/pid.txt
             adb exec-out screencap -p > /tmp/kehua-runtime.png
@@ -43,3 +45,5 @@ jobs:
             kehua-native/android/app/build/outputs/apk/release/app-release.apk
             /tmp/kehua-runtime.png
             /tmp/am-start.txt
+
+# trigger-clean-screenshot-20260922
