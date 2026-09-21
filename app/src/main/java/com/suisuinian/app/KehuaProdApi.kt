@@ -175,7 +175,7 @@ class KehuaProdApi(context: Context, private val prefSuffix:String="") {
 
     private fun http(method:String,path:String,body:JSONObject?,auth:Boolean):String{
         val c=(URL(KEHUA_BASE+path).openConnection() as HttpURLConnection).apply{
-            requestMethod=method;connectTimeout=12000;readTimeout=20000
+            requestMethod=method;connectTimeout=45000;readTimeout=90000
             setRequestProperty("Accept","application/json")
             if(auth && token.isNotBlank())setRequestProperty("Authorization","Bearer $token")
             if(body!=null){doOutput=true;setRequestProperty("Content-Type","application/json")}
