@@ -3,7 +3,7 @@ import os
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
-from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, String, Text, UniqueConstraint, create_engine
+from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, String, Text, UniqueConstraint, create_engine, inspect, text
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, sessionmaker
 
 UTC=timezone.utc
@@ -21,7 +21,7 @@ class User(Base):
 class SessionToken(Base):
  __tablename__='sessions';id:Mapped[int]=mapped_column(Integer,primary_key=True);user_id:Mapped[int]=mapped_column(ForeignKey('users.id',ondelete='CASCADE'),index=True);token_hash:Mapped[str]=mapped_column(String(64),unique=True,index=True);created_at:Mapped[datetime]=mapped_column(DateTime(timezone=True),default=lambda:datetime.now(UTC))
 class Post(Base):
- __tablename__='posts';id:Mapped[int]=mapped_column(Integer,primary_key=True);user_id:Mapped[int]=mapped_column(ForeignKey('users.id',ondelete='CASCADE'),index=True);body:Mapped[str]=mapped_column(Text);image_data:Mapped[Optional[str]]=mapped_column(Text,nullable=True);created_at:Mapped[datetime]=mapped_column(DateTime(timezone=True),default=lambda:datetime.now(UTC),index=True);active:Mapped[bool]=mapped_column(Boolean,default=True)
+ __tablename__='posts';id:Mapped[int]=mapped_column(Integer,primary_key=True);user_id:Mapped[int]=mapped_column(ForeignKey('users.id',ondelete='CASCADE'),index=True);body:Mapped[str]=mapped_column(Text);image_data:Mapped[Optional[str]]=mapped_column(Text,nullable=True);is_private:Mapped[bool]=mapped_column(Boolean,default=False);created_at:Mapped[datetime]=mapped_column(DateTime(timezone=True),default=lambda:datetime.now(UTC),index=True);active:Mapped[bool]=mapped_column(Boolean,default=True)
 class Match(Base):
  __tablename__='matches';__table_args__=(UniqueConstraint('source_post_id','target_post_id',name='uq_match_pair'),);id:Mapped[int]=mapped_column(Integer,primary_key=True);source_post_id:Mapped[int]=mapped_column(ForeignKey('posts.id',ondelete='CASCADE'),index=True);target_post_id:Mapped[int]=mapped_column(ForeignKey('posts.id',ondelete='CASCADE'),index=True);score:Mapped[float]=mapped_column(Float);skipped:Mapped[bool]=mapped_column(Boolean,default=False);lit:Mapped[bool]=mapped_column(Boolean,default=False);created_at:Mapped[datetime]=mapped_column(DateTime(timezone=True),default=lambda:datetime.now(UTC))
 class Conversation(Base):
@@ -41,3 +41,8 @@ class Block(Base):
 class Report(Base):
  __tablename__='reports';id:Mapped[int]=mapped_column(Integer,primary_key=True);reporter_id:Mapped[int]=mapped_column(ForeignKey('users.id',ondelete='CASCADE'),index=True);target_user_id:Mapped[int]=mapped_column(ForeignKey('users.id',ondelete='CASCADE'),index=True);reason:Mapped[str]=mapped_column(String(160));created_at:Mapped[datetime]=mapped_column(DateTime(timezone=True),default=lambda:datetime.now(UTC))
 Base.metadata.create_all(engine)
+def _migrate_existing():
+ cols={c['name'] for c in inspect(engine).get_columns('posts')}
+ if 'is_private' not in cols:
+  with engine.begin() as conn: conn.execute(text("ALTER TABLE posts ADD COLUMN is_private BOOLEAN NOT NULL DEFAULT FALSE"))
+_migrate_existing()

@@ -79,7 +79,8 @@ def insert_match(db,s,t,score):
  if db.scalar(select(Match).where(Match.source_post_id==s.id,Match.target_post_id==t.id)):return False
  db.add(Match(source_post_id=s.id,target_post_id=t.id,score=score));return True
 def refresh_matches_around(db,new,limit=6):
- candidates=db.scalars(select(Post).where(Post.active==True,Post.user_id!=new.user_id).order_by(Post.created_at.desc()).limit(240)).all();ranked=sorted([(pair_score(new,p),p) for p in candidates if not blocked_pair(db,new.user_id,p.user_id)],key=lambda x:x[0],reverse=True);seen=set();chosen=[]
+ if new.is_private:return
+ candidates=db.scalars(select(Post).where(Post.active==True,Post.is_private==False,Post.user_id!=new.user_id).order_by(Post.created_at.desc()).limit(240)).all();ranked=sorted([(pair_score(new,p),p) for p in candidates if not blocked_pair(db,new.user_id,p.user_id)],key=lambda x:x[0],reverse=True);seen=set();chosen=[]
  for score,p in ranked:
   if score<MATCH_THRESHOLD or p.user_id in seen:continue
   seen.add(p.user_id);chosen.append((score,p))
@@ -88,7 +89,7 @@ def refresh_matches_around(db,new,limit=6):
  for score,p in ranked[:80]:
   if score>=MATCH_THRESHOLD:insert_match(db,p,new,score)
  db.commit()
-def serialize_post(p,count=0):return {'id':p.id,'body':p.body,'image_data':p.image_data,'created_at':p.created_at.isoformat(),'resonance_count':count}
+def serialize_post(p,count=0):return {'id':p.id,'body':p.body,'image_data':p.image_data,'is_private':p.is_private,'created_at':p.created_at.isoformat(),'resonance_count':count}
 def conversation_for(db,a,b):
  low,high=sorted([a,b]);c=db.scalar(select(Conversation).where(Conversation.user_low==low,Conversation.user_high==high))
  if not c:c=Conversation(user_low=low,user_high=high);db.add(c);db.flush()

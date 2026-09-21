@@ -13,7 +13,7 @@ from .core import *
 ROOT=Path(__file__).resolve().parent
 app=FastAPI(title='说想说的话');app.mount('/static',StaticFiles(directory=ROOT/'static'),name='static')
 class AuthIn(BaseModel):username:str=Field(min_length=3,max_length=24);password:str=Field(min_length=6,max_length=72)
-class PostIn(BaseModel):body:str=Field(min_length=1,max_length=1200);image_data:Optional[str]=None
+class PostIn(BaseModel):body:str=Field(min_length=1,max_length=1200);image_data:Optional[str]=None;is_private:bool=False
 class MessageIn(BaseModel):body:str=Field(min_length=1,max_length=2000)
 class ProfileIn(BaseModel):nickname:str=Field(min_length=1,max_length=20);bio:str=Field(default='',max_length=120);avatar_data:Optional[str]=None
 class ReportIn(BaseModel):reason:str=Field(min_length=2,max_length=160)
@@ -59,7 +59,7 @@ def update_me(p:ProfileIn,user:User=Depends(current_user),db:Session=Depends(db_
 @app.post('/api/posts')
 def create_post(p:PostIn,user:User=Depends(current_user),db:Session=Depends(db_session)):
  if p.image_data and (not p.image_data.startswith('data:image/') or len(p.image_data)>MAX_IMAGE_CHARS):raise HTTPException(400,'图片过大')
- q=Post(user_id=user.id,body=p.body.strip(),image_data=p.image_data);db.add(q);db.commit();db.refresh(q);refresh_matches_around(db,q);cnt=len(db.scalars(select(Match).where(Match.source_post_id==q.id,Match.skipped==False)).all());return serialize_post(q,cnt)
+ q=Post(user_id=user.id,body=p.body.strip(),image_data=p.image_data,is_private=p.is_private);db.add(q);db.commit();db.refresh(q);refresh_matches_around(db,q);cnt=len(db.scalars(select(Match).where(Match.source_post_id==q.id,Match.skipped==False)).all());return serialize_post(q,cnt)
 @app.get('/api/posts/mine')
 def my_posts(user:User=Depends(current_user),db:Session=Depends(db_session)):
  rows=db.scalars(select(Post).where(Post.user_id==user.id,Post.active==True).order_by(Post.created_at.desc())).all();return [serialize_post(p,len(db.scalars(select(Match).where(Match.source_post_id==p.id,Match.skipped==False)).all())) for p in rows]
@@ -149,11 +149,19 @@ def accept_friend(rid:int,user:User=Depends(current_user),db:Session=Depends(db_
 @app.get('/api/friend-requests')
 def requests(user:User=Depends(current_user),db:Session=Depends(db_session)):
  return [{'id':r.id,'user':user_json(db.get(User,r.sender_id)),'created_at':r.created_at.isoformat()} for r in db.scalars(select(FriendRequest).where(FriendRequest.receiver_id==user.id,FriendRequest.status=='pending').order_by(FriendRequest.created_at.desc())).all()]
+@app.get('/api/friends')
+def friends(user:User=Depends(current_user),db:Session=Depends(db_session)):
+ out=[]
+ for f in db.scalars(select(Friendship).where(or_(Friendship.user_low==user.id,Friendship.user_high==user.id))).all():
+  oid=f.user_high if f.user_low==user.id else f.user_low
+  o=db.get(User,oid)
+  if o and not blocked_pair(db,user.id,oid):out.append(user_json(o))
+ return out
 @app.get('/api/friends/latest')
 def friends_latest(user:User=Depends(current_user),db:Session=Depends(db_session)):
  out=[]
  for f in db.scalars(select(Friendship).where(or_(Friendship.user_low==user.id,Friendship.user_high==user.id))).all():
-  oid=f.user_high if f.user_low==user.id else f.user_low;u=db.get(User,oid);p=db.scalar(select(Post).where(Post.user_id==oid,Post.active==True).order_by(Post.created_at.desc()).limit(1))
+  oid=f.user_high if f.user_low==user.id else f.user_low;u=db.get(User,oid);p=db.scalar(select(Post).where(Post.user_id==oid,Post.active==True,Post.is_private==False).order_by(Post.created_at.desc()).limit(1))
   if u and p:out.append({'user':user_json(u),'post':serialize_post(p)})
  return out[:12]
 @app.post('/api/users/{uid}/block')
