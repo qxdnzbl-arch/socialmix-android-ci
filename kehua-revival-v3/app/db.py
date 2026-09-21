@@ -17,7 +17,7 @@ engine=create_engine(DB_URL,connect_args={'check_same_thread':False} if DB_URL.s
 SessionLocal=sessionmaker(bind=engine,autoflush=False,expire_on_commit=False)
 class Base(DeclarativeBase): pass
 class User(Base):
- __tablename__='users';id:Mapped[int]=mapped_column(Integer,primary_key=True);username:Mapped[Optional[str]]=mapped_column(String(32),unique=True,index=True,nullable=True);password_hash:Mapped[Optional[str]]=mapped_column(String(180),nullable=True);nickname:Mapped[str]=mapped_column(String(40));avatar_seed:Mapped[str]=mapped_column(String(24));avatar_data:Mapped[Optional[str]]=mapped_column(Text,nullable=True);bio:Mapped[str]=mapped_column(String(140),default='');is_demo:Mapped[bool]=mapped_column(Boolean,default=False);created_at:Mapped[datetime]=mapped_column(DateTime(timezone=True),default=lambda:datetime.now(UTC))
+ __tablename__='users';id:Mapped[int]=mapped_column(Integer,primary_key=True);username:Mapped[Optional[str]]=mapped_column(String(32),unique=True,index=True,nullable=True);password_hash:Mapped[Optional[str]]=mapped_column(String(180),nullable=True);recovery_hash:Mapped[Optional[str]]=mapped_column(String(64),nullable=True);nickname:Mapped[str]=mapped_column(String(40));avatar_seed:Mapped[str]=mapped_column(String(24));avatar_data:Mapped[Optional[str]]=mapped_column(Text,nullable=True);bio:Mapped[str]=mapped_column(String(140),default='');is_demo:Mapped[bool]=mapped_column(Boolean,default=False);created_at:Mapped[datetime]=mapped_column(DateTime(timezone=True),default=lambda:datetime.now(UTC))
 class SessionToken(Base):
  __tablename__='sessions';id:Mapped[int]=mapped_column(Integer,primary_key=True);user_id:Mapped[int]=mapped_column(ForeignKey('users.id',ondelete='CASCADE'),index=True);token_hash:Mapped[str]=mapped_column(String(64),unique=True,index=True);created_at:Mapped[datetime]=mapped_column(DateTime(timezone=True),default=lambda:datetime.now(UTC))
 class Post(Base):
@@ -42,7 +42,9 @@ class Report(Base):
  __tablename__='reports';id:Mapped[int]=mapped_column(Integer,primary_key=True);reporter_id:Mapped[int]=mapped_column(ForeignKey('users.id',ondelete='CASCADE'),index=True);target_user_id:Mapped[int]=mapped_column(ForeignKey('users.id',ondelete='CASCADE'),index=True);reason:Mapped[str]=mapped_column(String(160));created_at:Mapped[datetime]=mapped_column(DateTime(timezone=True),default=lambda:datetime.now(UTC))
 Base.metadata.create_all(engine)
 def _migrate_existing():
- cols={c['name'] for c in inspect(engine).get_columns('posts')}
- if 'is_private' not in cols:
-  with engine.begin() as conn: conn.execute(text("ALTER TABLE posts ADD COLUMN is_private BOOLEAN NOT NULL DEFAULT FALSE"))
+ post_cols={c['name'] for c in inspect(engine).get_columns('posts')}
+ user_cols={c['name'] for c in inspect(engine).get_columns('users')}
+ with engine.begin() as conn:
+  if 'is_private' not in post_cols: conn.execute(text("ALTER TABLE posts ADD COLUMN is_private BOOLEAN NOT NULL DEFAULT FALSE"))
+  if 'recovery_hash' not in user_cols: conn.execute(text("ALTER TABLE users ADD COLUMN recovery_hash VARCHAR(64)"))
 _migrate_existing()
