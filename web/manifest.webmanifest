@@ -1,0 +1,11 @@
+{
+  "name":"可话",
+  "short_name":"可话",
+  "description":"想说的话，都聊得来。",
+  "start_url":"/",
+  "scope":"/",
+  "display":"standalone",
+  "background_color":"#f7f2ef",
+  "theme_color":"#f7f2ef",
+  "lang":"zh-CN"
+}
