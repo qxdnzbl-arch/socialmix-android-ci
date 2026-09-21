@@ -27,7 +27,8 @@ jobs:
         run: gradle :app:assembleRelease :app:assembleDebug --stacktrace
       - name: verify production backend embedded
         run: |
-          aapt dump badging kehua-native/android/app/build/outputs/apk/release/app-release.apk | grep "package: name='com.app.tideswing'"
+          AAPT="$(find "$ANDROID_HOME/build-tools" -type f -name aapt | sort -V | tail -1)"
+          "$AAPT" dump badging kehua-native/android/app/build/outputs/apk/release/app-release.apk | grep "package: name='com.app.tideswing'"
           unzip -p kehua-native/android/app/build/outputs/apk/release/app-release.apk classes.dex | strings | grep -F 'https://kehua-api-production.up.railway.app'
           ! unzip -p kehua-native/android/app/build/outputs/apk/release/app-release.apk classes.dex | strings | grep -E 'onrender\.com|render\.com'
       - uses: reactivecircus/android-emulator-runner@v2
@@ -57,4 +58,5 @@ jobs:
 
 
 
-# trigger-debug-visual-acceptance-20260922
+
+# trigger-debug-visual-acceptance-20260922b
