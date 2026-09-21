@@ -65,8 +65,8 @@ jobs:
             sleep 4
             adb shell pidof com.kehua.revival | tee /tmp/pid.txt
             test -s /tmp/pid.txt
-            adb shell uiautomator dump /sdcard/window.xml
-            adb pull /sdcard/window.xml /tmp/window.xml
+            adb shell uiautomator dump /data/local/tmp/window.xml
+            adb pull /data/local/tmp/window.xml /tmp/window.xml
             adb exec-out screencap -p > /tmp/kehua-runtime.png
             grep -q 'com.kehua.revival' /tmp/window.xml
             ! adb logcat -d | grep -E 'FATAL EXCEPTION.*com.kehua.revival|Process: com.kehua.revival.*FATAL'
