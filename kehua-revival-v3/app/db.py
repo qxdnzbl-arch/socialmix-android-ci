@@ -8,7 +8,9 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, sessionmaker
 
 UTC=timezone.utc
 ROOT=Path(__file__).resolve().parent
-DB_URL=os.environ.get('DATABASE_URL',f"sqlite:///{(ROOT.parent/'data'/'kehua.db').as_posix()}")
+DATA_DIR=ROOT.parent/'data'
+DATA_DIR.mkdir(parents=True,exist_ok=True)
+DB_URL=os.environ.get('DATABASE_URL',f"sqlite:///{(DATA_DIR/'kehua.db').as_posix()}")
 if DB_URL.startswith('postgres://'): DB_URL='postgresql+psycopg://'+DB_URL[len('postgres://'):]
 elif DB_URL.startswith('postgresql://') and '+psycopg' not in DB_URL: DB_URL='postgresql+psycopg://'+DB_URL[len('postgresql://'):]
 engine=create_engine(DB_URL,connect_args={'check_same_thread':False} if DB_URL.startswith('sqlite') else {},pool_pre_ping=True)
