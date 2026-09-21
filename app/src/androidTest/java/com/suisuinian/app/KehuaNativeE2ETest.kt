@@ -18,6 +18,9 @@ class KehuaNativeE2ETest {
   val b=KehuaProdApi(ContextWrapper(base),"_qa_b_"+suffix)
   val loginA="qa"+suffix+"a"; val loginB="qa"+suffix+"b"; val pw="Qa_"+suffix+"_pass"
   try{
+   val health=a.health()
+   assertTrue("STEP_HEALTH: "+health.exceptionOrNull()?.message,health.isSuccess)
+   assertEquals("STEP_BACKEND_NOT_PERSISTENT","postgres",health.getOrThrow())
    val ra=a.register(loginA,pw,"验收A")
    assertTrue("STEP_A_REGISTER: "+ra.exceptionOrNull()?.message,ra.isSuccess)
    val rb=b.register(loginB,pw,"验收B")
