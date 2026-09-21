@@ -1,6 +1,1 @@
-<resources>
-    <string name="app_name">可话·重生</string>
-    <string name="firebase_api_key"></string>
-    <string name="firebase_app_id"></string>
-    <string name="firebase_project_id"></string>
-</resources>
+<resources>\n    <string name="app_name">可话</string>\n</resources>\n
