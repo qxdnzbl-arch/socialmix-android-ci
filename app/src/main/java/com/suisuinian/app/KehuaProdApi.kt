@@ -174,18 +174,37 @@ class KehuaProdApi(context: Context, private val prefSuffix:String="") {
         }}
 
     private fun http(method:String,path:String,body:JSONObject?,auth:Boolean):String{
-        val c=(URL(KEHUA_BASE+path).openConnection() as HttpURLConnection).apply{
-            requestMethod=method;connectTimeout=45000;readTimeout=90000
-            setRequestProperty("Accept","application/json")
-            if(auth && token.isNotBlank())setRequestProperty("Authorization","Bearer $token")
-            if(body!=null){doOutput=true;setRequestProperty("Content-Type","application/json")}
+        var lastError:Throwable?=null
+        repeat(3){attempt->
+            try{
+                val c=(URL(KEHUA_BASE+path).openConnection() as HttpURLConnection).apply{
+                    requestMethod=method;connectTimeout=45000;readTimeout=90000
+                    setRequestProperty("Accept","application/json")
+                    if(auth && token.isNotBlank())setRequestProperty("Authorization","Bearer $token")
+                    if(body!=null){doOutput=true;setRequestProperty("Content-Type","application/json")}
+                }
+                if(body!=null)c.outputStream.use{it.write(body.toString().toByteArray())}
+                val code=c.responseCode
+                val raw=(if(code in 200..299)c.inputStream else c.errorStream)?.bufferedReader()?.use{it.readText()}.orEmpty()
+                c.disconnect()
+                if(code in 200..299)return raw
+                val error=IllegalStateException(parseError(raw,"请求失败 $code"))
+                lastError=error
+                if(code in setOf(429,502,503,504) && attempt<2){
+                    Thread.sleep(1200L*(attempt+1))
+                    return@repeat
+                }
+                throw error
+            }catch(e:java.io.IOException){
+                lastError=e
+                if(attempt<2){
+                    Thread.sleep(1200L*(attempt+1))
+                    return@repeat
+                }
+                throw IllegalStateException("网络暂时不可用，请稍后重试",e)
+            }
         }
-        if(body!=null)c.outputStream.use{it.write(body.toString().toByteArray())}
-        val code=c.responseCode
-        val raw=(if(code in 200..299)c.inputStream else c.errorStream)?.bufferedReader()?.use{it.readText()}.orEmpty()
-        c.disconnect()
-        if(code !in 200..299)throw IllegalStateException(parseError(raw,"请求失败 $code"))
-        return raw
+        throw IllegalStateException(lastError?.message?:"请求失败",lastError)
     }
 
     private fun JSONObject.reqString(k:String)=when(val v=opt(k)){
