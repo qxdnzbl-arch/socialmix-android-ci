@@ -1,0 +1,30 @@
+name: kehua-native-android
+on:
+  workflow_dispatch:
+  push:
+    branches: [kehua-v1133-native-cleanroom]
+    paths:
+      - 'kehua_native_bundle_00.b64'
+      - 'kehua-native-bootstrap.sh'
+      - '.github/workflows/kehua-native-android.yml'
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: unpack source
+        run: bash kehua-native-bootstrap.sh
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.10.2'
+      - name: build APK
+        working-directory: kehua-native/android
+        run: gradle :app:assembleRelease --stacktrace
+      - uses: actions/upload-artifact@v4
+        with:
+          name: kehua-1.13.3-android-apk
+          path: kehua-native/android/app/build/outputs/apk/release/app-release.apk
