@@ -1,0 +1,63 @@
+name: Kehua Native Railway Production
+
+on:
+  push:
+    branches: [kehua-native-railway-production]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  android-native:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Unpack native source
+        run: |
+          bash kehua-native-bootstrap.sh
+          find kehua-native/android -maxdepth 3 -type f | sort | head -120
+          test -f kehua-native/android/app/src/main/java/com/kehua/revival/MainActivity.java
+          ! grep -R "android.webkit.WebView\|<WebView" kehua-native/android/app/src/main kehua-native/android/app/src/main/AndroidManifest.xml
+
+      - name: Inspect production endpoint
+        run: |
+          grep -R "railway.app\|http://\|https://" kehua-native/android/app/src/main || true
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+
+      - name: Build native Android
+        run: |
+          cd kehua-native/android
+          if [ -x ./gradlew ]; then
+            ./gradlew --no-daemon assembleDebug assembleRelease
+          else
+            gradle --no-daemon assembleDebug assembleRelease
+          fi
+
+      - name: Package source and APKs
+        run: |
+          mkdir -p deliverable
+          find kehua-native/android/app/build/outputs/apk -type f -name '*.apk' -print -exec cp {} deliverable/ \;
+          tar -czf deliverable/Kehua-Native-Android-Source.tar.gz kehua-native/android
+          sha256sum deliverable/* > deliverable/SHA256.txt
+          ls -lah deliverable
+
+      - name: Upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: Kehua-Native-Railway-Android
+          path: deliverable/
+          if-no-files-found: error
+          retention-days: 30
