@@ -35,7 +35,13 @@ public class MainActivity extends Activity {
     dark=getPreferences(MODE_PRIVATE).getBoolean("dark",false);
     palette();
     shell();
-    if(token.isEmpty()) showLogin(); else { loadMeSilently(); showNow(); }
+    if(BuildConfig.DEBUG && getIntent().getBooleanExtra("qa_auto_login",false)){qaAutoLogin();}
+    else if(token.isEmpty()) showLogin(); else { loadMeSilently(); showNow(); }
+  }
+
+  void qaAutoLogin(){
+    String raw=String.valueOf(System.currentTimeMillis());String phone="+1555"+raw.substring(Math.max(0,raw.length()-9));
+    post("/v1/auth/request-code",obj("phone",phone),"",j->{String code=j.optString("qa_code","");if(code.isEmpty()){runOnUiThread(this::showLogin);return;}post("/v1/auth/verify-code",obj("phone",phone,"code",code),"",v->{token=v.optString("token");JSONObject u=v.optJSONObject("user");uid=u==null?"":u.optString("id");getPreferences(MODE_PRIVATE).edit().putString("token",token).putString("uid",uid).apply();runOnUiThread(this::showNow);},e->runOnUiThread(this::showLogin));},e->runOnUiThread(this::showLogin));
   }
 
   int dp(float n){return Math.round(n*getResources().getDisplayMetrics().density);}
