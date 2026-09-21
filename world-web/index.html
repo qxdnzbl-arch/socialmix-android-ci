@@ -1,190 +1,336 @@
 <!doctype html>
 <html lang="zh-CN">
 <head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no" />
-<title>小世界 · 第一段</title>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no"/>
+<meta name="theme-color" content="#dff4ee"/>
+<title>小世界 · 微光原野</title>
 <style>
-:root{--ink:#35423e;--paper:rgba(255,255,255,.82);--line:rgba(67,93,84,.12)}
-*{box-sizing:border-box}html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#dff3eb;font-family:"Noto Serif SC","Songti SC",serif;color:var(--ink)}
-canvas{display:block;width:100%;height:100%}
-#veil{position:fixed;inset:0;display:grid;place-items:center;background:
-radial-gradient(circle at 70% 18%,rgba(255,234,244,.8),transparent 34%),
-linear-gradient(160deg,#edf9f2,#d9edf4 55%,#f6e9ef);z-index:30;transition:opacity 1.4s ease,visibility 1.4s}
-#veil.hidden{opacity:0;visibility:hidden}
-.door{width:min(78vw,340px);height:min(60vh,520px);border:1px solid rgba(255,255,255,.78);border-radius:32px 32px 18px 18px;background:linear-gradient(135deg,rgba(255,255,255,.42),rgba(225,246,238,.16));box-shadow:0 30px 90px rgba(74,116,104,.14),inset 0 0 0 1px rgba(255,255,255,.4);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:26px;backdrop-filter:blur(7px);position:relative;overflow:hidden}
-.door:before{content:"";position:absolute;width:170%;height:40%;left:-35%;top:10%;background:linear-gradient(90deg,transparent,rgba(255,255,255,.55),transparent);transform:rotate(-14deg)}
-.door h1{font-size:24px;font-weight:500;letter-spacing:.18em;margin:0;z-index:1}
-button{font:inherit;color:inherit}
-.primary{border:1px solid rgba(73,108,96,.18);background:rgba(255,255,255,.72);border-radius:999px;padding:14px 24px;min-height:48px;box-shadow:0 10px 30px rgba(74,116,104,.1)}
-#top{position:fixed;top:max(16px,env(safe-area-inset-top));left:16px;right:16px;display:flex;justify-content:space-between;align-items:center;z-index:10;pointer-events:none}
-.pill{pointer-events:auto;border:1px solid var(--line);background:var(--paper);backdrop-filter:blur(12px);border-radius:999px;padding:10px 14px;box-shadow:0 9px 24px rgba(54,90,78,.08);font-size:13px}
-#status{max-width:62vw;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-#hint{position:fixed;left:50%;top:86px;transform:translateX(-50%);z-index:8;background:rgba(255,255,255,.7);padding:8px 14px;border-radius:999px;font-size:12px;opacity:.9;transition:opacity .5s}
-#thoughtBtn{position:fixed;right:18px;bottom:calc(26px + env(safe-area-inset-bottom));z-index:12;border:1px solid var(--line);width:54px;height:54px;border-radius:50%;background:rgba(255,255,255,.82);box-shadow:0 10px 30px rgba(54,90,78,.12);font-size:22px}
-#panel{position:fixed;left:12px;right:12px;bottom:calc(94px + env(safe-area-inset-bottom));z-index:20;background:rgba(255,255,255,.91);border:1px solid var(--line);border-radius:24px;padding:18px;box-shadow:0 24px 70px rgba(54,90,78,.18);transform:translateY(140%);transition:transform .45s cubic-bezier(.2,.8,.2,1)}
+:root{
+  --ink:#3d4b48;
+  --glass:rgba(255,255,255,.60);
+  --glass2:rgba(255,255,255,.76);
+  --line:rgba(76,105,97,.10);
+}
+*{box-sizing:border-box}
+html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#dff4ee;color:var(--ink);font-family:"Noto Serif SC","Songti SC","STSong",serif}
+canvas{position:fixed;inset:0;width:100%;height:100%;display:block;touch-action:none}
+button,textarea{font:inherit;color:inherit}
+button{cursor:pointer}
+#veil{position:fixed;inset:0;z-index:40;display:grid;place-items:center;overflow:hidden;background:
+radial-gradient(circle at 76% 18%,rgba(255,226,239,.72),transparent 30%),
+radial-gradient(circle at 22% 76%,rgba(220,238,255,.72),transparent 33%),
+linear-gradient(155deg,#effaf6 0%,#dff3ee 48%,#f7eef5 100%);transition:opacity 1.1s ease,visibility 1.1s}
+#veil:before,#veil:after{content:"";position:absolute;border-radius:50%;filter:blur(2px);opacity:.7;animation:float 7s ease-in-out infinite}
+#veil:before{width:120px;height:120px;background:rgba(255,255,255,.52);left:8%;top:20%}
+#veil:after{width:180px;height:180px;background:rgba(255,238,247,.45);right:-30px;bottom:12%;animation-delay:-2s}
+#veil.hidden{opacity:0;visibility:hidden;pointer-events:none}
+.entry{width:min(86vw,410px);text-align:center;position:relative;padding:44px 34px 38px;border-radius:54px 54px 28px 28px;background:linear-gradient(155deg,rgba(255,255,255,.46),rgba(255,255,255,.18));border:1px solid rgba(255,255,255,.72);box-shadow:0 30px 90px rgba(93,131,120,.12),inset 0 1px rgba(255,255,255,.72);backdrop-filter:blur(10px)}
+.entry:before{content:"";position:absolute;left:50%;top:-78px;transform:translateX(-50%);width:148px;height:148px;border-radius:50% 50% 46% 46%;background:
+radial-gradient(circle at 38% 34%,#fff 0 7%,transparent 8%),
+radial-gradient(circle at 62% 34%,#fff 0 7%,transparent 8%),
+linear-gradient(150deg,#cfe9e0,#e8dff1);box-shadow:0 18px 42px rgba(93,131,120,.15)}
+.entry:after{content:"✦";position:absolute;left:50%;top:-24px;transform:translateX(-50%);font-size:26px;color:rgba(255,255,255,.94)}
+.entry h1{font-size:24px;font-weight:500;letter-spacing:.20em;margin:32px 0 10px}
+.entry p{font-size:13px;line-height:1.9;opacity:.65;margin:0 0 26px}
+.primary{border:0;background:rgba(255,255,255,.82);min-height:50px;padding:0 26px;border-radius:999px;box-shadow:0 12px 34px rgba(88,121,112,.10);font-size:14px;letter-spacing:.10em}
+#hud{position:fixed;inset:0;z-index:10;pointer-events:none}
+.soft{pointer-events:auto;border:1px solid var(--line);background:var(--glass);backdrop-filter:blur(10px);box-shadow:0 10px 28px rgba(68,99,90,.08);border-radius:999px}
+#leave{position:absolute;right:16px;top:max(16px,env(safe-area-inset-top));padding:10px 14px;min-height:44px;border:0;font-size:13px}
+#state{position:absolute;left:16px;top:max(16px,env(safe-area-inset-top));padding:10px 14px;font-size:12px;max-width:62vw;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#place{position:absolute;left:50%;top:max(69px,calc(env(safe-area-inset-top) + 64px));transform:translateX(-50%);padding:8px 13px;font-size:12px;opacity:0;transition:opacity .35s,transform .35s}
+#place.show{opacity:1;transform:translateX(-50%) translateY(3px)}
+#interaction{position:absolute;left:50%;bottom:calc(34px + env(safe-area-inset-bottom));transform:translateX(-50%) translateY(16px);border:0;padding:12px 18px;min-height:46px;font-size:13px;opacity:0;visibility:hidden;transition:.3s;white-space:nowrap}
+#interaction.show{opacity:1;visibility:visible;transform:translateX(-50%) translateY(0)}
+#thoughtBtn{position:absolute;right:18px;bottom:calc(24px + env(safe-area-inset-bottom));width:58px;height:58px;border-radius:50%;border:1px solid rgba(255,255,255,.72);background:radial-gradient(circle at 36% 30%,#fff,#f4e7f0 68%,#ddeee8);font-size:22px;box-shadow:0 14px 38px rgba(72,105,95,.12)}
+#joystick{position:absolute;left:20px;bottom:calc(24px + env(safe-area-inset-bottom));width:116px;height:116px;border-radius:50%;border:1px solid rgba(255,255,255,.52);background:rgba(255,255,255,.13);box-shadow:inset 0 0 35px rgba(255,255,255,.10);pointer-events:auto;touch-action:none;display:none}
+#stick{position:absolute;left:34px;top:34px;width:48px;height:48px;border-radius:50%;background:radial-gradient(circle at 35% 28%,#fff,#edf4f1);box-shadow:0 8px 22px rgba(75,107,97,.12)}
+#panel{position:fixed;left:12px;right:12px;bottom:calc(92px + env(safe-area-inset-bottom));z-index:30;border:1px solid rgba(255,255,255,.72);background:rgba(251,254,252,.90);backdrop-filter:blur(16px);border-radius:28px;padding:18px;box-shadow:0 28px 80px rgba(65,96,87,.17);transform:translateY(150%);transition:transform .48s cubic-bezier(.2,.8,.2,1)}
 #panel.show{transform:translateY(0)}
-#panel textarea{width:100%;min-height:88px;border:0;outline:0;resize:none;background:rgba(233,246,240,.72);border-radius:16px;padding:14px;font:inherit;color:inherit}
-.row{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap}.small{border:1px solid var(--line);background:#fff;border-radius:999px;padding:10px 14px;min-height:44px}
-#reflection{margin-top:12px;padding:12px 14px;border-radius:16px;background:linear-gradient(135deg,rgba(238,249,244,.9),rgba(244,240,250,.9));line-height:1.7;font-size:14px;display:none}
-#joystick{position:fixed;left:20px;bottom:calc(28px + env(safe-area-inset-bottom));z-index:11;width:112px;height:112px;border-radius:50%;background:rgba(255,255,255,.17);border:1px solid rgba(255,255,255,.44);touch-action:none;display:none}
-#knob{position:absolute;width:48px;height:48px;border-radius:50%;left:32px;top:32px;background:rgba(255,255,255,.72);box-shadow:0 6px 16px rgba(57,86,77,.12)}
-#zone{position:fixed;left:50%;bottom:calc(34px + env(safe-area-inset-bottom));transform:translateX(-50%);z-index:9;background:rgba(255,255,255,.7);border:1px solid var(--line);border-radius:999px;padding:10px 15px;font-size:12px;opacity:0;transition:opacity .3s}
-#zone.on{opacity:1}
-@media(max-width:700px){#joystick{display:block}#hint{top:76px}.door h1{font-size:21px}}
-@media(prefers-reduced-motion:reduce){*{transition:none!important}}
+#panel .title{font-size:15px;margin:0 0 10px}
+#panel .sub{font-size:12px;opacity:.56;margin-bottom:12px}
+#thought{width:100%;min-height:96px;border:0;outline:0;resize:none;background:linear-gradient(145deg,rgba(232,247,240,.86),rgba(245,238,247,.72));border-radius:20px;padding:14px 15px;font-size:15px;line-height:1.7}
+.actions{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap}
+.chip{border:1px solid var(--line);background:#fff;border-radius:999px;min-height:44px;padding:10px 14px}
+#reflection{display:none;margin-top:12px;padding:13px 14px;border-radius:18px;background:linear-gradient(145deg,rgba(237,249,243,.94),rgba(244,239,249,.94));font-size:14px;line-height:1.8}
+#tinyGuide{position:fixed;left:50%;bottom:calc(160px + env(safe-area-inset-bottom));z-index:9;transform:translateX(-50%);font-size:11px;letter-spacing:.08em;opacity:.55;background:rgba(255,255,255,.44);padding:7px 11px;border-radius:999px;pointer-events:none;transition:opacity .6s}
+@keyframes float{50%{transform:translateY(-10px)}}
+@media(max-width:760px){#joystick{display:block}#tinyGuide{bottom:calc(153px + env(safe-area-inset-bottom))}}
+@media(min-width:761px){#tinyGuide{bottom:34px}}
+@media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 </style>
 </head>
 <body>
-<div id="veil"><div class="door"><h1>进来待一会儿。</h1><button class="primary" id="enter">推门进去</button></div></div>
-<div id="top">
-  <div class="pill" id="status">今天：随便看看</div>
-  <button class="pill" id="outside">门外</button>
+<div id="veil">
+  <div class="entry">
+    <h1>微光原野</h1>
+    <p>这里没有任务。<br>想走就走，想坐就坐。</p>
+    <button class="primary" id="enter">走进去</button>
+  </div>
 </div>
-<div id="hint">WASD / 方向键移动 · 手机拖动左下角</div>
-<div id="zone"></div>
-<button id="thoughtBtn" aria-label="碎碎念">✦</button>
-<div id="joystick"><div id="knob"></div></div>
+
+<div id="hud">
+  <div class="soft" id="state">此刻：只是来待一会儿</div>
+  <button class="soft" id="leave">门外</button>
+  <div class="soft" id="place"></div>
+  <button class="soft" id="interaction"></button>
+  <button id="thoughtBtn" aria-label="碎碎念">✦</button>
+  <div id="joystick"><div id="stick"></div></div>
+</div>
+<div id="tinyGuide">拖动左下角走动 · 靠近地方会出现互动</div>
+
 <div id="panel">
-  <div style="font-size:15px;margin-bottom:10px">现在脑子里有什么，就放在这里。</div>
-  <textarea id="thought" placeholder="不用整理，随便说。"></textarea>
-  <div class="row">
-    <button class="small" id="sendThought">让它先听懂我</button>
-    <button class="small" id="closePanel">收起来</button>
+  <div class="title">把脑子里这句话放下来</div>
+  <div class="sub">不用整理，也不用想清楚。</div>
+  <textarea id="thought" placeholder="现在想到什么，就说什么。"></textarea>
+  <div class="actions">
+    <button class="chip" id="sendThought">让它先听懂我</button>
+    <button class="chip" id="closePanel">先收起来</button>
   </div>
   <div id="reflection"></div>
 </div>
 
 <script type="importmap">
-{"imports":{"three":"https://unpkg.com/three@0.169.0/build/three.module.js","three/addons/":"https://unpkg.com/three@0.169.0/examples/jsm/"}}
+{"imports":{"three":"https://unpkg.com/three@0.169.0/build/three.module.js"}}
 </script>
 <script type="module">
 import * as THREE from 'three';
 
 const scene=new THREE.Scene();
-scene.background=new THREE.Color(0xdff3eb);
-scene.fog=new THREE.FogExp2(0xdff3eb,0.025);
-const camera=new THREE.PerspectiveCamera(52,innerWidth/innerHeight,.1,180);
-camera.position.set(0,6,12);
+const camera=new THREE.PerspectiveCamera(46,innerWidth/innerHeight,.1,160);
 const renderer=new THREE.WebGLRenderer({antialias:true,alpha:true});
-renderer.setPixelRatio(Math.min(devicePixelRatio,2));
 renderer.setSize(innerWidth,innerHeight);
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));
 renderer.shadowMap.enabled=true;
 renderer.shadowMap.type=THREE.PCFSoftShadowMap;
 renderer.outputColorSpace=THREE.SRGBColorSpace;
+renderer.toneMapping=THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure=1.1;
 document.body.prepend(renderer.domElement);
 
-scene.add(new THREE.HemisphereLight(0xfaffff,0x89a88d,2.25));
-const sun=new THREE.DirectionalLight(0xfff0dc,2.8);sun.position.set(-10,18,8);sun.castShadow=true;scene.add(sun);
+// Illustrated gradient sky
+const skyGeo=new THREE.SphereGeometry(95,40,28);
+const skyMat=new THREE.ShaderMaterial({
+  side:THREE.BackSide,
+  uniforms:{top:{value:new THREE.Color(0xcfe9ef)},mid:{value:new THREE.Color(0xe7f4eb)},bottom:{value:new THREE.Color(0xf8eee8)}},
+  vertexShader:`varying vec3 vP;void main(){vP=position;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0);}`,
+  fragmentShader:`uniform vec3 top;uniform vec3 mid;uniform vec3 bottom;varying vec3 vP;void main(){float h=normalize(vP).y;vec3 c=mix(mid,top,smoothstep(.0,.7,h));c=mix(bottom,c,smoothstep(-.45,.05,h));gl_FragColor=vec4(c,1.);}`
+});
+scene.add(new THREE.Mesh(skyGeo,skyMat));
+scene.fog=new THREE.Fog(0xe8f3ec,25,65);
 
-const ground=new THREE.Mesh(new THREE.CircleGeometry(52,96),new THREE.MeshStandardMaterial({color:0xcfe7d5,roughness:.98}));
-ground.rotation.x=-Math.PI/2;ground.receiveShadow=true;scene.add(ground);
+scene.add(new THREE.HemisphereLight(0xfffbf7,0x7fa68b,2.8));
+const sun=new THREE.DirectionalLight(0xffe9cf,4.0);sun.position.set(-10,18,6);sun.castShadow=true;sun.shadow.mapSize.set(1024,1024);sun.shadow.camera.left=-20;sun.shadow.camera.right=20;sun.shadow.camera.top=20;sun.shadow.camera.bottom=-20;scene.add(sun);
+const fill=new THREE.DirectionalLight(0xdde9ff,1.3);fill.position.set(12,10,-8);scene.add(fill);
 
-function mound(x,z,s,c=0xb8d8bf){
- const m=new THREE.Mesh(new THREE.SphereGeometry(s,24,16),new THREE.MeshStandardMaterial({color:c,roughness:1}));
- m.scale.y=.28;m.position.set(x,-s*.72,z);m.receiveShadow=true;scene.add(m);return m
+// soft cloud clusters
+function cloud(x,y,z,s=1){
+  const g=new THREE.Group();
+  const mat=new THREE.MeshBasicMaterial({color:0xffffff,transparent:true,opacity:.55,depthWrite:false});
+  [[0,0,0,1],[.8,.15,.1,.7],[-.75,.08,.12,.72],[.1,.28,.05,.78]].forEach(p=>{
+    const m=new THREE.Mesh(new THREE.SphereGeometry(p[3]*s,18,12),mat);m.scale.y=.58;m.position.set(p[0]*s,p[1]*s,p[2]*s);g.add(m)
+  });
+  g.position.set(x,y,z);scene.add(g);return g;
 }
-mound(-12,-7,12);mound(15,-8,14,0xc7dfc3);mound(0,17,16,0xb9d9c2);
+const clouds=[cloud(-13,10,-24,2.8),cloud(16,8,-30,2.3),cloud(3,12,-40,3.2)];
 
-const trunkMat=new THREE.MeshStandardMaterial({color:0x8f7a69,roughness:1});
-const leafMat=new THREE.MeshStandardMaterial({color:0x8fc8a1,roughness:1});
+// meadow island with soft edge
+const meadowMat=new THREE.MeshStandardMaterial({color:0xbfdcbd,roughness:.95});
+const base=new THREE.Mesh(new THREE.CylinderGeometry(21,22,1.1,72),meadowMat);base.position.y=-.6;base.receiveShadow=true;scene.add(base);
+const rim=new THREE.Mesh(new THREE.TorusGeometry(21.05,.34,12,90),new THREE.MeshStandardMaterial({color:0xd9ead0,roughness:.9}));rim.rotation.x=Math.PI/2;rim.position.y=-.05;scene.add(rim);
+
+// path
+const pathMat=new THREE.MeshStandardMaterial({color:0xe8dfc9,roughness:1});
+for(let i=0;i<18;i++){
+  const p=new THREE.Mesh(new THREE.CylinderGeometry(.78+Math.random()*.16,.82,.08,18),pathMat);
+  const t=i/17; p.position.set(Math.sin(t*5)*1.5,.03,8-t*20); p.scale.z=.72; p.rotation.y=Math.sin(t*4)*.25; p.receiveShadow=true;scene.add(p);
+}
+
+// pond
+const pond=new THREE.Mesh(new THREE.CircleGeometry(4.1,48),new THREE.MeshPhysicalMaterial({color:0xa9dbe0,roughness:.2,metalness:0,transparent:true,opacity:.82,transmission:.08}));
+pond.rotation.x=-Math.PI/2;pond.position.set(9,.02,-7);scene.add(pond);
+const pondRim=new THREE.Mesh(new THREE.TorusGeometry(4.18,.18,10,60),new THREE.MeshStandardMaterial({color:0xcbdcbf,roughness:1}));pondRim.rotation.x=Math.PI/2;pondRim.position.set(9,.05,-7);scene.add(pondRim);
+
+// trees - rounded illustrated
+const trunkMat=new THREE.MeshStandardMaterial({color:0x9c816d,roughness:1});
+const leafPalette=[0x8fc8a0,0xaad7ad,0x78b99a,0xc3dfb8];
 function tree(x,z,s=1){
- const trunk=new THREE.Mesh(new THREE.CylinderGeometry(.18*s,.26*s,2.7*s,8),trunkMat);trunk.position.set(x,1.25*s,z);trunk.castShadow=true;scene.add(trunk);
- for(let i=0;i<5;i++){const l=new THREE.Mesh(new THREE.IcosahedronGeometry(.8*s,1),leafMat);const a=i/5*Math.PI*2;l.position.set(x+Math.cos(a)*.55*s,2.65*s+Math.sin(i)*.25*s,z+Math.sin(a)*.55*s);l.castShadow=true;scene.add(l)}
+  const g=new THREE.Group();
+  const trunk=new THREE.Mesh(new THREE.CylinderGeometry(.16*s,.28*s,2.8*s,12),trunkMat);trunk.position.y=1.35*s;trunk.castShadow=true;g.add(trunk);
+  for(let i=0;i<7;i++){
+    const a=i/7*Math.PI*2;
+    const leaf=new THREE.Mesh(new THREE.SphereGeometry(.76*s,20,14),new THREE.MeshStandardMaterial({color:leafPalette[i%leafPalette.length],roughness:.92}));
+    leaf.scale.set(1,.83,1);
+    leaf.position.set(Math.cos(a)*.58*s,2.65*s+Math.sin(i*1.7)*.2*s,Math.sin(a)*.58*s);leaf.castShadow=true;g.add(leaf);
+  }
+  g.position.set(x,0,z);scene.add(g);return g
 }
-[[-10,-8,1.5],[-14,-1,1.1],[11,-10,1.35],[15,2,1.15],[8,12,1.2],[-7,15,1.25]].forEach(v=>tree(...v));
+[[-13,-10,1.6],[-16,-2,1.3],[-12,7,1.45],[15,5,1.45],[15,-13,1.5],[2,-17,1.2],[12,12,1.25],[-4,15,1.2]].forEach(v=>tree(...v));
 
-const flowerGroup=new THREE.Group();flowerGroup.position.set(-8,0,-1);scene.add(flowerGroup);
-const stemMat=new THREE.MeshStandardMaterial({color:0x6fb58a});
-for(let i=0;i<22;i++){
- const a=Math.random()*Math.PI*2,r=1.2+Math.random()*3.2,h=.6+Math.random()*.9;
- const stem=new THREE.Mesh(new THREE.CylinderGeometry(.025,.04,h,6),stemMat);stem.position.set(Math.cos(a)*r,h/2,Math.sin(a)*r);flowerGroup.add(stem);
- const petalColor=[0xffd9e7,0xe3e8ff,0xfff0b9,0xffffff][i%4];
- const blossom=new THREE.Mesh(new THREE.SphereGeometry(.12+Math.random()*.08,10,8),new THREE.MeshStandardMaterial({color:petalColor,emissive:petalColor,emissiveIntensity:.55}));
- blossom.position.set(stem.position.x,h,stem.position.z);flowerGroup.add(blossom);
+// glowing flower beds
+const flowerCenters=[new THREE.Vector3(-8,0,-3),new THREE.Vector3(-10,0,4),new THREE.Vector3(5,0,11)];
+const flowerGroup=new THREE.Group();scene.add(flowerGroup);
+function flower(x,z,c,s=.22){
+  const stem=new THREE.Mesh(new THREE.CylinderGeometry(.025,.035,.5+s,7),new THREE.MeshStandardMaterial({color:0x6aa985,roughness:1}));
+  stem.position.set(x,.26+s/2,z);flowerGroup.add(stem);
+  const center=new THREE.Mesh(new THREE.SphereGeometry(s*.52,10,8),new THREE.MeshStandardMaterial({color:c,emissive:c,emissiveIntensity:.72,roughness:.7}));
+  center.position.set(x,.62+s,z);flowerGroup.add(center);
+  for(let j=0;j<5;j++){
+    const petal=new THREE.Mesh(new THREE.SphereGeometry(s*.42,10,8),new THREE.MeshStandardMaterial({color:c,emissive:c,emissiveIntensity:.16,roughness:.8}));
+    const a=j/5*Math.PI*2;petal.scale.set(1.5,.65,1);petal.position.set(x+Math.cos(a)*s*.52,.62+s,z+Math.sin(a)*s*.52);flowerGroup.add(petal)
+  }
+}
+for(let i=0;i<52;i++){
+  const center=flowerCenters[i%flowerCenters.length],a=Math.random()*Math.PI*2,r=.7+Math.random()*2.5;
+  flower(center.x+Math.cos(a)*r,center.z+Math.sin(a)*r,[0xffd9e5,0xe6dcff,0xffefb7,0xd8f4ef][i%4],.16+Math.random()*.12)
 }
 
-const quiet=new THREE.Group();quiet.position.set(8,0,5);scene.add(quiet);
-const shell=new THREE.Mesh(new THREE.SphereGeometry(3.4,32,20,0,Math.PI*2,0,Math.PI*.58),new THREE.MeshPhysicalMaterial({color:0xeaf5f2,roughness:.45,transmission:.08,transparent:true,opacity:.76}));
-shell.scale.y=.55;shell.position.y=.4;quiet.add(shell);
-const cushion=new THREE.Mesh(new THREE.CylinderGeometry(1.8,2.1,.42,28),new THREE.MeshStandardMaterial({color:0xe9dfe9,roughness:.9}));cushion.position.y=.2;quiet.add(cushion);
-
-const tea=new THREE.Group();tea.position.set(2,0,-10);scene.add(tea);
-const table=new THREE.Mesh(new THREE.CylinderGeometry(1.8,1.95,.35,24),new THREE.MeshStandardMaterial({color:0xd9c2a2,roughness:.82}));table.position.y=.35;tea.add(table);
-const cup=new THREE.Mesh(new THREE.CylinderGeometry(.42,.34,.7,20),new THREE.MeshPhysicalMaterial({color:0xf8f0e8,roughness:.35}));cup.position.y=.9;tea.add(cup);
-const glow=new THREE.PointLight(0xffc48f,2.8,8);glow.position.set(0,2,0);tea.add(glow);
-
-const steam=[];
-for(let i=0;i<16;i++){
- const p=new THREE.Mesh(new THREE.SphereGeometry(.06,8,8),new THREE.MeshBasicMaterial({color:0xffffff,transparent:true,opacity:.42}));
- p.position.set((Math.random()-.5)*.3,1.3+Math.random()*1.6,(Math.random()-.5)*.3);tea.add(p);steam.push(p)
+// quiet nook: petals canopy + soft nest
+const nook=new THREE.Group();nook.position.set(10,0,7);scene.add(nook);
+for(let i=0;i<9;i++){
+  const pet=new THREE.Mesh(new THREE.SphereGeometry(.8+Math.random()*.28,18,13),new THREE.MeshStandardMaterial({color:i%2?0xe6edf9:0xeadfeb,roughness:.85}));
+  const a=i/9*Math.PI*2;pet.scale.set(1.35,.42,.85);pet.position.set(Math.cos(a)*2.25,.75+Math.sin(i)*.15,Math.sin(a)*2.0);nook.add(pet)
 }
+const nest=new THREE.Mesh(new THREE.CylinderGeometry(1.7,1.95,.46,30),new THREE.MeshStandardMaterial({color:0xf1e6dc,roughness:.96}));nest.position.y=.22;nook.add(nest);
+const nookLight=new THREE.PointLight(0xffd8ea,2.2,7);nookLight.position.set(0,2,0);nook.add(nookLight);
 
-// firefly / petals
+// tea corner: tiny pavilion
+const tea=new THREE.Group();tea.position.set(-3,0,-11);scene.add(tea);
+const wood=new THREE.MeshStandardMaterial({color:0xc9a984,roughness:.88});
+const table=new THREE.Mesh(new THREE.CylinderGeometry(1.45,1.58,.28,28),wood);table.position.y=.35;tea.add(table);
+for(const x of [-1.2,1.2]){const stool=new THREE.Mesh(new THREE.CylinderGeometry(.48,.52,.32,20),new THREE.MeshStandardMaterial({color:0xe9ddcf,roughness:.94}));stool.position.set(x,.18,.5);tea.add(stool)}
+const cup=new THREE.Mesh(new THREE.CylinderGeometry(.32,.26,.52,20),new THREE.MeshStandardMaterial({color:0xfff7f0,roughness:.5}));cup.position.set(0,.78,0);tea.add(cup);
+const teaLight=new THREE.PointLight(0xffc98d,2.7,8);teaLight.position.set(0,2,0);tea.add(teaLight);
+const steam=[];for(let i=0;i<18;i++){const p=new THREE.Mesh(new THREE.SphereGeometry(.035+Math.random()*.025,8,8),new THREE.MeshBasicMaterial({color:0xffffff,transparent:true,opacity:.3,depthWrite:false}));p.position.set((Math.random()-.5)*.25,1.05+Math.random()*1.45,(Math.random()-.5)*.25);tea.add(p);steam.push(p)}
+
+// little lantern mushrooms around pond
+function mushroom(x,z,c){
+  const stem=new THREE.Mesh(new THREE.CylinderGeometry(.07,.11,.38,10),new THREE.MeshStandardMaterial({color:0xf3eadc,roughness:.8}));stem.position.set(x,.19,z);scene.add(stem);
+  const cap=new THREE.Mesh(new THREE.SphereGeometry(.23,16,10,0,Math.PI*2,0,Math.PI/2),new THREE.MeshStandardMaterial({color:c,emissive:c,emissiveIntensity:.6}));cap.position.set(x,.43,z);scene.add(cap)
+}
+for(let i=0;i<16;i++){const a=i/16*Math.PI*2,r=4.7+Math.random()*.6;mushroom(9+Math.cos(a)*r,-7+Math.sin(a)*r,[0xffd7e8,0xffefb9,0xdedcff][i%3])}
+
+// drifting motes/petals
 const motes=[];
-for(let i=0;i<36;i++){
- const m=new THREE.Mesh(new THREE.SphereGeometry(.035+Math.random()*.035,6,6),new THREE.MeshBasicMaterial({color:i%3===0?0xffe7f0:0xffffdd,transparent:true,opacity:.75}));
- m.position.set((Math.random()-.5)*32,.4+Math.random()*4,(Math.random()-.5)*32);scene.add(m);motes.push({m,phase:Math.random()*6.28,s:.2+Math.random()*.3});
+for(let i=0;i<80;i++){
+  const mat=new THREE.MeshBasicMaterial({color:[0xffffff,0xffe4ef,0xf9f4b8,0xdde8ff][i%4],transparent:true,opacity:.52,depthWrite:false});
+  const geom=i%3===0?new THREE.PlaneGeometry(.09,.15):new THREE.SphereGeometry(.035+Math.random()*.03,6,6);
+  const m=new THREE.Mesh(geom,mat);m.position.set((Math.random()-.5)*38,.3+Math.random()*5,(Math.random()-.5)*38);m.rotation.set(Math.random()*2,Math.random()*2,Math.random()*2);scene.add(m);
+  motes.push({m,phase:Math.random()*6.28,s:.28+Math.random()*.38})
 }
 
-// avatar
-const avatar=new THREE.Group();scene.add(avatar);avatar.position.set(0,0,4);
-const body=new THREE.Mesh(new THREE.CapsuleGeometry(.42,.95,6,12),new THREE.MeshStandardMaterial({color:0xf7eee9,roughness:.7}));body.position.y=1.15;body.castShadow=true;avatar.add(body);
-const head=new THREE.Mesh(new THREE.SphereGeometry(.48,20,16),new THREE.MeshStandardMaterial({color:0xfff7ef,roughness:.8}));head.position.y=2.15;head.castShadow=true;avatar.add(head);
-const cape=new THREE.Mesh(new THREE.ConeGeometry(.85,1.5,12,1,true),new THREE.MeshStandardMaterial({color:0xb9c7ef,side:THREE.DoubleSide,roughness:.7}));cape.rotation.x=Math.PI;cape.position.set(0,1.25,.15);avatar.add(cape);
-const eyeMat=new THREE.MeshBasicMaterial({color:0x435a58});
-[-.17,.17].forEach(x=>{const e=new THREE.Mesh(new THREE.SphereGeometry(.035,8,8),eyeMat);e.position.set(x,2.2,.45);avatar.add(e)});
+// Avatar: smaller, cuter, more character-like
+const avatar=new THREE.Group();avatar.position.set(0,0,6);scene.add(avatar);
+const skin=new THREE.MeshStandardMaterial({color:0xffefe4,roughness:.86});
+const cloakMat=new THREE.MeshStandardMaterial({color:0xb9c7ec,roughness:.78});
+const trimMat=new THREE.MeshStandardMaterial({color:0xe9d6ee,roughness:.75});
+const dark=new THREE.MeshBasicMaterial({color:0x3e4d4b});
+const body=new THREE.Mesh(new THREE.CapsuleGeometry(.34,.62,7,14),new THREE.MeshStandardMaterial({color:0xf8eee8,roughness:.9}));body.position.y=.95;body.castShadow=true;avatar.add(body);
+const head=new THREE.Mesh(new THREE.SphereGeometry(.43,24,18),skin);head.position.y=1.78;head.castShadow=true;avatar.add(head);
+const hood=new THREE.Mesh(new THREE.SphereGeometry(.50,22,16,0,Math.PI*2,0,Math.PI*.62),cloakMat);hood.position.set(0,1.83,-.02);hood.rotation.x=.07;avatar.add(hood);
+const cape=new THREE.Mesh(new THREE.SphereGeometry(.78,24,16,0,Math.PI*2,Math.PI*.15,Math.PI*.55),cloakMat);cape.scale.set(.95,1.25,.55);cape.position.set(0,.97,-.22);cape.castShadow=true;avatar.add(cape);
+const scarf=new THREE.Mesh(new THREE.TorusGeometry(.38,.07,8,22),trimMat);scarf.rotation.x=Math.PI/2;scarf.position.set(0,1.45,.03);avatar.add(scarf);
+[-.13,.13].forEach(x=>{const e=new THREE.Mesh(new THREE.SphereGeometry(.034,8,8),dark);e.position.set(x,1.79,.41);avatar.add(e)});
+const blushMat=new THREE.MeshBasicMaterial({color:0xf3b7bd,transparent:true,opacity:.48});
+[-.24,.24].forEach(x=>{const b=new THREE.Mesh(new THREE.SphereGeometry(.045,8,6),blushMat);b.scale.x=1.5;b.position.set(x,1.69,.405);avatar.add(b)});
+const legs=[];[-.18,.18].forEach(x=>{const l=new THREE.Mesh(new THREE.CapsuleGeometry(.085,.28,5,8),new THREE.MeshStandardMaterial({color:0xd8c9d8,roughness:.9}));l.position.set(x,.35,.01);avatar.add(l);legs.push(l)});
+const arms=[];[-.48,.48].forEach((x,i)=>{const a=new THREE.Mesh(new THREE.CapsuleGeometry(.07,.3,5,8),skin);a.position.set(x,.98,.08);a.rotation.z=(i?-.35:.35);avatar.add(a);arms.push(a)});
 
+// sparkle companion
+const orb=new THREE.Mesh(new THREE.SphereGeometry(.08,10,8),new THREE.MeshBasicMaterial({color:0xfff3c8,transparent:true,opacity:.9}));
+const orbLight=new THREE.PointLight(0xffe6a8,1.4,4);scene.add(orb,orbLight);
+
+// controls
 const keys={};addEventListener('keydown',e=>keys[e.key.toLowerCase()]=true);addEventListener('keyup',e=>keys[e.key.toLowerCase()]=false);
-let joy={x:0,y:0};const joyEl=document.getElementById('joystick'),knob=document.getElementById('knob');
-function joyMove(e){
- const r=joyEl.getBoundingClientRect(),t=e.touches?e.touches[0]:e;
- let x=t.clientX-(r.left+r.width/2),y=t.clientY-(r.top+r.height/2);const d=Math.hypot(x,y),max=38;if(d>max){x=x/d*max;y=y/d*max}
- joy={x:x/max,y:y/max};knob.style.transform=`translate(${x}px,${y}px)`
+let joy={x:0,y:0};
+const joyEl=document.getElementById('joystick'),stick=document.getElementById('stick');
+function setJoy(e){
+  const r=joyEl.getBoundingClientRect(),t=e.touches?e.touches[0]:e;
+  let x=t.clientX-(r.left+r.width/2),y=t.clientY-(r.top+r.height/2),d=Math.hypot(x,y),m=39;
+  if(d>m){x=x/d*m;y=y/d*m}
+  joy={x:x/m,y:y/m};stick.style.transform=`translate(${x}px,${y}px)`
 }
-joyEl.addEventListener('touchstart',joyMove,{passive:false});joyEl.addEventListener('touchmove',e=>{e.preventDefault();joyMove(e)},{passive:false});
-joyEl.addEventListener('touchend',()=>{joy={x:0,y:0};knob.style.transform='translate(0,0)'});
+joyEl.addEventListener('touchstart',e=>{e.preventDefault();setJoy(e)},{passive:false});
+joyEl.addEventListener('touchmove',e=>{e.preventDefault();setJoy(e)},{passive:false});
+joyEl.addEventListener('touchend',()=>{joy={x:0,y:0};stick.style.transform='translate(0,0)'});
 
-let currentZone='';const zoneEl=document.getElementById('zone');
-function zoneCheck(){
- const p=avatar.position;
- const zones=[
-  {n:'花与微光',x:-8,z:-1,r:5},
-  {n:'安静窝',x:8,z:5,r:4},
-  {n:'茶香暖角',x:2,z:-10,r:4}
- ];
- let hit='';for(const q of zones){if(Math.hypot(p.x-q.x,p.z-q.z)<q.r){hit=q.n;break}}
- if(hit!==currentZone){currentZone=hit;zoneEl.textContent=hit?('你到了 · '+hit):'';zoneEl.classList.toggle('on',!!hit)}
+let sitting=false,current='';
+const place=document.getElementById('place'),interact=document.getElementById('interaction');
+const zones=[
+  {name:'花与微光',x:-8,z:-3,r:4.4,action:'蹲下来看看花'},
+  {name:'安静窝',x:10,z:7,r:3.5,action:'坐一会儿'},
+  {name:'茶香暖角',x:-3,z:-11,r:3.5,action:'捧起热茶'},
+  {name:'水边',x:9,z:-7,r:4.8,action:'看看水面'}
+];
+function detectZone(){
+  let hit=null;for(const z of zones){if(Math.hypot(avatar.position.x-z.x,avatar.position.z-z.z)<z.r){hit=z;break}}
+  const name=hit?.name||'';
+  if(name!==current){current=name;place.textContent=name;place.classList.toggle('show',!!name)}
+  if(hit){interact.textContent=sitting&&name==='安静窝'?'站起来':hit.action;interact.dataset.zone=name;interact.classList.add('show')}
+  else{interact.classList.remove('show');interact.dataset.zone=''}
 }
+interact.onclick=()=>{
+  const z=interact.dataset.zone;
+  if(z==='安静窝'){sitting=!sitting;interact.textContent=sitting?'站起来':'坐一会儿';document.getElementById('state').textContent=sitting?'此刻：安静待着':'此刻：只是来待一会儿'}
+  if(z==='茶香暖角'){document.getElementById('state').textContent='此刻：手里有一点暖';teaLight.intensity=4.2;setTimeout(()=>teaLight.intensity=2.7,1800)}
+  if(z==='花与微光'){document.getElementById('state').textContent='此刻：在看花';flowerGroup.scale.setScalar(1.035);setTimeout(()=>flowerGroup.scale.setScalar(1),900)}
+  if(z==='水边'){document.getElementById('state').textContent='此刻：看看水面'}
+};
 
+// camera
+camera.position.set(0,4.8,12.5);
 const clock=new THREE.Clock();
 function animate(){
- requestAnimationFrame(animate);const dt=Math.min(clock.getDelta(),.04),t=performance.now()/1000;
- let dx=(keys['d']||keys['arrowright']?1:0)-(keys['a']||keys['arrowleft']?1:0)+joy.x;
- let dz=(keys['s']||keys['arrowdown']?1:0)-(keys['w']||keys['arrowup']?1:0)+joy.y;
- const len=Math.hypot(dx,dz);if(len>.08){dx/=Math.max(1,len);dz/=Math.max(1,len);avatar.position.x+=dx*4*dt;avatar.position.z+=dz*4*dt;avatar.rotation.y=Math.atan2(dx,dz);body.position.y=1.15+Math.sin(t*8)*.035}else{body.position.y=1.15+Math.sin(t*2)*.025;head.rotation.y=Math.sin(t*.7)*.08}
- cape.rotation.z=Math.sin(t*2.3)*.03;
- avatar.position.x=THREE.MathUtils.clamp(avatar.position.x,-22,22);avatar.position.z=THREE.MathUtils.clamp(avatar.position.z,-22,22);
- const target=new THREE.Vector3(avatar.position.x,1.2,avatar.position.z+8.5);camera.position.lerp(target,.035);camera.lookAt(avatar.position.x,1.35,avatar.position.z);
- motes.forEach(o=>{o.m.position.y+=Math.sin(t*o.s+o.phase)*.002;o.m.position.x+=Math.cos(t*.2+o.phase)*.0015});
- steam.forEach((p,i)=>{p.position.y+=.006;if(p.position.y>3)p.position.y=1.25;p.material.opacity=.25+.15*Math.sin(t+i)});
- zoneCheck();renderer.render(scene,camera)
+  requestAnimationFrame(animate);
+  const dt=Math.min(clock.getDelta(),.04),t=performance.now()/1000;
+  let dx=(keys['d']||keys['arrowright']?1:0)-(keys['a']||keys['arrowleft']?1:0)+joy.x;
+  let dz=(keys['s']||keys['arrowdown']?1:0)-(keys['w']||keys['arrowup']?1:0)+joy.y;
+  const moving=Math.hypot(dx,dz)>.08&&!sitting;
+  if(moving){
+    const len=Math.max(1,Math.hypot(dx,dz));dx/=len;dz/=len;
+    avatar.position.x+=dx*3.25*dt;avatar.position.z+=dz*3.25*dt;avatar.rotation.y=Math.atan2(dx,dz);
+    legs[0].rotation.x=Math.sin(t*8)*.45;legs[1].rotation.x=-Math.sin(t*8)*.45;
+    arms[0].rotation.x=-Math.sin(t*8)*.24;arms[1].rotation.x=Math.sin(t*8)*.24;
+    body.position.y=.95+Math.abs(Math.sin(t*8))*.035;
+  }else{
+    legs.forEach(l=>l.rotation.x=THREE.MathUtils.lerp(l.rotation.x,0,.12));
+    arms.forEach((a,i)=>a.rotation.x=THREE.MathUtils.lerp(a.rotation.x,0,.12));
+    body.position.y=.95+Math.sin(t*2)*.018;
+  }
+  avatar.position.x=THREE.MathUtils.clamp(avatar.position.x,-18.5,18.5);
+  avatar.position.z=THREE.MathUtils.clamp(avatar.position.z,-18.5,18.5);
+  head.rotation.y=Math.sin(t*.55)*.06;
+  cape.rotation.z=Math.sin(t*1.8)*.025;
+  if(sitting){avatar.scale.y=THREE.MathUtils.lerp(avatar.scale.y,.82,.08);avatar.position.y=THREE.MathUtils.lerp(avatar.position.y,-.05,.08)}
+  else{avatar.scale.y=THREE.MathUtils.lerp(avatar.scale.y,1,.08);avatar.position.y=THREE.MathUtils.lerp(avatar.position.y,0,.08)}
+  const desired=new THREE.Vector3(avatar.position.x,3.9,avatar.position.z+8.2);
+  camera.position.lerp(desired,.045);camera.lookAt(avatar.position.x,1.25,avatar.position.z-.7);
+  orb.position.set(avatar.position.x+Math.sin(t*.9)*.8,1.75+Math.sin(t*1.6)*.16,avatar.position.z+.35+Math.cos(t*.8)*.45);
+  orbLight.position.copy(orb.position);
+  clouds.forEach((c,i)=>c.position.x+=Math.sin(t*.04+i)*.0014);
+  motes.forEach(o=>{o.m.position.y+=Math.sin(t*o.s+o.phase)*.0015;o.m.position.x+=Math.cos(t*.18+o.phase)*.0013;o.m.rotation.z+=.002});
+  steam.forEach((p,i)=>{p.position.y+=.007;if(p.position.y>2.55)p.position.y=1.05;p.position.x+=Math.sin(t+i)*.0007;p.material.opacity=.16+.16*Math.sin(t*1.3+i)});
+  pond.material.opacity=.78+Math.sin(t*.8)*.025;
+  detectZone();
+  renderer.render(scene,camera);
 }
 animate();
 
 addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight)});
-
 document.getElementById('enter').onclick=()=>document.getElementById('veil').classList.add('hidden');
-document.getElementById('outside').onclick=()=>document.getElementById('veil').classList.remove('hidden');
-const panel=document.getElementById('panel');document.getElementById('thoughtBtn').onclick=()=>panel.classList.add('show');document.getElementById('closePanel').onclick=()=>panel.classList.remove('show');
+document.getElementById('leave').onclick=()=>document.getElementById('veil').classList.remove('hidden');
+const panel=document.getElementById('panel');
+document.getElementById('thoughtBtn').onclick=()=>panel.classList.add('show');
+document.getElementById('closePanel').onclick=()=>panel.classList.remove('show');
 document.getElementById('sendThought').onclick=()=>{
- const v=document.getElementById('thought').value.trim();if(!v)return;
- const r=document.getElementById('reflection');let text='我先不替你下结论。这里更像是：你现在希望有一个地方能接住这句话，而不是立刻要求你解释、回应或解决什么。';
- if(/累|烦|不想|懒/.test(v))text='候选理解：你现在介意的可能不只是这件事本身，而是它正在要求你继续输出精力。你更想先把负担停下来，再决定要不要处理。';
- if(/喜欢|舒服|好看|香|温暖/.test(v))text='候选理解：你不是只在评价一个东西“不错”，你在记录一种会让自己身体和注意力自然愿意停留的感觉。这个体验值得被保留下来。';
- r.innerHTML=text+'<div class="row"><button class="small" onclick="this.closest(\'#reflection\').dataset.feedback=\'right\'">对</button><button class="small" onclick="this.closest(\'#reflection\').dataset.feedback=\'wrong\'">不对</button><button class="small" onclick="this.closest(\'#reflection\').dataset.feedback=\'context\'">只在这种情况下</button></div>';
- r.style.display='block';document.getElementById('status').textContent='此刻：'+v.slice(0,16)+(v.length>16?'…':'');
+  const v=document.getElementById('thought').value.trim();if(!v)return;
+  let text='候选理解：你现在可能不是需要一个答案，而是需要先让这句话被好好接住，不必立刻解释，也不必马上做什么。';
+  if(/累|烦|不想|懒|麻烦/.test(v))text='候选理解：真正让你难受的也许不只是这件事，而是它还在继续向你索取精力。你现在更需要先停掉负担，再决定后面要不要处理。';
+  if(/喜欢|舒服|好看|香|温暖|开心/.test(v))text='候选理解：你记录的不只是“喜欢”，而是一种会让身体和注意力自然愿意停下来的感觉。这个感觉值得被留下，成为以后选择环境和生活方式的线索。';
+  const r=document.getElementById('reflection');r.innerHTML=text+'<div class="actions"><button class="chip">对</button><button class="chip">不对</button><button class="chip">只在这种情况下</button></div>';r.style.display='block';
+  document.getElementById('state').textContent='此刻：'+v.slice(0,14)+(v.length>14?'…':'');
 };
+setTimeout(()=>document.getElementById('tinyGuide').style.opacity='.18',6500);
 </script>
 </body>
 </html>
