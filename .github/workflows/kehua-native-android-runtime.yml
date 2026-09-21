@@ -1,6 +1,12 @@
 name: kehua-native-android-runtime
 on:
   workflow_dispatch:
+  push:
+    branches: [kehua-v1133-native-cleanroom]
+    paths:
+      - '.github/workflows/kehua-native-android-runtime.yml'
+      - 'kehua_native_bundle_*.b64'
+      - 'kehua-native-bootstrap.sh'
 jobs:
   runtime:
     runs-on: ubuntu-latest
