@@ -10,7 +10,7 @@ import java.net.URL
 
 private const val KEHUA_BASE = "https://kehua-public.onrender.com"
 
-data class NativeSession(val id:String,val nickname:String,val token:String)
+data class NativeSession(val id:String,val nickname:String,val token:String,val recoveryCode:String?=null)
 data class NativePost(val id:String,val content:String,val createdAt:String,val lightCount:Int,val isPrivate:Boolean)
 data class NativeResonance(val id:String,val content:String,val status:String,val nickname:String?,val authorId:String?)
 data class NativeHome(val posts:List<NativePost>,val resonances:List<NativeResonance>,val newCount:Int)
@@ -36,17 +36,28 @@ class KehuaProdApi(context: Context, private val prefSuffix:String="") {
         val initial=j.getJSONObject("user")
         val wanted=nickname.trim().ifBlank{initial.optString("nickname").ifBlank{login}}
         val prof=requestJson("PATCH","/api/me",JSONObject().put("nickname",wanted).put("bio",initial.optString("bio"))).getOrThrow()
-        NativeSession(prof.strId("id"),prof.optString("nickname").ifBlank{wanted},t)
+        NativeSession(prof.strId("id"),prof.optString("nickname").ifBlank{wanted},t,j.optString("recovery_code").ifBlank{null})
     }.onFailure{ token="" }
 
     suspend fun login(login:String,password:String):Result<NativeSession> = runCatching {
         val j=requestJson("POST","/api/auth/login",JSONObject().put("username",login).put("password",password),false).getOrThrow()
         val u=j.getJSONObject("user")
-        val s=NativeSession(u.strId("id"),u.optString("nickname").ifBlank{login},j.str("token"))
+        val s=NativeSession(u.strId("id"),u.optString("nickname").ifBlank{login},j.str("token"),null)
         token=s.token
         s
     }
     fun logout(){ token="" }
+    suspend fun logoutRemote():Result<Unit> =
+        requestJson("POST","/api/auth/logout").map { token=""; Unit }.onFailure{ token="" }
+
+    suspend fun recover(login:String,recoveryCode:String,newPassword:String):Result<NativeSession> = runCatching {
+        val j=requestJson("POST","/api/auth/recover",JSONObject().put("username",login).put("recovery_code",recoveryCode).put("new_password",newPassword),false).getOrThrow()
+        val u=j.getJSONObject("user")
+        val s=NativeSession(u.strId("id"),u.optString("nickname").ifBlank{login},j.str("token"),j.optString("recovery_code").ifBlank{null})
+        token=s.token;s
+    }
+    suspend fun rotateRecovery():Result<String> =
+        requestJson("POST","/api/me/recovery").mapCatching{it.str("recovery_code")}
 
     suspend fun home():Result<NativeHome> = runCatching {
         val postArray=requestArray("GET","/api/posts/mine").getOrThrow()
@@ -122,6 +133,13 @@ class KehuaProdApi(context: Context, private val prefSuffix:String="") {
         val fs=requestArray("GET","/api/friends").getOrThrow()
         NativeMe(j.strId("id"),j.optString("nickname").ifBlank{"可话er"},j.optString("bio"),j.optJSONArray("posts")?.length() ?: 0,fs.length())
     }
+
+    suspend fun updateProfile(nickname:String,bio:String):Result<Unit> =
+        requestJson("PATCH","/api/me",JSONObject().put("nickname",nickname).put("bio",bio)).map{Unit}
+    suspend fun block(peerId:String):Result<Unit> =
+        requestJson("POST","/api/users/$peerId/block").map{Unit}
+    suspend fun report(peerId:String,reason:String):Result<Unit> =
+        requestJson("POST","/api/users/$peerId/report",JSONObject().put("reason",reason)).map{Unit}
 
     suspend fun deleteAccount():Result<Unit> =
         requestJson("DELETE","/api/me").map { token=""; Unit }.onFailure{ token="" }
