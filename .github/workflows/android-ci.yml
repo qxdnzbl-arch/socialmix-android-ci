@@ -2,7 +2,7 @@ name: Kehua Android Engineering Acceptance
 
 on:
   push:
-    branches: [main, socialmix-chat-production-core, kehua-firebase-auth-prod]
+    branches: [main, socialmix-chat-production-core, kehua-firebase-auth-prod, kehua-v1133-production]
   workflow_dispatch:
 
 permissions:
