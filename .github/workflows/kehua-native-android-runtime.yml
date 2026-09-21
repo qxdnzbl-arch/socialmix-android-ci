@@ -1,0 +1,74 @@
+name: kehua-native-android-runtime
+on:
+  workflow_dispatch:
+jobs:
+  runtime:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: unpack source
+        run: bash kehua-native-bootstrap.sh
+      - name: apply Android compile fix
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('kehua-native/android/app/src/main/java/com/kehua/revival/MainActivity.java')
+          s=p.read_text()
+          marker='  EditText input(String hint){EditText e=new EditText(this);e.setHint(hint);e.setTextColor(ink);e.setHintTextColor(muted);e.setBackgroundColor(Color.WHITE);e.setPadding(20,16,20,16);return e;}\n'
+          helper='  JSONObject obj(Object... kv){JSONObject o=new JSONObject();for(int i=0;i+1<kv.length;i+=2){try{o.put(String.valueOf(kv[i]),kv[i+1]);}catch(Exception ignored){}}return o;}\n  JSONArray arr(Object... xs){JSONArray a=new JSONArray();for(Object x:xs)a.put(x);return a;}\n'
+          if 'JSONObject obj(Object... kv)' not in s:
+              s=s.replace(marker,marker+helper)
+          reps={
+            'new JSONObject().put("phone",phone.getText().toString()).put("code",code.getText().toString())':'obj("phone",phone.getText().toString(),"code",code.getText().toString())',
+            'new JSONObject().put("phone",phone.getText().toString())':'obj("phone",phone.getText().toString())',
+            'new JSONObject().put("kind",kind).put("mime",mime).put("base64",Base64.encodeToString(data,Base64.NO_WRAP))':'obj("kind",kind,"mime",mime,"base64",Base64.encodeToString(data,Base64.NO_WRAP))',
+            'new JSONObject().put("body",text)':'obj("body",text)',
+            'new JSONArray().put(mediaId)':'arr(mediaId)',
+            'new JSONObject().put("source","post").put("post_id",id)':'obj("source","post","post_id",id)',
+            'new JSONObject().put("other_user_id",authorId)':'obj("other_user_id",authorId)',
+            'new JSONObject().put("kind","text").put("body",s)':'obj("kind","text","body",s)'
+          }
+          for a,b in reps.items(): s=s.replace(a,b)
+          p.write_text(s)
+          PY
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.10.2'
+      - name: build release
+        working-directory: kehua-native/android
+        run: gradle :app:assembleRelease --stacktrace
+      - name: verify production backend embedded
+        run: |
+          unzip -p kehua-native/android/app/build/outputs/apk/release/app-release.apk classes.dex | strings | grep -F 'https://kehua-api-production.up.railway.app'
+          ! unzip -p kehua-native/android/app/build/outputs/apk/release/app-release.apk classes.dex | strings | grep -E 'onrender\.com|render\.com'
+      - uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          profile: pixel_6
+          disable-animations: true
+          script: |
+            adb install -r kehua-native/android/app/build/outputs/apk/release/app-release.apk
+            adb shell am start -W com.kehua.revival/.MainActivity | tee /tmp/am-start.txt
+            sleep 4
+            adb shell pidof com.kehua.revival | tee /tmp/pid.txt
+            test -s /tmp/pid.txt
+            adb shell uiautomator dump /sdcard/window.xml
+            adb pull /sdcard/window.xml /tmp/window.xml
+            adb exec-out screencap -p > /tmp/kehua-runtime.png
+            grep -q 'com.kehua.revival' /tmp/window.xml
+            ! adb logcat -d | grep -E 'FATAL EXCEPTION.*com.kehua.revival|Process: com.kehua.revival.*FATAL'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: kehua-1.13.3-runtime-accepted
+          path: |
+            kehua-native/android/app/build/outputs/apk/release/app-release.apk
+            /tmp/window.xml
+            /tmp/kehua-runtime.png
+            /tmp/am-start.txt
