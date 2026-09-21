@@ -37,9 +37,9 @@ jobs:
           disable-animations: false
           script: |
             adb install -r kehua-native/android/app/build/outputs/apk/release/app-release.apk
-            adb shell am start -W com.kehua.revival/.MainActivity | tee /tmp/am-start.txt
+            adb shell am start -W com.app.tideswing/com.kehua.revival.MainActivity | tee /tmp/am-start.txt
             sleep 4
-            adb shell pidof com.kehua.revival | tee /tmp/pid.txt
+            adb shell pidof com.app.tideswing | tee /tmp/pid.txt
             test -s /tmp/pid.txt
             adb exec-out screencap -p > /tmp/kehua-runtime.png
             test -s /tmp/kehua-runtime.png
@@ -54,4 +54,5 @@ jobs:
 
 
 
-# trigger-faithful-build-20260922c
+
+# trigger-final-faithful-20260922
