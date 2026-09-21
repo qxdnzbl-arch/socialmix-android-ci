@@ -147,7 +147,7 @@ public class MainActivity extends Activity {
     io.execute(()->{try{String mime=getContentResolver().getType(uri);byte[] data=read(getContentResolver().openInputStream(uri));String kind=mime!=null&&mime.startsWith("video")?"video":"image";JSONObject up=sync("POST","/v1/media",obj("kind",kind,"mime",mime,"base64",Base64.encodeToString(data,Base64.NO_WRAP)),token);String id=up.getJSONObject("media").getString("id");runOnUiThread(()->createPost(text,id,b));}catch(Exception x){runOnUiThread(()->{b.setEnabled(true);toast("素材上传失败");});}});
   }
   void createPost(String text,String mediaId,Button b){
-    JSONObject p=obj("body",text);if(mediaId!=null)p.putOpt("media_ids",arr(mediaId));
+    JSONObject p=obj("body",text,"media_ids",mediaId!=null?arr(mediaId):JSONObject.NULL);if(mediaId==null)p.remove("media_ids");
     post("/v1/posts",p,token,j->{JSONObject post=j.optJSONObject("post");String id=post==null?"":post.optString("id");post("/v1/match",obj("source","post","post_id",id),token,x->runOnUiThread(()->{selectedPostMedia=null;b.setEnabled(true);showResonanceFrom(x);}),e->runOnUiThread(()->{b.setEnabled(true);toast(errorText(e));}));},e->runOnUiThread(()->{b.setEnabled(true);toast(errorText(e));}));
   }
 
