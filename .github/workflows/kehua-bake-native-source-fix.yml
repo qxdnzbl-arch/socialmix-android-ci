@@ -25,6 +25,30 @@ jobs:
           cp /tmp/MainActivity.java kehua-native/android/app/src/main/java/com/kehua/revival/MainActivity.java
           grep -F '此刻，说你想说的话～' kehua-native/android/app/src/main/java/com/kehua/revival/MainActivity.java
           grep -F 'https://kehua-api-production.up.railway.app' kehua-native/android/app/src/main/java/com/kehua/revival/MainActivity.java || true
+      - name: align Android identity with original package
+        shell: bash
+        run: |
+          sed -i "s/applicationId 'com.kehua.revival'/applicationId 'com.app.tideswing'/" kehua-native/android/app/build.gradle
+          sed -i "s/minSdk 26/minSdk 21/" kehua-native/android/app/build.gradle
+          mkdir -p kehua-native/android/app/src/main/res/drawable
+          cat > kehua-native/android/app/src/main/res/drawable/ic_kehua_launcher.xml <<'XML'
+          <vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="108dp" android:height="108dp" android:viewportWidth="108" android:viewportHeight="108">
+            <path android:fillColor="#FFFFFF" android:pathData="M0,0H108V108H0Z"/>
+            <path android:fillColor="#FF2B63" android:pathData="M23,54 C28,41 39,39 48,47 C54,52 59,53 64,44 L73,44 C70,58 61,66 50,60 C42,55 36,51 31,60 L20,60 Z"/>
+            <path android:fillColor="#FF2B63" android:pathData="M76,32 H88 L84,58 H72 Z"/>
+            <path android:fillColor="#FF2B63" android:pathData="M76,69 A7,7 0,1 0,90 69 A7,7 0,1 0,76 69"/>
+          </vector>
+          XML
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('kehua-native/android/app/src/main/AndroidManifest.xml')
+          s=p.read_text()
+          if 'android:icon=' not in s:
+              s=s.replace('<application ','<application android:icon="@drawable/ic_kehua_launcher" ')
+          p.write_text(s)
+          PY
+          grep -F "applicationId 'com.app.tideswing'" kehua-native/android/app/build.gradle
+          grep -F 'android:icon="@drawable/ic_kehua_launcher"' kehua-native/android/app/src/main/AndroidManifest.xml
       - name: repack canonical native bundle
         shell: bash
         run: |
