@@ -8,8 +8,7 @@ import org.json.JSONObject
 import java.net.HttpURLConnection
 import java.net.URL
 
-private const val KEHUA_BASE = "https://nvwdtfnhsyfdopaxdylx.supabase.co"
-private const val KEHUA_KEY = "sb_publishable_S4IE-ziO7WQ_JAK9tuQGgQ_cszwKBWB"
+private const val KEHUA_BASE = "https://kehua-public.onrender.com"
 
 data class NativeSession(val id:String,val nickname:String,val token:String,val recoveryCode:String?=null)
 data class NativePost(val id:String,val content:String,val createdAt:String,val lightCount:Int,val isPrivate:Boolean)
@@ -28,82 +27,181 @@ class KehuaProdApi(context: Context, private val prefSuffix:String="") {
         private set(v){ prefs.edit().putString("token",v).apply() }
     val isLoggedIn:Boolean get()=token.isNotBlank()
 
-    suspend fun health():Result<String> = withContext(Dispatchers.IO){ runCatching {
-        val c=(URL("$KEHUA_BASE/rest/v1/kehua_prod_accounts?select=id&limit=0").openConnection() as HttpURLConnection).apply{
-            requestMethod="GET";connectTimeout=8000;readTimeout=12000
-            setRequestProperty("apikey",KEHUA_KEY);setRequestProperty("Accept","application/json")
+    suspend fun health():Result<String> = requestObject("GET","/health",auth=false).mapCatching {
+        if(!it.optBoolean("ok")) throw IllegalStateException("后端不可用")
+        it.optString("database")
+    }
+
+    suspend fun register(login:String,password:String,nickname:String):Result<NativeSession> =
+        requestObject("POST","/api/auth/register",JSONObject().put("username",login).put("password",password),auth=false).mapCatching { j ->
+            val s=session(j);token=s.token
+            if(nickname.isNotBlank() && nickname != s.nickname){
+                requestObject("PATCH","/api/me",JSONObject().put("nickname",nickname).put("bio","").put("avatar_data",JSONObject.NULL)).getOrThrow()
+                val me=requestObject("GET","/api/me").getOrThrow()
+                NativeSession(s.id,me.optString("nickname",nickname),s.token,s.recoveryCode)
+            } else s
         }
-        val code=c.responseCode;val raw=(if(code in 200..299)c.inputStream else c.errorStream)?.bufferedReader()?.use{it.readText()}.orEmpty();c.disconnect()
-        if(code !in 200..299) throw IllegalStateException(parseError(raw,"请求失败 $code"))
-        "postgres"
-    }}
-    suspend fun register(login:String,password:String,nickname:String):Result<NativeSession> = runRpc("kehua_prod_register", mapOf("p_phone" to login,"p_password" to password,"p_nickname" to nickname)).mapCatching { j ->
-        val s=session(j); token=s.token; s
-    }
-    suspend fun login(login:String,password:String):Result<NativeSession> = runRpc("kehua_prod_login", mapOf("p_phone" to login,"p_password" to password)).mapCatching { j ->
-        val s=session(j); token=s.token; s
-    }
+
+    suspend fun login(login:String,password:String):Result<NativeSession> =
+        requestObject("POST","/api/auth/login",JSONObject().put("username",login).put("password",password),auth=false).mapCatching { j ->
+            val s=session(j); token=s.token; s
+        }
+
     fun logout(){ token="" }
+
     suspend fun logoutRemote():Result<Unit> {
-        val old=token
-        if(old.isBlank())return Result.success(Unit)
-        return runRpc("kehua_prod_logout",mapOf("p_token" to old)).map{token="";Unit}.onFailure{token=""}
+        if(token.isBlank()) return Result.success(Unit)
+        return requestObject("POST","/api/auth/logout").map{token="";Unit}.onFailure{token=""}
     }
+
     suspend fun recover(login:String,recoveryCode:String,newPassword:String):Result<NativeSession> =
-        runRpc("kehua_prod_recover",mapOf("p_login" to login,"p_recovery_code" to recoveryCode,"p_new_password" to newPassword)).mapCatching { j ->
-            val s=NativeSession(j.optString("user_id"),login,j.str("token"),j.optString("recovery_code").ifBlank{null})
-            token=s.token;s
+        requestObject("POST","/api/auth/recover",JSONObject().put("username",login).put("recovery_code",recoveryCode).put("new_password",newPassword),auth=false).mapCatching { j ->
+            val s=session(j);token=s.token;s
         }
+
     suspend fun rotateRecovery():Result<String> =
-        authed("kehua_prod_rotate_recovery").mapCatching{it.str("recovery_code")}
+        requestObject("POST","/api/me/recovery").mapCatching{it.reqString("recovery_code")}
 
-    suspend fun home():Result<NativeHome> = authed("kehua_prod_home").mapCatching { j ->
-        NativeHome(
-            posts=jsonArray(j,"my_posts").mapObj { o -> NativePost(o.str("id"),o.str("content"),o.str("created_at"),o.optInt("light_count"),o.optBoolean("is_private")) },
-            resonances=jsonArray(j,"resonances").mapObj { o -> NativeResonance(o.str("id"),o.str("content"),o.str("status"),(if(o.isNull("nickname")) null else o.optString("nickname").ifBlank{null}),(if(o.isNull("author_id")) null else o.optString("author_id").ifBlank{null})) },
-            newCount=j.optInt("new_count")
-        )
-    }
-    suspend fun createPost(content:String,isPrivate:Boolean=false):Result<String> = authed("kehua_prod_create_post",mapOf("p_content" to content,"p_media_data" to null,"p_private" to isPrivate)).mapCatching{it.str("id")}
-    suspend fun openResonance(id:String):Result<Unit> = authed("kehua_prod_open_resonance",mapOf("p_resonance_id" to id)).map{Unit}
-    suspend fun dismissResonance(id:String):Result<Unit> = authed("kehua_prod_dismiss_resonance",mapOf("p_resonance_id" to id)).map{Unit}
-    suspend fun light(id:String):Result<NativePeer> = authed("kehua_prod_light",mapOf("p_post_id" to id)).mapCatching { j ->
-        val u=j.getJSONObject("user"); NativePeer(u.str("id"),u.str("nickname"),u.optString("bio"))
-    }
-    suspend fun threads():Result<List<NativeThread>> = authed("kehua_prod_threads").mapCatching{j -> jsonArray(j,"items").mapObj{o->NativeThread(o.str("id"),o.str("nickname"),o.optString("last_message"),o.optString("last_at"),o.optBoolean("is_friend"))}}
-    suspend fun chat(peerId:String):Result<Pair<NativePeer,List<NativeMessage>>> = authed("kehua_prod_chat",mapOf("p_other" to peerId)).mapCatching { j ->
-        val p=j.getJSONObject("peer");
-        NativePeer(p.str("id"),p.str("nickname"),p.optString("bio"),j.optBoolean("is_friend")) to jsonArray(j,"items").mapObj{o->NativeMessage(o.optLong("id"),o.str("from_id"),o.str("body"),o.str("created_at"))}
-    }
-    suspend fun sendMessage(peerId:String,body:String):Result<Long> = authed("kehua_prod_send_message",mapOf("p_to" to peerId,"p_body" to body)).mapCatching{it.optLong("id")}
-    suspend fun friendRequest(peerId:String):Result<String> = authed("kehua_prod_friend_request",mapOf("p_other" to peerId)).mapCatching{it.str("status")}
-    suspend fun incomingRequests():Result<List<NativeFriendRequest>> = authed("kehua_prod_incoming_friend_requests").mapCatching{j->jsonArray(j,"items").mapObj{o->NativeFriendRequest(o.str("id"),o.str("from_user"))}}
-    suspend fun respondRequest(id:String,accept:Boolean):Result<String> = authed("kehua_prod_respond_friend_request",mapOf("p_request" to id,"p_accept" to accept)).mapCatching{it.str("status")}
-    suspend fun friends():Result<List<NativePeer>> = authed("kehua_prod_friends").mapCatching{j->jsonArray(j,"items").mapObj{o->NativePeer(o.str("id"),o.str("nickname"),o.optString("bio"),true)}}
-    suspend fun me():Result<NativeMe> = authed("kehua_prod_me").mapCatching { j -> val u=j.getJSONObject("user"); NativeMe(u.str("id"),u.str("nickname"),u.optString("bio"),u.optInt("post_count"),u.optInt("friend_count")) }
-    suspend fun updateProfile(nickname:String,bio:String):Result<Unit> =
-        authed("kehua_prod_update_profile",mapOf("p_nickname" to nickname,"p_bio" to bio,"p_gender" to "","p_region" to "","p_avatar_data" to null,"p_background_data" to null)).map{Unit}
-    suspend fun block(peerId:String):Result<Unit> =
-        authed("kehua_prod_block",mapOf("p_other" to peerId)).map{Unit}
-    suspend fun report(peerId:String,reason:String):Result<Unit> =
-        authed("kehua_prod_report",mapOf("p_user" to peerId,"p_post" to null,"p_reason" to reason)).map{Unit}
-    suspend fun deleteAccount():Result<Unit> = authed("kehua_prod_delete_account").map { token=""; Unit }
-
-    private suspend fun authed(name:String,args:Map<String,Any?> = emptyMap())=runRpc(name,args+mapOf("p_token" to token)).onFailure{ if(it.message=="登录已失效") token="" }
-    private suspend fun runRpc(name:String,args:Map<String,Any?>):Result<JSONObject> = withContext(Dispatchers.IO){ runCatching {
-        val c=(URL("$KEHUA_BASE/rest/v1/rpc/$name").openConnection() as HttpURLConnection).apply{
-            requestMethod="POST"; connectTimeout=8000; readTimeout=12000; doOutput=true
-            setRequestProperty("apikey",KEHUA_KEY); setRequestProperty("Content-Type","application/json")
+    suspend fun home():Result<NativeHome> = withContext(Dispatchers.IO){runCatching{
+        val posts=requestArrayRaw("GET","/api/posts/mine").getOrThrow().mapObj { o ->
+            NativePost(o.reqString("id"),o.reqString("body"),o.optString("created_at"),o.optInt("resonance_count"),o.optBoolean("is_private"))
         }
-        val body=JSONObject(); args.forEach{(k,v)->body.put(k,v ?: JSONObject.NULL)}
-        c.outputStream.use{it.write(body.toString().toByteArray())}
-        val code=c.responseCode; val raw=(if(code in 200..299)c.inputStream else c.errorStream)?.bufferedReader()?.use{it.readText()}.orEmpty(); c.disconnect()
-        if(code !in 200..299) throw IllegalStateException(parseError(raw,"请求失败 $code"))
-        val j=JSONObject(raw.ifBlank{"{}"}); if(j.optBoolean("ok",true).not()) throw IllegalStateException(j.optString("error","操作失败")); j
+        val resonances=ArrayList<NativeResonance>()
+        for(p in posts){
+            val arr=requestArrayRaw("GET","/api/posts/${p.id}/resonances").getOrThrow()
+            resonances += arr.mapObj { o ->
+                val lit=o.optBoolean("lit")
+                val u=o.optJSONObject("user")
+                NativeResonance(
+                    o.reqString("match_id"),
+                    o.reqString("body"),
+                    if(lit)"lit" else "new",
+                    if(lit) u?.optString("nickname")?.ifBlank{null} else null,
+                    null
+                )
+            }
+        }
+        NativeHome(posts,resonances,resonances.count{it.status=="new"})
     }}
-    private fun session(j:JSONObject):NativeSession{ val u=j.getJSONObject("user"); return NativeSession(u.str("id"),u.str("nickname"),j.str("token"),j.optString("recovery_code").ifBlank{null}) }
-    private fun jsonArray(j:JSONObject,key:String)=j.optJSONArray(key) ?: JSONArray()
-    private fun JSONObject.str(k:String)=optString(k).ifBlank{throw IllegalStateException("数据缺少 $k")}
-    private inline fun <T> JSONArray.mapObj(block:(JSONObject)->T):List<T>{ val out=ArrayList<T>(); for(i in 0 until length()) out+=block(getJSONObject(i)); return out }
-    private fun parseError(raw:String,fallback:String)=runCatching{JSONObject(raw).optString("message").ifBlank{JSONObject(raw).optString("error")}.ifBlank{fallback}}.getOrDefault(fallback)
+
+    suspend fun createPost(content:String,isPrivate:Boolean=false):Result<String> =
+        requestObject("POST","/api/posts",JSONObject().put("body",content).put("image_data",JSONObject.NULL).put("is_private",isPrivate)).mapCatching{it.reqString("id")}
+
+    suspend fun openResonance(id:String):Result<Unit> = Result.success(Unit)
+
+    suspend fun dismissResonance(id:String):Result<Unit> =
+        requestObject("POST","/api/matches/$id/skip").map{Unit}
+
+    suspend fun light(id:String):Result<NativePeer> =
+        requestObject("POST","/api/matches/$id/light").mapCatching { j ->
+            val u=j.getJSONObject("user")
+            NativePeer(u.reqString("id"),u.reqString("nickname"),u.optString("bio"),u.optString("friend_status")=="friends")
+        }
+
+    suspend fun threads():Result<List<NativeThread>> =
+        requestArrayRaw("GET","/api/conversations").mapCatching{arr ->
+            arr.mapObj{o->
+                val other=o.getJSONObject("other")
+                NativeThread(other.reqString("id"),other.reqString("nickname"),o.optString("last_message"),o.optString("updated_at"),other.optString("friend_status")=="friends")
+            }
+        }
+
+    suspend fun chat(peerId:String):Result<Pair<NativePeer,List<NativeMessage>>> = withContext(Dispatchers.IO){runCatching{
+        val p=requestObject("GET","/api/users/$peerId").getOrThrow()
+        val cid=p.reqString("conversation_id")
+        val ms=requestArrayRaw("GET","/api/conversations/$cid/messages").getOrThrow().mapObj{o->
+            NativeMessage(o.optLong("id"),o.reqString("sender_id"),o.reqString("body"),o.optString("created_at"))
+        }
+        NativePeer(p.reqString("id"),p.reqString("nickname"),p.optString("bio"),p.optString("friend_status")=="friends") to ms
+    }}
+
+    suspend fun sendMessage(peerId:String,body:String):Result<Long> = withContext(Dispatchers.IO){runCatching{
+        val p=requestObject("GET","/api/users/$peerId").getOrThrow()
+        requestObject("POST","/api/conversations/${p.reqString("conversation_id")}/messages",JSONObject().put("body",body)).getOrThrow().optLong("id")
+    }}
+
+    suspend fun friendRequest(peerId:String):Result<String> =
+        requestObject("POST","/api/users/$peerId/friend-request").mapCatching{it.reqString("status")}
+
+    suspend fun incomingRequests():Result<List<NativeFriendRequest>> =
+        requestArrayRaw("GET","/api/friend-requests").mapCatching{arr->
+            arr.mapObj{o->NativeFriendRequest(o.reqString("id"),o.getJSONObject("user").reqString("id"))}
+        }
+
+    suspend fun respondRequest(id:String,accept:Boolean):Result<String> {
+        if(!accept) return Result.failure(IllegalStateException("当前后端暂不支持拒绝好友申请"))
+        return requestObject("POST","/api/friend-requests/$id/accept").map{"accepted"}
+    }
+
+    suspend fun friends():Result<List<NativePeer>> =
+        requestArrayRaw("GET","/api/friends").mapCatching{arr->
+            arr.mapObj{o->NativePeer(o.reqString("id"),o.reqString("nickname"),o.optString("bio"),true)}
+        }
+
+    suspend fun me():Result<NativeMe> = withContext(Dispatchers.IO){runCatching{
+        val u=requestObject("GET","/api/me").getOrThrow()
+        val fs=requestArrayRaw("GET","/api/friends").getOrThrow()
+        NativeMe(u.reqString("id"),u.reqString("nickname"),u.optString("bio"),u.optJSONArray("posts")?.length()?:0,fs.length())
+    }}
+
+    suspend fun updateProfile(nickname:String,bio:String):Result<Unit> =
+        requestObject("PATCH","/api/me",JSONObject().put("nickname",nickname).put("bio",bio).put("avatar_data",JSONObject.NULL)).map{Unit}
+
+    suspend fun block(peerId:String):Result<Unit> =
+        requestObject("POST","/api/users/$peerId/block").map{Unit}
+
+    suspend fun report(peerId:String,reason:String):Result<Unit> =
+        requestObject("POST","/api/users/$peerId/report",JSONObject().put("reason",reason)).map{Unit}
+
+    suspend fun deleteAccount():Result<Unit> =
+        requestObject("DELETE","/api/me").map{token="";Unit}
+
+    private fun session(j:JSONObject):NativeSession{
+        val u=j.getJSONObject("user")
+        return NativeSession(u.reqString("id"),u.reqString("nickname"),j.reqString("token"),j.optString("recovery_code").ifBlank{null})
+    }
+
+    private suspend fun requestObject(method:String,path:String,body:JSONObject?=null,auth:Boolean=true):Result<JSONObject> =
+        withContext(Dispatchers.IO){runCatching{
+            val raw=http(method,path,body,auth)
+            JSONObject(raw.ifBlank{"{}"})
+        }}
+
+    private suspend fun requestArrayRaw(method:String,path:String,body:JSONObject?=null,auth:Boolean=true):Result<JSONArray> =
+        withContext(Dispatchers.IO){runCatching{
+            val raw=http(method,path,body,auth)
+            JSONArray(raw.ifBlank{"[]"})
+        }}
+
+    private fun http(method:String,path:String,body:JSONObject?,auth:Boolean):String{
+        val c=(URL(KEHUA_BASE+path).openConnection() as HttpURLConnection).apply{
+            requestMethod=method;connectTimeout=12000;readTimeout=20000
+            setRequestProperty("Accept","application/json")
+            if(auth && token.isNotBlank())setRequestProperty("Authorization","Bearer $token")
+            if(body!=null){doOutput=true;setRequestProperty("Content-Type","application/json")}
+        }
+        if(body!=null)c.outputStream.use{it.write(body.toString().toByteArray())}
+        val code=c.responseCode
+        val raw=(if(code in 200..299)c.inputStream else c.errorStream)?.bufferedReader()?.use{it.readText()}.orEmpty()
+        c.disconnect()
+        if(code !in 200..299)throw IllegalStateException(parseError(raw,"请求失败 $code"))
+        return raw
+    }
+
+    private fun JSONObject.reqString(k:String)=when(val v=opt(k)){
+        null,JSONObject.NULL -> throw IllegalStateException("数据缺少 $k")
+        else -> v.toString().ifBlank{throw IllegalStateException("数据缺少 $k")}
+    }
+
+    private inline fun <T> JSONArray.mapObj(block:(JSONObject)->T):List<T>{
+        val out=ArrayList<T>();for(i in 0 until length())out+=block(getJSONObject(i));return out
+    }
+
+    private fun parseError(raw:String,fallback:String)=runCatching{
+        val j=JSONObject(raw)
+        when(val d=j.opt("detail")){
+            is String -> d
+            else -> j.optString("message").ifBlank{j.optString("error")}.ifBlank{fallback}
+        }
+    }.getOrDefault(fallback)
 }
