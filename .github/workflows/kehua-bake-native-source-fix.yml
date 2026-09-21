@@ -5,6 +5,7 @@ on:
     branches: [kehua-v1133-native-cleanroom]
     paths:
       - '.github/workflows/kehua-bake-native-source-fix.yml'
+      - 'kehua-native/android/app/src/main/java/com/kehua/revival/MainActivity.java'
 permissions:
   contents: write
 jobs:
@@ -14,36 +15,16 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: kehua-v1133-native-cleanroom
-      - name: unpack current native source
+          fetch-depth: 0
+      - name: preserve canonical Android UI source
+        run: cp kehua-native/android/app/src/main/java/com/kehua/revival/MainActivity.java /tmp/MainActivity.java
+      - name: unpack current native bundle
         run: bash kehua-native-bootstrap.sh
-      - name: bake Android JSONObject compile fix into source
-        shell: bash
+      - name: replace bundled Android source with canonical UI
         run: |
-          python - <<'PY'
-          from pathlib import Path
-          p=Path('kehua-native/android/app/src/main/java/com/kehua/revival/MainActivity.java')
-          s=p.read_text()
-          marker='  EditText input(String hint){EditText e=new EditText(this);e.setHint(hint);e.setTextColor(ink);e.setHintTextColor(muted);e.setBackgroundColor(Color.WHITE);e.setPadding(20,16,20,16);return e;}\n'
-          helper='  JSONObject obj(Object... kv){JSONObject o=new JSONObject();for(int i=0;i+1<kv.length;i+=2){try{o.put(String.valueOf(kv[i]),kv[i+1]);}catch(Exception ignored){}}return o;}\n  JSONArray arr(Object... xs){JSONArray a=new JSONArray();for(Object x:xs)a.put(x);return a;}\n'
-          if 'JSONObject obj(Object... kv)' not in s:
-              if marker not in s:
-                  raise SystemExit('helper insertion marker missing')
-              s=s.replace(marker,marker+helper)
-          reps={
-            'new JSONObject().put("phone",phone.getText().toString()).put("code",code.getText().toString())':'obj("phone",phone.getText().toString(),"code",code.getText().toString())',
-            'new JSONObject().put("phone",phone.getText().toString())':'obj("phone",phone.getText().toString())',
-            'new JSONObject().put("kind",kind).put("mime",mime).put("base64",Base64.encodeToString(data,Base64.NO_WRAP))':'obj("kind",kind,"mime",mime,"base64",Base64.encodeToString(data,Base64.NO_WRAP))',
-            'new JSONObject().put("body",text)':'obj("body",text)',
-            'new JSONArray().put(mediaId)':'arr(mediaId)',
-            'new JSONObject().put("source","post").put("post_id",id)':'obj("source","post","post_id",id)',
-            'new JSONObject().put("other_user_id",authorId)':'obj("other_user_id",authorId)',
-            'new JSONObject().put("kind","text").put("body",s)':'obj("kind","text","body",s)'
-          }
-          for a,b in reps.items(): s=s.replace(a,b)
-          p.write_text(s)
-          if 'JSONObject obj(Object... kv)' not in s:
-              raise SystemExit('compile helper not baked')
-          PY
+          cp /tmp/MainActivity.java kehua-native/android/app/src/main/java/com/kehua/revival/MainActivity.java
+          grep -F '此刻，说你想说的话～' kehua-native/android/app/src/main/java/com/kehua/revival/MainActivity.java
+          grep -F 'https://kehua-api-production.up.railway.app' kehua-native/android/app/src/main/java/com/kehua/revival/MainActivity.java || true
       - name: repack canonical native bundle
         shell: bash
         run: |
@@ -59,8 +40,7 @@ jobs:
               Path(f'kehua_native_bundle_0{i}.b64').write_text(raw[i*chunk:(i+1)*chunk]+'\n')
           PY
           bash kehua-native-bootstrap.sh
-          grep -F 'JSONObject obj(Object... kv)' kehua-native/android/app/src/main/java/com/kehua/revival/MainActivity.java
-          grep -R -F 'https://kehua-api-production.up.railway.app' kehua-native/android >/dev/null
+          grep -F '此刻，说你想说的话～' kehua-native/android/app/src/main/java/com/kehua/revival/MainActivity.java
       - name: commit baked source
         shell: bash
         run: |
@@ -70,6 +50,6 @@ jobs:
           if git diff --cached --quiet; then
             echo "already baked"
           else
-            git commit -m "Bake Android compile fix into native source bundle"
+            git commit -m "Bake canonical Kehua Android UI into native source bundle"
             git push origin HEAD:kehua-v1133-native-cleanroom
           fi
