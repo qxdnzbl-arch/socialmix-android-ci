@@ -10,10 +10,10 @@ import org.junit.runner.RunWith
 @RunWith(AndroidJUnit4::class)
 class LaunchSmokeTest {
     @get:Rule
-    val activityRule = ActivityScenarioRule(KehuaActivity::class.java)
+    val activityRule = ActivityScenarioRule(KehuaNativeActivity::class.java)
 
     @Test
-    fun freshInstall_launchesWithoutCrash() {
+    fun freshInstall_launchesNativeAppWithoutCrash() {
         activityRule.scenario.onActivity { activity ->
             assertFalse(activity.isFinishing)
             assertFalse(activity.isDestroyed)
