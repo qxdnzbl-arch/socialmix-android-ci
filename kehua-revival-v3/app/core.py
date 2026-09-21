@@ -5,8 +5,6 @@ from typing import Dict
 from fastapi import Depends,Header,HTTPException
 from sqlalchemy import or_,select
 from sqlalchemy.orm import Session
-from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.metrics.pairwise import cosine_similarity
 from .db import *
 UTC=timezone.utc;MATCH_THRESHOLD=float(os.environ.get('MATCH_THRESHOLD','0.245'));MAX_IMAGE_CHARS=2_200_000
 TOPIC_WORDS={'work':['上班','工作','加班','同事','老板','辞职','工资','产线','累'],'lonely':['孤独','孤单','一个人','没人','难过','想哭','想念','怀念','失去'],'love':['喜欢','爱','恋爱','心动','分手','想你','朋友','关系'],'life':['生活','今天','晚上','天气','吃饭','散步','回家','睡觉','地铁','海边'],'study':['学习','考试','学校','老师','作业','上课'],'hope':['开心','希望','期待','终于','幸运','好看','舒服','温柔'],'digital':['软件','游戏','停运','更新','账号','手机','app','APP','聊天']}
@@ -42,6 +40,21 @@ def aux_similarity(a,b):
 def recency(dt):
  if dt.tzinfo is None:dt=dt.replace(tzinfo=UTC)
  return math.exp(-max(0,(datetime.now(UTC)-dt).total_seconds()/86400)/30)
+def _char_ngram_counts(text):
+ text=''.join(str(text or '').lower().split())
+ out={}
+ if not text:return out
+ for n in (1,2,3,4):
+  if len(text)<n:continue
+  for i in range(len(text)-n+1):
+   g=text[i:i+n];out[g]=out.get(g,0)+1
+ return out
+def _cosine_counts(a,b):
+ A=_char_ngram_counts(a);B=_char_ngram_counts(b)
+ if not A or not B:return 0.0
+ dot=sum(v*B.get(k,0) for k,v in A.items())
+ na=math.sqrt(sum(v*v for v in A.values()));nb=math.sqrt(sum(v*v for v in B.values()))
+ return dot/(na*nb) if na and nb else 0.0
 def _char_ngram_counts(text):
  text=''.join(str(text or '').lower().split())
  out={}
