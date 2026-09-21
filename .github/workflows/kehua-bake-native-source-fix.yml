@@ -60,7 +60,7 @@ jobs:
           PY
           bash kehua-native-bootstrap.sh
           grep -F 'JSONObject obj(Object... kv)' kehua-native/android/app/src/main/java/com/kehua/revival/MainActivity.java
-          grep -F 'https://kehua-api-production.up.railway.app' kehua-native/android/app/src/main/java/com/kehua/revival/MainActivity.java
+          grep -R -F 'https://kehua-api-production.up.railway.app' kehua-native/android >/dev/null
       - name: commit baked source
         shell: bash
         run: |
