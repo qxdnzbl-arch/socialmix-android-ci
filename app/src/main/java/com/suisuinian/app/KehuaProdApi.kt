@@ -11,7 +11,7 @@ import java.net.URL
 private const val KEHUA_BASE = "https://cxzcvswokzjibatmejqc.supabase.co"
 private const val KEHUA_KEY = "sb_publishable_B_eb3pu8OLyCmWJLdUZGdA_sel2BREC"
 
-data class NativeSession(val id:String,val nickname:String,val token:String)
+data class NativeSession(val id:String,val nickname:String,val token:String,val recoveryCode:String?=null)
 data class NativePost(val id:String,val content:String,val createdAt:String,val lightCount:Int,val isPrivate:Boolean)
 data class NativeResonance(val id:String,val content:String,val status:String,val nickname:String?,val authorId:String?)
 data class NativeHome(val posts:List<NativePost>,val resonances:List<NativeResonance>,val newCount:Int)
@@ -35,6 +35,18 @@ class KehuaProdApi(context: Context, private val prefSuffix:String="") {
         val s=session(j); token=s.token; s
     }
     fun logout(){ token="" }
+    suspend fun logoutRemote():Result<Unit> {
+        val old=token
+        if(old.isBlank()) return Result.success(Unit)
+        return runRpc("kehua_prod_logout",mapOf("p_token" to old)).map { token=""; Unit }
+    }
+    suspend fun recover(login:String,recoveryCode:String,newPassword:String):Result<NativeSession> =
+        runRpc("kehua_prod_recover",mapOf("p_login" to login,"p_recovery_code" to recoveryCode,"p_new_password" to newPassword)).mapCatching { j ->
+            val s=NativeSession(j.optString("user_id"),login,j.str("token"),j.optString("recovery_code").ifBlank{null})
+            token=s.token
+            s
+        }
+    suspend fun rotateRecovery():Result<String> = authed("kehua_prod_rotate_recovery").mapCatching { it.str("recovery_code") }
 
     suspend fun home():Result<NativeHome> = authed("kehua_prod_home").mapCatching { j ->
         NativeHome(
@@ -60,6 +72,9 @@ class KehuaProdApi(context: Context, private val prefSuffix:String="") {
     suspend fun respondRequest(id:String,accept:Boolean):Result<String> = authed("kehua_prod_respond_friend_request",mapOf("p_request" to id,"p_accept" to accept)).mapCatching{it.str("status")}
     suspend fun friends():Result<List<NativePeer>> = authed("kehua_prod_friends").mapCatching{j->jsonArray(j,"items").mapObj{o->NativePeer(o.str("id"),o.str("nickname"),o.optString("bio"),true)}}
     suspend fun me():Result<NativeMe> = authed("kehua_prod_me").mapCatching { j -> val u=j.getJSONObject("user"); NativeMe(u.str("id"),u.str("nickname"),u.optString("bio"),u.optInt("post_count"),u.optInt("friend_count")) }
+    suspend fun updateProfile(nickname:String,bio:String):Result<Unit> = authed("kehua_prod_update_profile",mapOf("p_nickname" to nickname,"p_bio" to bio,"p_gender" to "","p_region" to "","p_avatar_data" to null,"p_background_data" to null)).map { Unit }
+    suspend fun block(peerId:String):Result<Unit> = authed("kehua_prod_block",mapOf("p_other" to peerId)).map { Unit }
+    suspend fun report(peerId:String,reason:String):Result<Unit> = authed("kehua_prod_report",mapOf("p_user" to peerId,"p_post" to null,"p_reason" to reason)).map { Unit }
     suspend fun deleteAccount():Result<Unit> = authed("kehua_prod_delete_account").map { token=""; Unit }
 
     private suspend fun authed(name:String,args:Map<String,Any?> = emptyMap())=runRpc(name,args+mapOf("p_token" to token)).onFailure{ if(it.message=="登录已失效") token="" }
@@ -74,7 +89,7 @@ class KehuaProdApi(context: Context, private val prefSuffix:String="") {
         if(code !in 200..299) throw IllegalStateException(parseError(raw,"请求失败 $code"))
         val j=JSONObject(raw.ifBlank{"{}"}); if(j.optBoolean("ok",true).not()) throw IllegalStateException(j.optString("error","操作失败")); j
     }}
-    private fun session(j:JSONObject):NativeSession{ val u=j.getJSONObject("user"); return NativeSession(u.str("id"),u.str("nickname"),j.str("token")) }
+    private fun session(j:JSONObject):NativeSession{ val u=j.getJSONObject("user"); return NativeSession(u.str("id"),u.str("nickname"),j.str("token"),j.optString("recovery_code").ifBlank{null}) }
     private fun jsonArray(j:JSONObject,key:String)=j.optJSONArray(key) ?: JSONArray()
     private fun JSONObject.str(k:String)=optString(k).ifBlank{throw IllegalStateException("数据缺少 $k")}
     private inline fun <T> JSONArray.mapObj(block:(JSONObject)->T):List<T>{ val out=ArrayList<T>(); for(i in 0 until length()) out+=block(getJSONObject(i)); return out }
