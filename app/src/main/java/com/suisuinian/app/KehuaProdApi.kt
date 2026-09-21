@@ -72,11 +72,11 @@ class KehuaProdApi(context: Context, private val prefSuffix:String="") {
         c.outputStream.use{it.write(body.toString().toByteArray())}
         val code=c.responseCode; val raw=(if(code in 200..299)c.inputStream else c.errorStream)?.bufferedReader()?.use{it.readText()}.orEmpty(); c.disconnect()
         if(code !in 200..299) throw IllegalStateException(parseError(raw,"请求失败 $code"))
-        val j=JSONObject(raw.ifBlan{{"{}"}); if(j.optBoolean("ok",true).not()) throw IllegalStateException(j.optString("error","操作失败")); j
+        val j=JSONObject(raw.ifBlank{"{}"}); if(j.optBoolean("ok",true).not()) throw IllegalStateException(j.optString("error","操作失败")); j
     }}
     private fun session(j:JSONObject):NativeSession{ val u=j.getJSONObject("user"); return NativeSession(u.str("id"),u.str("nickname"),j.str("token")) }
     private fun jsonArray(j:JSONObject,key:String)=j.optJSONArray(key) ?: JSONArray()
     private fun JSONObject.str(k:String)=optString(k).ifBlank{throw IllegalStateException("数据缺少 $k")}
     private inline fun <T> JSONArray.mapObj(block:(JSONObject)->T):List<T>{ val out=ArrayList<T>(); for(i in 0 until length()) out+=block(getJSONObject(i)); return out }
-    private fun parseError(raw:String,fallback:String)=runCatching{JSONObject(raw).optString("message").ifBlank{JSONObject(raw).optString("error")}.ifBlan{fallback}}.getOrDefault(fallback)
+    private fun parseError(raw:String,fallback:String)=runCatching{JSONObject(raw).optString("message").ifBlank{JSONObject(raw).optString("error")}.ifBlank{fallback}}.getOrDefault(fallback)
 }
