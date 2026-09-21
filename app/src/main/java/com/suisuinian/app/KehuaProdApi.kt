@@ -8,8 +8,8 @@ import org.json.JSONObject
 import java.net.HttpURLConnection
 import java.net.URL
 
-private const val KEHUA_BASE = "https://nvwdtfnhsyfdopaxdylx.supabase.co"
-private const val KEHUA_KEY = "sb_publishable_S4IE-ziO7WQ_JAK9tuQGgQ_cszwKBWB"
+private const val KEHUA_BASE = "https://cxzcvswokzjibatmejqc.supabase.co"
+private const val KEHUA_KEY = "sb_publishable_B_eb3pu8OLyCmWJLdUZGdA_sel2BREC"
 
 data class NativeSession(val id:String,val nickname:String,val token:String)
 data class NativePost(val id:String,val content:String,val createdAt:String,val lightCount:Int,val isPrivate:Boolean)
