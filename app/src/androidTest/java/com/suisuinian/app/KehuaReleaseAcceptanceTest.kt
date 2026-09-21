@@ -10,18 +10,11 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 
-/**
- * Engineering-only regression gates for the current revival candidate.
- *
- * IMPORTANT: Product behavior is intentionally NOT accepted here. Visuals, auth/recovery,
- * and social interaction rules remain user-confirmation gates under KEHUA-REVIVAL-AUTHORITY.md.
- * These tests may only prove product-definition-neutral Android infrastructure properties.
- */
 @RunWith(AndroidJUnit4::class)
 class KehuaReleaseAcceptanceTest {
     @Test
-    fun launcherStartsWithoutCrash() {
-        ActivityScenario.launch(KehuaActivity::class.java).use { scenario ->
+    fun nativeLauncherStartsWithoutCrash() {
+        ActivityScenario.launch(KehuaNativeActivity::class.java).use { scenario ->
             scenario.onActivity { activity ->
                 assertFalse(activity.isFinishing)
                 assertFalse(activity.isDestroyed)
@@ -30,8 +23,9 @@ class KehuaReleaseAcceptanceTest {
     }
 
     @Test
-    fun engineeringApkDoesNotRequestDangerousUserDataPermissions() {
+    fun nativeApkDoesNotRequestUnexpectedSensitivePermissions() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
+        @Suppress("DEPRECATION")
         val packageInfo = context.packageManager.getPackageInfo(context.packageName, PackageManager.GET_PERMISSIONS)
         val requested = packageInfo.requestedPermissions?.toSet().orEmpty()
         val forbidden = setOf(
@@ -47,27 +41,29 @@ class KehuaReleaseAcceptanceTest {
             Manifest.permission.READ_CALL_LOG,
             Manifest.permission.WRITE_CALL_LOG
         )
-        val leaked = requested.intersect(forbidden)
-        assertTrue("Kehua engineering candidate unexpectedly requests dangerous user-data permissions: $leaked", leaked.isEmpty())
+        assertTrue("Unexpected sensitive permissions: ${requested.intersect(forbidden)}", requested.intersect(forbidden).isEmpty())
     }
 
     @Test
-    fun appOwnedComponentsDoNotExposeUnexpectedEntryPoints() {
+    fun onlyNativeLauncherActivityIsExported() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         @Suppress("DEPRECATION")
         val packageInfo = context.packageManager.getPackageInfo(
             context.packageName,
-            PackageManager.GET_ACTIVITIES or PackageManager.GET_SERVICES or PackageManager.GET_RECEIVERS or PackageManager.GET_PROVIDERS
+            PackageManager.GET_ACTIVITIES or PackageManager.GET_SERVICES or
+                PackageManager.GET_RECEIVERS or PackageManager.GET_PROVIDERS
         )
-        val appPrefix = "com.suisuinian.app."
-        val exportedActivities = packageInfo.activities.orEmpty().filter { it.exported && it.name.startsWith(appPrefix) }.map { it.name }.toSet()
-        val exportedServices = packageInfo.services.orEmpty().filter { it.exported && it.name.startsWith(appPrefix) }.map { it.name }
-        val exportedReceivers = packageInfo.receivers.orEmpty().filter { it.exported && it.name.startsWith(appPrefix) }.map { it.name }
-        val exportedProviders = packageInfo.providers.orEmpty().filter { it.exported && it.name.startsWith(appPrefix) }.map { it.name }
-
-        assertTrue("Only KehuaActivity may be exported by Kehua code, found: $exportedActivities", exportedActivities == setOf(KehuaActivity::class.java.name))
-        assertTrue("Kehua code must not export services: $exportedServices", exportedServices.isEmpty())
-        assertTrue("Kehua code must not export receivers: $exportedReceivers", exportedReceivers.isEmpty())
-        assertTrue("Kehua code must not export providers: $exportedProviders", exportedProviders.isEmpty())
+        val prefix = "com.suisuinian.app."
+        val exportedActivities = packageInfo.activities.orEmpty()
+            .filter { it.exported && it.name.startsWith(prefix) }
+            .map { it.name }
+            .toSet()
+        assertTrue(
+            "Only KehuaNativeActivity may be exported, found: $exportedActivities",
+            exportedActivities == setOf(KehuaNativeActivity::class.java.name)
+        )
+        assertTrue(packageInfo.services.orEmpty().none { it.exported && it.name.startsWith(prefix) })
+        assertTrue(packageInfo.receivers.orEmpty().none { it.exported && it.name.startsWith(prefix) })
+        assertTrue(packageInfo.providers.orEmpty().none { it.exported && it.name.startsWith(prefix) })
     }
 }
