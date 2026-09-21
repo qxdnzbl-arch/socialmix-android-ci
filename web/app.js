@@ -1,8 +1,8 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.116.0';
 
 const supabase = createClient(
-  'https://lzylcqozczsaxtdqfhrs.supabase.co',
-  'sb_publishable_Wu7Xa-2bx6QARotVaTX_8g_yBlToQ-e',
+  'https://cxzcvswokzjibatmejqc.supabase.co',
+  'sb_publishable_B_eb3pu8OLyCmWJLdUZGdA_sel2BREC',
   { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true } }
 );
 
@@ -27,7 +27,7 @@ const clear = () => { state.notice=''; state.error=''; };
 
 async function track(name, metadata={}) {
   if (!state.user) return;
-  try { await supabase.from('product_events').insert({user_id:state.user.id,event_name:name,metadata}); } catch(_) {}
+  try { await supabase.from('kehua_growth_events').insert({user_id:state.user.id,event:name,meta:metadata}); } catch(_) {}
 }
 
 function parseRoute() {
@@ -40,7 +40,7 @@ function parseRoute() {
 async function ensureProfile() {
   if (!state.user) return;
   const nickname = state.user.user_metadata?.nickname || null;
-  const {data,error} = await supabase.rpc('ensure_profile',{_nickname:nickname});
+  const {data,error} = await supabase.rpc('kehua_ensure_profile',{_nickname:nickname});
   if (error) throw error;
   state.profile = data;
 }
@@ -82,7 +82,7 @@ async function navigate(view,chatId=null) {
 
 function avatar(p) {
   const name=p?.nickname||'可话用户';
-  return '<div class="avatar">'+(p?.avatar_url?'<img src="'+esc(p.avatar_url)+'" alt="">':esc(first(name)))+'</div>';
+  return '<div class="avatar">'+(esc(first(name)))+'</div>';
 }
 function notice() {
   if (state.error) return '<div class="notice error">'+esc(state.error)+'</div>';
@@ -113,7 +113,7 @@ function landing() {
 function postCard(p,opts={}) {
   const media=(p.media||[]).map(m=>m.kind==='video'?'<video controls playsinline src="'+esc(m.url)+'"></video>':'<img loading="lazy" src="'+esc(m.url)+'" alt="">').join('');
   const actions=opts.resonance?'<div class="row wrap"><button class="soft-btn" data-light-post="'+p.id+'" data-author="'+p.author_id+'">点亮并回应</button><button class="ghost-btn" data-start-chat="'+p.author_id+'">聊一聊</button><button class="ghost-btn tiny" data-report-user="'+p.author_id+'" data-report-post="'+p.id+'">举报</button><button class="ghost-btn tiny" data-block-user="'+p.author_id+'">屏蔽</button></div>':'';
-  return '<article class="card post"><div class="post-head">'+avatar(p.profile)+'<div><div class="post-author">'+esc(p.profile?.nickname||'可话用户')+'</div><div class="post-time">'+fmt(p.created_at)+'</div></div>'+(p.pinned?'<span class="tag">置顶</span>':'')+'</div><div class="post-body">'+esc(p.content||'')+'</div>'+(media?'<div class="media-grid">'+media+'</div>':'')+(opts.score!=null?'<div class="tiny muted">共鸣匹配 '+Math.round(Number(opts.score||0)*100)+'%</div>':'')+actions+'</article>';
+  return '<article class="card post"><div class="post-head">'+avatar(p.profile)+'<div><div class="post-author">'+esc(p.profile?.nickname||'可话用户')+'</div><div class="post-time">'+fmt(p.created_at)+'</div></div>'+(p.pinned?'<span class="tag">置顶</span>':'')+'</div><div class="post-body">'+esc(p.body||'')+'</div>'+(media?'<div class="media-grid">'+media+'</div>':'')+(opts.score!=null?'<div class="tiny muted">共鸣匹配 '+Math.round(Number(opts.score||0)*100)+'%</div>':'')+actions+'</article>';
 }
 
 function home() {
@@ -129,17 +129,17 @@ function messages() {
 }
 function friends() {
   const accepted=state.friends.filter(f=>f.status==='accepted');
-  const incoming=state.friends.filter(f=>f.status==='pending'&&f.requested_by!==state.user.id);
-  const outgoing=state.friends.filter(f=>f.status==='pending'&&f.requested_by===state.user.id);
-  const row=(f,label)=>'<div class="chat-item">'+avatar(f.peer)+'<div class="chat-main"><div class="chat-name">'+esc(f.peer?.nickname||'可话用户')+'</div><div class="chat-preview">'+label+'</div></div>'+(f.status==='accepted'?'<button class="ghost-btn" data-start-chat="'+f.peer.id+'">聊天</button>':'')+(f.status==='pending'&&f.requested_by!==state.user.id?'<button class="primary-btn" data-accept-friend="'+f.peer.id+'">接受</button>':'')+'</div>';
+  const incoming=state.friends.filter(f=>f.status==='pending'&&f.addressee_id===state.user.id);
+  const outgoing=state.friends.filter(f=>f.status==='pending'&&f.requester_id===state.user.id);
+  const row=(f,label)=>'<div class="chat-item">'+avatar(f.peer)+'<div class="chat-main"><div class="chat-name">'+esc(f.peer?.nickname||'可话用户')+'</div><div class="chat-preview">'+label+'</div></div>'+(f.status==='accepted'?'<button class="ghost-btn" data-start-chat="'+f.peer.id+'">聊天</button>':'')+(f.status==='pending'&&f.addressee_id===state.user.id?'<button class="primary-btn" data-accept-friend="'+f.peer.id+'">接受</button>':'')+'</div>';
   return topbar('朋友','关系从理解开始，不从关注数开始')+'<main class="shell">'+notice()+(incoming.length?'<h2 class="section-title">收到的申请</h2>'+incoming.map(f=>row(f,'想成为你的朋友')).join(''):'')+'<h2 class="section-title">朋友</h2><div class="chat-list">'+(accepted.length?accepted.map(f=>row(f,'已成为朋友')).join(''):'<div class="card empty">还没有朋友。</div>')+'</div>'+(outgoing.length?'<h2 class="section-title">等待对方</h2>'+outgoing.map(f=>row(f,'申请已发出')).join(''):'')+'</main>'+navHtml();
 }
 function me() {
-  const vip=!!state.entitlement?.is_vip&&(!state.entitlement.vip_until||new Date(state.entitlement.vip_until)>new Date());
+  const vip=!!state.entitlement?.vip_until&&new Date(state.entitlement.vip_until)>new Date();
   return topbar('我的','你的表达、关系和设置')+'<main class="shell">'+notice()+'<section class="card"><div class="post-head">'+avatar(state.profile)+'<div class="grow"><div class="post-author">'+esc(state.profile?.nickname||'可话用户')+'</div><div class="post-time">'+esc(state.user?.email||'')+'</div></div>'+(vip?'<span class="tag">VIP</span>':'')+'</div><p class="small muted">'+esc(state.profile?.bio||'还没有写自我介绍。')+'</p><div class="row wrap"><button class="soft-btn" data-route="settings">编辑资料</button><button class="ghost-btn" data-route="membership">会员</button></div></section><h2 class="section-title">我的动态</h2>'+(state.ownPosts.length?state.ownPosts.map(p=>postCard(p)).join(''):'<div class="card empty">还没有动态。</div>')+'</main>'+navHtml();
 }
 function membership() {
-  const vip=!!state.entitlement?.is_vip&&(!state.entitlement.vip_until||new Date(state.entitlement.vip_until)>new Date());
+  const vip=!!state.entitlement?.vip_until&&new Date(state.entitlement.vip_until)>new Date();
   return topbar('会员','会员能力由服务端权限控制')+'<main class="shell">'+notice()+'<section class="card hero"><h1 style="font-size:26px">可话会员</h1><p>附近优先、共鸣性别筛选、每日遇见额度提升、动态置顶、历史动态自见。</p><div class="slogan">'+(vip?'当前会员有效':'当前为普通用户')+'</div></section><section class="card"><div class="notice">支付账户尚未完成真实商户接入，因此这里不会伪造付款成功。应用其他功能已经可以真实使用。</div><div class="row between wrap" style="margin-top:14px"><div><strong>开通提醒</strong><div class="tiny muted">真实支付开放后通知已登记用户。</div></div><button class="primary-btn" data-membership-interest '+(state.interest?'disabled':'')+'>'+(state.interest?'已登记':'登记开通提醒')+'</button></div></section><button class="ghost-btn" data-route="me">← 返回我的</button></main>';
 }
 function settings() {
@@ -171,14 +171,14 @@ function render() {
 async function enrichPosts(posts) {
   if (!posts?.length) return [];
   const authors=[...new Set(posts.map(p=>p.author_id))];
-  const {data:profiles}=await supabase.from('profiles').select('*').in('id',authors);
+  const {data:profiles}=await supabase.from('kehua_profiles').select('*').in('id',authors);
   const pmap=new Map((profiles||[]).map(p=>[p.id,p]));
   const out=[];
   for (const post of posts) {
-    const {data:mediaRows}=await supabase.from('post_media').select('*').eq('post_id',post.id).order('position');
+    const {data:mediaRows}=await supabase.from('kehua_media').select('*').eq('post_id',post.id).order('created_at');
     const media=[];
     for (const m of mediaRows||[]) {
-      const {data}=await supabase.storage.from('kehua-media').createSignedUrl(m.storage_path,3600);
+      const {data}=await supabase.storage.from('kehua-media').createSignedUrl(m.object_path,3600);
       if (data?.signedUrl) media.push({...m,url:data.signedUrl});
     }
     out.push({...post,profile:pmap.get(post.author_id),media});
@@ -186,46 +186,61 @@ async function enrichPosts(posts) {
   return out;
 }
 async function loadOwnPosts() {
-  const {data,error}=await supabase.from('posts').select('*').eq('author_id',state.user.id).order('created_at',{ascending:false}).limit(30);
+  const {data,error}=await supabase.from('kehua_posts').select('*').eq('author_id',state.user.id).order('created_at',{ascending:false}).limit(30);
   if(error) throw error; state.ownPosts=await enrichPosts(data||[]);
 }
 async function loadResonance() {
-  const {data:rows,error}=await supabase.from('resonance_candidates').select('*').eq('user_id',state.user.id).order('created_at',{ascending:false}).limit(40);
+  const {data:rows,error}=await supabase.from('kehua_resonances').select('*').eq('user_id',state.user.id).order('created_at',{ascending:false}).limit(40);
   if(error) throw error;
   const ids=[...new Set((rows||[]).map(r=>r.candidate_post_id))];
   if(!ids.length){state.resonance=[];return;}
-  const {data:posts,error:pe}=await supabase.from('posts').select('*').in('id',ids); if(pe) throw pe;
+  const {data:posts,error:pe}=await supabase.from('kehua_posts').select('*').in('id',ids); if(pe) throw pe;
   const enriched=await enrichPosts(posts||[]); const map=new Map(enriched.map(p=>[p.id,p]));
   state.resonance=(rows||[]).filter(r=>map.has(r.candidate_post_id)).map(r=>({score:r.score,post:map.get(r.candidate_post_id)}));
   await track('resonance_viewed',{count:state.resonance.length});
 }
 async function loadConversations() {
-  const {data:memberships,error}=await supabase.from('conversation_members').select('conversation_id').eq('user_id',state.user.id); if(error) throw error;
-  const ids=(memberships||[]).map(x=>x.conversation_id); if(!ids.length){state.conversations=[];return;}
-  const {data:convs,error:ce}=await supabase.from('conversations').select('*').in('id',ids).order('last_message_at',{ascending:false}); if(ce) throw ce;
-  const {data:allMembers,error:me}=await supabase.from('conversation_members').select('*').in('conversation_id',ids); if(me) throw me;
-  const peerIds=[...new Set((allMembers||[]).filter(m=>m.user_id!==state.user.id).map(m=>m.user_id))];
-  const {data:profiles}=peerIds.length?await supabase.from('profiles').select('*').in('id',peerIds):{data:[]}; const pmap=new Map((profiles||[]).map(p=>[p.id,p]));
-  const by=new Map(); for(const m of allMembers||[]){if(!by.has(m.conversation_id))by.set(m.conversation_id,[]);by.get(m.conversation_id).push(m);}
-  const out=[]; for(const c of convs||[]){const peerId=(by.get(c.id)||[]).find(m=>m.user_id!==state.user.id)?.user_id;const {data:last}=await supabase.from('messages').select('*').eq('conversation_id',c.id).order('created_at',{ascending:false}).limit(1);out.push({...c,peer:pmap.get(peerId),last:last?.[0]||null});}
+  const {data:convs,error}=await supabase.from('kehua_conversations').select('*').order('last_message_at',{ascending:false});
+  if(error) throw error;
+  if(!convs?.length){state.conversations=[];return;}
+  const peerIds=[...new Set(convs.map(c=>c.user_low===state.user.id?c.user_high:c.user_low))];
+  const {data:profiles}=await supabase.from('kehua_profiles').select('*').in('id',peerIds);
+  const pmap=new Map((profiles||[]).map(p=>[p.id,p]));
+  const out=[];
+  for(const conv of convs){
+    const peerId=conv.user_low===state.user.id?conv.user_high:conv.user_low;
+    const {data:last}=await supabase.from('kehua_messages').select('*').eq('conversation_id',conv.id).order('created_at',{ascending:false}).limit(1);
+    out.push({...conv,peer:pmap.get(peerId),last:last?.[0]||null});
+  }
   state.conversations=out;
 }
 async function loadFriends() {
-  const uid=state.user.id; const {data,error}=await supabase.from('friendships').select('*').or('user_low.eq.'+uid+',user_high.eq.'+uid).order('updated_at',{ascending:false}); if(error) throw error;
-  const peerIds=[...new Set((data||[]).map(f=>f.user_low===uid?f.user_high:f.user_low))]; const {data:profiles}=peerIds.length?await supabase.from('profiles').select('*').in('id',peerIds):{data:[]}; const map=new Map((profiles||[]).map(p=>[p.id,p]));
-  state.friends=(data||[]).map(f=>({...f,peer:map.get(f.user_low===uid?f.user_high:f.user_low)}));
+  const uid=state.user.id;
+  const {data,error}=await supabase.from('kehua_friendships').select('*').or('requester_id.eq.'+uid+',addressee_id.eq.'+uid).order('created_at',{ascending:false});
+  if(error) throw error;
+  const peerIds=[...new Set((data||[]).map(f=>f.requester_id===uid?f.addressee_id:f.requester_id))];
+  const {data:profiles}=peerIds.length?await supabase.from('kehua_profiles').select('*').in('id',peerIds):{data:[]};
+  const map=new Map((profiles||[]).map(p=>[p.id,p]));
+  state.friends=(data||[]).map(f=>({...f,peer:map.get(f.requester_id===uid?f.addressee_id:f.requester_id)}));
 }
-async function loadEntitlement(){const {data}=await supabase.from('entitlements').select('*').eq('user_id',state.user.id).maybeSingle();state.entitlement=data||null;}
-async function loadInterest(){const {data}=await supabase.from('membership_interest').select('*').eq('user_id',state.user.id).maybeSingle();state.interest=data||null;}
+async function loadEntitlement(){const {data}=await supabase.from('kehua_entitlements').select('*').eq('user_id',state.user.id).maybeSingle();state.entitlement=data||null;}
+async function loadInterest(){const {data}=await supabase.from('kehua_vip_interest').select('*').eq('user_id',state.user.id).maybeSingle();state.interest=data||null;}
 async function loadChat(id) {
-  const {data:members,error:me}=await supabase.from('conversation_members').select('*').eq('conversation_id',id);if(me)throw me;
-  const peerId=(members||[]).find(m=>m.user_id!==state.user.id)?.user_id;if(!peerId)throw new Error('会话不存在或你没有访问权限。');
-  const {data:peer}=await supabase.from('profiles').select('*').eq('id',peerId).single();state.chatPeer=peer;
-  const {data:msgs,error}=await supabase.from('messages').select('*').eq('conversation_id',id).order('created_at',{ascending:true}).limit(200);if(error)throw error;state.chatMessages=msgs||[];
-  await supabase.rpc('mark_conversation_read',{_conversation_id:id});
-  state.chatChannel=supabase.channel('chat-'+id).on('postgres_changes',{event:'INSERT',schema:'public',table:'messages',filter:'conversation_id=eq.'+id},payload=>{if(!state.chatMessages.some(m=>m.id===payload.new.id)){state.chatMessages.push(payload.new);render();window.scrollTo({top:document.body.scrollHeight,behavior:'smooth'});}}).subscribe();
+  const {data:conv,error:ce}=await supabase.from('kehua_conversations').select('*').eq('id',id).single();
+  if(ce) throw ce;
+  const peerId=conv.user_low===state.user.id?conv.user_high:conv.user_low;
+  const {data:peer,error:pe}=await supabase.from('kehua_profiles').select('*').eq('id',peerId).single();
+  if(pe) throw pe;
+  state.chatPeer=peer;
+  const {data:msgs,error}=await supabase.from('kehua_messages').select('*').eq('conversation_id',id).order('created_at',{ascending:true}).limit(200);
+  if(error) throw error;
+  state.chatMessages=msgs||[];
+  await supabase.rpc('kehua_mark_read',{_conversation_id:id});
+  state.chatChannel=supabase.channel('kehua-chat-'+id).on('postgres_changes',{event:'INSERT',schema:'public',table:'kehua_messages',filter:'conversation_id=eq.'+id},payload=>{
+    if(!state.chatMessages.some(m=>m.id===payload.new.id)){state.chatMessages.push(payload.new);render();window.scrollTo({top:document.body.scrollHeight,behavior:'smooth'});}
+  }).subscribe();
 }
-async function startChatWith(userId){const {data,error}=await supabase.rpc('get_or_create_conversation',{_other:userId});if(error)throw error;await track('conversation_started',{peer:userId});location.hash='chat='+data;}
+async function startChatWith(userId){const {data,error}=await supabase.rpc('kehua_get_or_create_conversation',{_other:userId});if(error)throw error;await track('conversation_started',{peer:userId});location.hash='chat='+data;}
 
 async function handleAuth(form) {
   state.busy=true;clear();render(); const fd=new FormData(form); const email=String(fd.get('email')||'').trim(); const password=String(fd.get('password')||'');
@@ -239,21 +254,21 @@ async function handlePost(form) {
   state.busy=true;clear();render();
   try {
     const fd=new FormData(form);const content=String(fd.get('content')||'').trim();if(!content)throw new Error('先写下你真正想说的话。');
-    const {data:post,error}=await supabase.from('posts').insert({author_id:state.user.id,content,visibility:'mutual'}).select('*').single();if(error)throw error;
-    let pos=0;for(const file of state.pendingFiles){if(file.size>25*1024*1024)throw new Error('单个媒体文件暂时不能超过 25MB。');const safe=file.name.replace(/[^a-zA-Z0-9._-]+/g,'-');const path=state.user.id+'/'+post.id+'/'+Date.now()+'-'+pos+'-'+safe;const {error:ue}=await supabase.storage.from('kehua-media').upload(path,file,{upsert:false,contentType:file.type});if(ue)throw ue;const kind=file.type.startsWith('video/')?'video':'image';const {error:ie}=await supabase.from('post_media').insert({post_id:post.id,owner_id:state.user.id,storage_path:path,kind,position:pos});if(ie)throw ie;pos++;}
-    await track('post_created',{media_count:state.pendingFiles.length});const {error:re}=await supabase.rpc('generate_resonance',{_seed_post_id:post.id,_gender:null,_nearby:false});if(re)throw re;state.pendingFiles=[];location.hash='resonance';
+    const {data:post,error}=await supabase.from('kehua_posts').insert({author_id:state.user.id,body:content,visibility:'resonance'}).select('*').single();if(error)throw error;
+    let pos=0;for(const file of state.pendingFiles){if(file.size>25*1024*1024)throw new Error('单个媒体文件暂时不能超过 25MB。');const safe=file.name.replace(/[^a-zA-Z0-9._-]+/g,'-');const path=state.user.id+'/'+post.id+'/'+Date.now()+'-'+pos+'-'+safe;const {error:ue}=await supabase.storage.from('kehua-media').upload(path,file,{upsert:false,contentType:file.type});if(ue)throw ue;const kind=file.type.startsWith('video/')?'video':'image';const {error:ie}=await supabase.from('kehua_media').insert({post_id:post.id,owner_id:state.user.id,object_path:path,kind,mime_type:file.type,size_bytes:file.size});if(ie)throw ie;pos++;}
+    await track('post_created',{media_count:state.pendingFiles.length});const {error:re}=await supabase.rpc('kehua_generate_resonance',{_seed_post_id:post.id,_gender:null,_nearby:false});if(re)throw re;state.pendingFiles=[];location.hash='resonance';
   } catch(e){fail(e.message||'发表失败。');state.busy=false;render();}
 }
 async function sendMessage(form) {
   const fd=new FormData(form);const body=String(fd.get('body')||'').trim();if(!body)return;const input=form.querySelector('[name="body"]');input.value='';
-  const {data,error}=await supabase.from('messages').insert({conversation_id:state.chatId,sender_id:state.user.id,body}).select('*').single();if(error){fail(error.message);render();return;}if(!state.chatMessages.some(m=>m.id===data.id))state.chatMessages.push(data);await track('message_sent',{conversation_id:state.chatId});render();window.scrollTo({top:document.body.scrollHeight,behavior:'smooth'});
+  const {data,error}=await supabase.from('kehua_messages').insert({conversation_id:state.chatId,sender_id:state.user.id,body}).select('*').single();if(error){fail(error.message);render();return;}if(!state.chatMessages.some(m=>m.id===data.id))state.chatMessages.push(data);await track('message_sent',{conversation_id:state.chatId});render();window.scrollTo({top:document.body.scrollHeight,behavior:'smooth'});
 }
 
 document.addEventListener('submit',async e=>{
   if(e.target.id==='auth-form'){e.preventDefault();await handleAuth(e.target);}
   if(e.target.id==='post-form'){e.preventDefault();await handlePost(e.target);}
   if(e.target.id==='message-form'){e.preventDefault();await sendMessage(e.target);}
-  if(e.target.id==='profile-form'){e.preventDefault();const fd=new FormData(e.target);const patch={nickname:String(fd.get('nickname')||'').trim(),bio:String(fd.get('bio')||'').trim()||null,city:String(fd.get('city')||'').trim()||null,updated_at:new Date().toISOString()};const {data,error}=await supabase.from('profiles').update(patch).eq('id',state.user.id).select('*').single();if(error)fail(error.message);else{state.profile=data;ok('资料已保存。');}render();}
+  if(e.target.id==='profile-form'){e.preventDefault();const fd=new FormData(e.target);const patch={nickname:String(fd.get('nickname')||'').trim(),bio:String(fd.get('bio')||'').trim()||null,city:String(fd.get('city')||'').trim()||null,updated_at:new Date().toISOString()};const {data,error}=await supabase.from('kehua_profiles').update(patch).eq('id',state.user.id).select('*').single();if(error)fail(error.message);else{state.profile=data;ok('资料已保存。');}render();}
 });
 
 document.addEventListener('change',e=>{if(e.target.id==='media-input'){state.pendingFiles=[...e.target.files].slice(0,6);const x=document.getElementById('file-summary');if(x)x.textContent=state.pendingFiles.length?state.pendingFiles.map(f=>f.name).join(' · '):'未选择媒体';}});
@@ -264,12 +279,12 @@ document.addEventListener('click',async e=>{
   if(el.dataset.route){e.preventDefault();location.hash=el.dataset.route;return;}
   if(el.dataset.chat){location.hash='chat='+el.dataset.chat;return;}
   if(el.dataset.startChat){try{await startChatWith(el.dataset.startChat);}catch(err){fail(err.message);render();}return;}
-  if(el.dataset.lightPost){try{const {error}=await supabase.from('reactions').insert({post_id:el.dataset.lightPost,user_id:state.user.id,author_id:el.dataset.author,kind:'light'});if(error&&!String(error.message).includes('duplicate'))throw error;const {data:cid,error:ce}=await supabase.rpc('get_or_create_conversation',{_other:el.dataset.author});if(ce)throw ce;await track('conversation_started',{source:'resonance'});location.hash='chat='+cid;}catch(err){fail(err.message);render();}return;}
-  if(el.dataset.acceptFriend){try{const {error}=await supabase.rpc('accept_friend',{_other:el.dataset.acceptFriend});if(error)throw error;await track('friend_added',{source:'accepted'});await loadFriends();ok('已经成为朋友。');render();}catch(err){fail(err.message);render();}return;}
-  if(el.dataset.requestFriend){try{const {data,error}=await supabase.rpc('request_friend',{_other:el.dataset.requestFriend});if(error)throw error;if(data?.status==='accepted')await track('friend_added',{source:'mutual_request'});ok(data?.status==='accepted'?'已经成为朋友。':'好友申请已发出。');render();}catch(err){fail(err.message);render();}return;}
-  if(el.dataset.reportUser){const reason=prompt('举报原因（例如：骚扰、欺诈、违法内容、侵犯隐私）');if(!reason)return;const details=prompt('补充说明（可留空）')||null;const payload={reporter_id:state.user.id,reported_user_id:el.dataset.reportUser,reason,details};if(el.dataset.reportPost)payload.post_id=el.dataset.reportPost;const {error}=await supabase.from('user_reports').insert(payload);error?fail(error.message):ok('举报已提交。');render();return;}
-  if(el.dataset.blockUser){if(!confirm('屏蔽后，双方将无法继续发新消息，也不会再互相匹配共鸣。确定吗？'))return;const {error}=await supabase.from('user_blocks').insert({blocker_id:state.user.id,blocked_id:el.dataset.blockUser});if(error&&!String(error.message).includes('duplicate'))fail(error.message);else{ok('已屏蔽。');if(state.view==='chat')location.hash='messages';else await loadResonance();}render();return;}
-  if(el.dataset.membershipInterest!==undefined){const {data,error}=await supabase.from('membership_interest').upsert({user_id:state.user.id,plan:'vip',updated_at:new Date().toISOString()}).select('*').single();if(error)fail(error.message);else{state.interest=data;ok('已登记。真实支付开放后会按这条记录通知。');await track('membership_viewed',{interest:true});}render();return;}
+  if(el.dataset.lightPost){try{const {data:cid,error}=await supabase.rpc('kehua_light_post',{_post_id:el.dataset.lightPost});if(error)throw error;await track('conversation_started',{source:'resonance'});location.hash='chat='+cid;}catch(err){fail(err.message);render();}return;}
+  if(el.dataset.acceptFriend){try{const {error}=await supabase.rpc('kehua_accept_friend',{_other:el.dataset.acceptFriend});if(error)throw error;await track('friend_added',{source:'accepted'});await loadFriends();ok('已经成为朋友。');render();}catch(err){fail(err.message);render();}return;}
+  if(el.dataset.requestFriend){try{const {data,error}=await supabase.rpc('kehua_request_friend',{_other:el.dataset.requestFriend});if(error)throw error;if(data?.status==='accepted')await track('friend_added',{source:'mutual_request'});ok(data?.status==='accepted'?'已经成为朋友。':'好友申请已发出。');render();}catch(err){fail(err.message);render();}return;}
+  if(el.dataset.reportUser){const reason=prompt('举报原因（例如：骚扰、欺诈、违法内容、侵犯隐私）');if(!reason)return;const details=prompt('补充说明（可留空）')||null;const payload={reporter_id:state.user.id,reported_user_id:el.dataset.reportUser,reason,details};if(el.dataset.reportPost)payload.post_id=el.dataset.reportPost;const {error}=await supabase.from('kehua_user_reports').insert(payload);error?fail(error.message):ok('举报已提交。');render();return;}
+  if(el.dataset.blockUser){if(!confirm('屏蔽后，双方将无法继续发新消息，也不会再互相匹配共鸣。确定吗？'))return;const {error}=await supabase.from('kehua_user_blocks').insert({blocker_id:state.user.id,blocked_id:el.dataset.blockUser});if(error&&!String(error.message).includes('duplicate'))fail(error.message);else{ok('已屏蔽。');if(state.view==='chat')location.hash='messages';else await loadResonance();}render();return;}
+  if(el.dataset.membershipInterest!==undefined){const {data,error}=await supabase.from('kehua_vip_interest').insert({user_id:state.user.id,price_choice:'notify_me',note:'public_launch'}).select('*').single();if(error)fail(error.message);else{state.interest=data;ok('已登记。真实支付开放后会按这条记录通知。');await track('membership_viewed',{interest:true});}render();return;}
   if(el.dataset.toggleTheme!==undefined){const dark=document.documentElement.classList.toggle('dark');localStorage.setItem('kehua-theme',dark?'dark':'light');render();return;}
   if(el.dataset.signout!==undefined){await supabase.auth.signOut();return;}
 });
