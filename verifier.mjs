@@ -1,5 +1,5 @@
 import http from "node:http";
-const APP="https://kehua-live.onrender.com";
+const APP="https://kehua-app-public.onrender.com";
 const SB="https://lzylcqozczsaxtdqfhrs.supabase.co";
 const KEY="sb_publishable_Wu7Xa-2bx6QARotVaTX_8g_yBlToQ-e";
 async function check(){
