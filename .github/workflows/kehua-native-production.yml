@@ -1,0 +1,46 @@
+name: Kehua Native Production Candidate
+on:
+  push:
+    branches: [ kehua-native-prod-repair ]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  native-candidate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+      - name: Build native release candidate
+        run: gradle --no-daemon :app:assembleDebug :app:assembleDebugAndroidTest :app:bundleRelease
+      - name: Enable KVM
+        run: |
+          if [ -e /dev/kvm ]; then sudo chmod 666 /dev/kvm; fi
+      - name: Native app end-to-end acceptance
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          target: google_apis
+          profile: pixel_6
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none
+          script: |
+            adb uninstall com.qxdnzbl.kehua || true
+            gradle --no-daemon :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.suisuinian.app.KehuaNativeE2ETest
+            adb install -r app/build/outputs/apk/debug/app-debug.apk
+            adb shell am force-stop com.qxdnzbl.kehua || true
+            adb shell monkey -p com.qxdnzbl.kehua -c android.intent.category.LAUNCHER 1
+            sleep 4
+            adb shell pidof com.qxdnzbl.kehua
+      - name: Prove launcher is native Compose activity
+        run: |
+          grep -q 'android:name=".KehuaNativeActivity"' app/src/main/AndroidManifest.xml
+          if grep -q 'WebView' app/src/main/java/com/suisuinian/app/KehuaNativeActivity.kt; then exit 1; fi
