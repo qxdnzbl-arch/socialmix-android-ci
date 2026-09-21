@@ -42,9 +42,23 @@ def aux_similarity(a,b):
 def recency(dt):
  if dt.tzinfo is None:dt=dt.replace(tzinfo=UTC)
  return math.exp(-max(0,(datetime.now(UTC)-dt).total_seconds()/86400)/30)
+def _char_ngram_counts(text):
+ text=''.join(str(text or '').lower().split())
+ out={}
+ if not text:return out
+ for n in (1,2,3,4):
+  if len(text)<n:continue
+  for i in range(len(text)-n+1):
+   g=text[i:i+n];out[g]=out.get(g,0)+1
+ return out
+def _cosine_counts(a,b):
+ A=_char_ngram_counts(a);B=_char_ngram_counts(b)
+ if not A or not B:return 0.0
+ dot=sum(v*B.get(k,0) for k,v in A.items())
+ na=math.sqrt(sum(v*v for v in A.values()));nb=math.sqrt(sum(v*v for v in B.values()))
+ return dot/(na*nb) if na and nb else 0.0
 def pair_score(a,b):
- try:v=TfidfVectorizer(analyzer='char',ngram_range=(1,4),min_df=1,sublinear_tf=True).fit_transform([a.body,b.body]);sem=float(cosine_similarity(v[0:1],v[1:2])[0][0])
- except ValueError:sem=0
+ sem=_cosine_counts(a.body,b.body)
  return .58*sem+.17*SequenceMatcher(None,a.body,b.body).ratio()+.20*aux_similarity(a.body,b.body)+.05*recency(b.created_at)
 def blocked_pair(db,a,b):return db.scalar(select(Block).where(or_((Block.blocker_id==a)&(Block.blocked_id==b),(Block.blocker_id==b)&(Block.blocked_id==a)))) is not None
 def insert_match(db,s,t,score):
