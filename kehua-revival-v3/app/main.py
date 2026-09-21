@@ -40,7 +40,7 @@ def login(p:AuthIn,db:Session=Depends(db_session)):
 @app.post('/api/auth/recover')
 def recover(p:RecoveryIn,db:Session=Depends(db_session)):
  username=p.username.strip().lower();u=db.scalar(select(User).where(User.username==username))
- if not u or not u.recovery_hash or not hmac.compare_digest(u.recovery_hash,token_hash(p.recovery_code.strip().upper())):raise HTTPException(401,'账号或恢复码不正确')
+ if not u or not u.recovery_hash or not secrets.compare_digest(u.recovery_hash,token_hash(p.recovery_code.strip().upper())):raise HTTPException(401,'账号或恢复码不正确')
  u.password_hash=password_hash(p.new_password);new_code=secrets.token_hex(10).upper();u.recovery_hash=token_hash(new_code)
  for s in db.scalars(select(SessionToken).where(SessionToken.user_id==u.id)).all():db.delete(s)
  db.flush();t=issue_session(db,u);return {'token':t,'recovery_code':new_code,'user':user_json(u,True)}
