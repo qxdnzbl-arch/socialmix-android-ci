@@ -8,8 +8,7 @@ import org.json.JSONObject
 import java.net.HttpURLConnection
 import java.net.URL
 
-private const val KEHUA_BASE = "https://cxzcvswokzjibatmejqc.supabase.co"
-private const val KEHUA_KEY = "sb_publishable_B_eb3pu8OLyCmWJLdUZGdA_sel2BREC"
+private const val KEHUA_BASE = "https://kehua-api-production.up.railway.app"
 
 data class NativeSession(val id:String,val nickname:String,val token:String,val recoveryCode:String?=null)
 data class NativePost(val id:String,val content:String,val createdAt:String,val lightCount:Int,val isPrivate:Boolean)
@@ -140,9 +139,8 @@ class KehuaProdApi(context: Context, private val prefSuffix:String="") {
             var last:Throwable?=null
             repeat(3){attempt->
                 try{
-                    val c=(URL("$KEHUA_BASE/rest/v1/rpc/$name").openConnection() as HttpURLConnection).apply{
+                    val c=(URL("$KEHUA_BASE/rpc/$name").openConnection() as HttpURLConnection).apply{
                         requestMethod="POST";connectTimeout=12000;readTimeout=20000;doOutput=true
-                        setRequestProperty("apikey",KEHUA_KEY)
                         setRequestProperty("Content-Type","application/json")
                         setRequestProperty("Accept","application/json")
                     }
