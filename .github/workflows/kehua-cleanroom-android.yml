@@ -1,0 +1,73 @@
+name: Kehua Cleanroom Android Deliverable
+
+on:
+  push:
+    branches: [kehua-v1133-native-cleanroom]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: kehua-cleanroom-android
+  cancel-in-progress: true
+
+jobs:
+  build-verify-deliver:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - name: Unpack authoritative native bundle
+        run: bash kehua-native-bootstrap.sh
+      - name: Verify production backend
+        run: |
+          curl --fail --retry 5 --retry-all-errors --connect-timeout 10 --max-time 30 https://kehua-api-production.up.railway.app/health
+      - name: Verify native Android source
+        run: |
+          test -f kehua-native/android/app/src/main/java/com/kehua/revival/MainActivity.java
+          ! grep -R "android.webkit.WebView\|WebView(" kehua-native/android/app/src/main/java
+          grep -R "https://kehua-api-production.up.railway.app" kehua-native/android/app/src/main >/dev/null
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+      - name: Build native APK
+        working-directory: kehua-native/android
+        run: gradle --no-daemon :app:assembleDebug
+      - name: Enable KVM
+        run: |
+          if [ -e /dev/kvm ]; then sudo chmod 666 /dev/kvm; fi
+      - name: Install and launch native APK
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          target: google_apis
+          profile: pixel_6
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none
+          script: |
+            adb install -r kehua-native/android/app/build/outputs/apk/debug/app-debug.apk
+            PKG=$(adb shell pm list packages | tr -d '\r' | grep -E 'com\.kehua|qxdnzbl' | head -1 | cut -d: -f2)
+            test -n "$PKG"
+            adb shell monkey -p "$PKG" -c android.intent.category.LAUNCHER 1
+            sleep 4
+            adb shell pidof "$PKG"
+            mkdir -p deliverable
+            adb exec-out screencap -p > deliverable/Kehua-Android.png
+            test -s deliverable/Kehua-Android.png
+      - name: Prepare deliverable
+        run: |
+          cp kehua-native/android/app/build/outputs/apk/debug/app-debug.apk deliverable/Kehua-Android.apk
+          sha256sum deliverable/Kehua-Android.apk > deliverable/SHA256.txt
+      - name: Upload verified APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: Kehua-Android-Verified
+          path: deliverable/
+          if-no-files-found: error
+          retention-days: 14
