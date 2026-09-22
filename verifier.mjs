@@ -31,9 +31,34 @@ async function check(){
 }
 let latest=await check();
 setInterval(async()=>{latest=await check()},60000);
-http.createServer(async(req,res)=>{
+const server=http.createServer(async(req,res)=>{
   if((req.url||"").startsWith("/evidence")) return handleEvidence(req,res);
   if(req.url==="/refresh") latest=await check();
   res.writeHead(latest.ok?200:500,{"content-type":"application/json; charset=utf-8"});
   res.end(JSON.stringify(latest));
-}).listen(process.env.PORT||10000,()=>console.log("verifier listening"));
+});
+const PORT=Number(process.env.PORT||10000);
+server.listen(PORT,async()=>{
+  console.log("verifier listening");
+  try{
+    const page=await fetch(`http://127.0.0.1:${PORT}/evidence`);
+    const pageText=await page.text();
+    const health=await fetch(`http://127.0.0.1:${PORT}/evidence/health`);
+    const verify=await fetch(`http://127.0.0.1:${PORT}/evidence/api/verify?q=${encodeURIComponent("维生素C可以预防普通感冒吗")}`);
+    const data=await verify.json();
+    console.log("EVIDENCE_SELFTEST "+JSON.stringify({
+      page_http:page.status,
+      page_has_quote:pageText.includes("如果你说是真的，那请你拿出证据来"),
+      page_has_api_path:pageText.includes("/evidence/api/verify"),
+      health_http:health.status,
+      verify_http:verify.status,
+      conclusion:data.conclusion||null,
+      confidence:data.confidence||null,
+      source_count:Number(data.source_count||data.sources?.length||0),
+      evidence_count:Array.isArray(data.evidence)?data.evidence.length:0,
+      source_urls_ok:Array.isArray(data.sources)&&data.sources.length>0&&data.sources.every(x=>/^https?:\/\//.test(x.url||"")),
+      synthesis:data.synthesis||null,
+      search_errors:data.search_errors||[]
+    }));
+  }catch(e){console.error("EVIDENCE_SELFTEST_ERROR "+String(e))}
+});
