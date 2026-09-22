@@ -47,8 +47,10 @@ jobs:
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none
           script: |
-            adb install -r kehua-native/android/app/build/outputs/apk/debug/app-debug.apk
-            PKG=$(adb shell pm list packages | tr -d '\r' | grep -E 'com\.kehua|qxdnzbl' | head -1 | cut -d: -f2)
+            APK=kehua-native/android/app/build/outputs/apk/debug/app-debug.apk
+            adb install -r "$APK"
+            AAPT=$(find "$ANDROID_HOME/build-tools" -type f -name aapt | sort | tail -1)
+            PKG=$("$AAPT" dump badging "$APK" | sed -n "s/package: name='\\([^']*\\)'.*/\\1/p")
             test -n "$PKG"
             adb shell monkey -p "$PKG" -c android.intent.category.LAUNCHER 1
             sleep 4
