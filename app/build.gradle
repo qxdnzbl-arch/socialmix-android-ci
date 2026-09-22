@@ -5,6 +5,11 @@ plugins {
 }
 
 def ciVersionCode = (System.getenv('GITHUB_RUN_NUMBER') ?: '1') as Integer
+def releaseStoreFile = System.getenv('KEHUA_RELEASE_STORE_FILE')
+def releaseStorePassword = System.getenv('KEHUA_RELEASE_STORE_PASSWORD')
+def releaseKeyAlias = System.getenv('KEHUA_RELEASE_KEY_ALIAS')
+def releaseKeyPassword = System.getenv('KEHUA_RELEASE_KEY_PASSWORD')
+def hasReleaseSigning = releaseStoreFile && releaseStorePassword && releaseKeyAlias && releaseKeyPassword
 
 android {
     namespace 'com.suisuinian.app'
@@ -19,12 +24,24 @@ android {
         testInstrumentationRunner 'androidx.test.runner.AndroidJUnitRunner'
     }
 
+    signingConfigs {
+        if (hasReleaseSigning) {
+            production {
+                storeFile file(releaseStoreFile)
+                storePassword releaseStorePassword
+                keyAlias releaseKeyAlias
+                keyPassword releaseKeyPassword
+            }
+        }
+    }
+
     buildTypes {
         debug { }
         release {
             minifyEnabled true
             shrinkResources true
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt')
+            if (hasReleaseSigning) signingConfig signingConfigs.production
         }
     }
 
