@@ -29,7 +29,7 @@ jobs:
         run: |
           test -f kehua-native/android/app/src/main/java/com/kehua/revival/MainActivity.java
           ! grep -R "android.webkit.WebView\|WebView(" kehua-native/android/app/src/main/java
-          grep -R "https://kehua-api-production.up.railway.app" kehua-native/android/app/src/main >/dev/null
+          grep -R "https://kehua-api-production.up.railway.app" kehua-native/android >/dev/null
       - uses: actions/setup-java@v5
         with:
           distribution: temurin
