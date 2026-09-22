@@ -1,18 +1,12 @@
 name: Kehua Cleanroom Android Deliverable
 
 on:
-  push:
-    branches: [kehua-v1133-native-cleanroom]
   pull_request:
     branches: [main]
   workflow_dispatch:
 
 permissions:
   contents: read
-
-concurrency:
-  group: kehua-cleanroom-android
-  cancel-in-progress: true
 
 jobs:
   build-verify-deliver:
