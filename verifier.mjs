@@ -1,4 +1,5 @@
 import http from "node:http";
+import { handleEvidence } from "./evidence.mjs";
 const APP="https://kehua-app-public.onrender.com";
 const SB="https://lzylcqozczsaxtdqfhrs.supabase.co";
 const KEY="sb_publishable_Wu7Xa-2bx6QARotVaTX_8g_yBlToQ-e";
@@ -31,6 +32,7 @@ async function check(){
 let latest=await check();
 setInterval(async()=>{latest=await check()},60000);
 http.createServer(async(req,res)=>{
+  if((req.url||"").startsWith("/evidence")) return handleEvidence(req,res);
   if(req.url==="/refresh") latest=await check();
   res.writeHead(latest.ok?200:500,{"content-type":"application/json; charset=utf-8"});
   res.end(JSON.stringify(latest));
