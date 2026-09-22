@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+<meta name="theme-color" content="#f7f5ef" />
+<title>拿证据｜Show Me Evidence</title>
+<meta name="description" content="把一个说法拆成事实、证据、反证与暂时结论。" />
+<style>
+:root{--bg:#f7f5ef;--paper:#fffdf8;--ink:#1d1d1b;--muted:#6e6a61;--line:#d8d2c7;--accent:#174f3f;--soft:#e9efe9;--warn:#7a4d16;--bad:#8b2f27;--r:18px}
+*{box-sizing:border-box}html{scroll-behavior:smooth}body{margin:0;background:var(--bg);color:var(--ink);font-family:ui-serif,"Noto Serif SC","Source Han Serif SC",serif;line-height:1.65}button,textarea{font:inherit}button{cursor:pointer}.shell{max-width:860px;margin:0 auto;padding:22px 18px 72px}.top{display:flex;justify-content:space-between;align-items:center;font-family:ui-sans-serif,system-ui,sans-serif;font-size:13px}.brand{font-weight:800;letter-spacing:.08em}.free{color:var(--muted)}.hero{padding:62px 0 34px}.eyebrow{font-family:ui-sans-serif,system-ui,sans-serif;color:var(--muted);font-size:12px;letter-spacing:.16em;text-transform:uppercase}.hero h1{font-size:clamp(36px,8vw,72px);line-height:1.06;margin:10px 0 18px;letter-spacing:-.04em}.quote{font-size:clamp(19px,4vw,28px);margin:0;max-width:720px}.sub{margin:12px 0 0;color:var(--muted);font-family:ui-sans-serif,system-ui,sans-serif}.panel,.report{background:var(--paper);border:1px solid var(--line);border-radius:var(--r);box-shadow:0 8px 30px rgba(45,39,30,.04)}.panel{padding:16px}.input{width:100%;min-height:150px;resize:vertical;border:0;outline:0;background:transparent;color:var(--ink);font-size:17px;padding:8px 6px}.actions{display:flex;gap:10px;align-items:center;justify-content:space-between;border-top:1px solid var(--line);padding-top:12px}.btn{min-height:46px;border-radius:999px;border:1px solid var(--ink);padding:0 20px;background:var(--ink);color:white;font-family:ui-sans-serif,system-ui,sans-serif;font-weight:700}.btn:disabled{opacity:.45;cursor:not-allowed}.ghost{background:transparent;color:var(--ink)}.examples{display:flex;flex-wrap:wrap;gap:8px;margin:14px 0 0}.chip{border:1px solid var(--line);background:transparent;color:var(--ink);border-radius:999px;padding:8px 12px;font:13px ui-sans-serif,system-ui,sans-serif}.method{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:28px 0 44px}.step{padding:14px;border-top:1px solid var(--ink);font-family:ui-sans-serif,system-ui,sans-serif}.step b{display:block;font-size:12px;color:var(--muted);margin-bottom:6px}.state{display:none;text-align:center;padding:34px 12px;color:var(--muted);font-family:ui-sans-serif,system-ui,sans-serif}.spinner{width:24px;height:24px;border:2px solid var(--line);border-top-color:var(--ink);border-radius:50%;margin:0 auto 12px;animation:spin .8s linear infinite}@keyframes spin{to{transform:rotate(360deg)}}.report{display:none;padding:24px;margin-top:18px}.report.show{display:block}.kicker{font:12px ui-sans-serif,system-ui,sans-serif;color:var(--muted);letter-spacing:.12em;text-transform:uppercase}.claim{font-size:20px;margin:6px 0 22px}.verdict{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;padding:18px 0;border-top:1px solid var(--ink);border-bottom:1px solid var(--line)}.verdict h2{font-size:30px;margin:0;line-height:1.1}.confidence{font:13px ui-sans-serif,system-ui,sans-serif;color:var(--muted);text-align:right;max-width:250px}.section{padding:22px 0;border-bottom:1px solid var(--line)}.section:last-child{border:0}.section h3{font:700 15px ui-sans-serif,system-ui,sans-serif;margin:0 0 12px}.source{display:block;color:inherit;text-decoration:none;border:1px solid var(--line);border-radius:14px;padding:14px;margin:9px 0;background:white}.source:hover{border-color:#999}.sourcehead{display:flex;gap:8px;justify-content:space-between;font:12px ui-sans-serif,system-ui,sans-serif;color:var(--muted)}.source strong{display:block;font-size:16px;margin:5px 0}.source p{margin:0;color:#48453f;font-size:14px}.tag{white-space:nowrap;border:1px solid var(--line);border-radius:999px;padding:2px 7px}.unknowns{margin:0;padding-left:20px}.warning{background:#faf1e5;border-left:3px solid #b67b37;padding:12px 14px;font:14px ui-sans-serif,system-ui,sans-serif}.error{display:none;color:var(--bad);font:14px ui-sans-serif,system-ui,sans-serif;margin:12px 3px}.paywall{display:none;background:var(--paper);border:1px solid var(--ink);border-radius:var(--r);padding:24px;margin-top:18px}.paywall h2{margin:0;font-size:28px}.price{font-size:34px;font-weight:800;margin:12px 0}.paywall p{color:var(--muted);font-family:ui-sans-serif,system-ui,sans-serif}.history{margin-top:42px}.history h3{font:700 14px ui-sans-serif,system-ui,sans-serif}.hist{border-top:1px solid var(--line);padding:10px 0;font-size:14px;display:flex;gap:12px;justify-content:space-between}.hist small{color:var(--muted)}footer{margin-top:56px;padding-top:18px;border-top:1px solid var(--line);color:var(--muted);font:12px ui-sans-serif,system-ui,sans-serif}.modal{position:fixed;inset:0;background:rgba(20,20,18,.36);display:none;align-items:center;justify-content:center;padding:20px}.modal.on{display:flex}.modalbox{max-width:420px;background:var(--paper);border:1px solid var(--ink);border-radius:18px;padding:22px}.modalbox h3{margin:0 0 8px}.modalbox p{font-family:ui-sans-serif,system-ui,sans-serif;color:var(--muted)}@media(max-width:640px){.hero{padding:46px 0 26px}.method{grid-template-columns:1fr 1fr}.actions{align-items:flex-end}.free{font-size:12px}.report{padding:18px}.verdict{display:block}.confidence{text-align:left;margin-top:12px}.sourcehead{display:block}.tag{display:inline-block;margin-top:5px}}
+</style>
+</head>
+<body>
+<main class="shell">
+  <div class="top"><div class="brand">拿证据 · SHOW ME EVIDENCE</div><div class="free" id="freeCount">免费查证 3 / 3</div></div>
+  <section class="hero">
+    <div class="eyebrow">Evidence before certainty</div>
+    <h1>拿证据。</h1>
+    <p class="quote">“如果你说是真的，那请你拿出证据来。”</p>
+    <p class="sub">不替你制造确定性。把说法拆成证据、反证、未知和暂时结论。</p>
+  </section>
+  <section class="panel" id="verifyPanel">
+    <textarea id="claim" class="input" maxlength="2000" placeholder="粘贴一个你想查证的说法、招聘信息、商品宣传、新闻表述或网址……"></textarea>
+    <div class="actions"><span class="free" id="charCount">0 / 2000</span><button id="verifyBtn" class="btn">查证</button></div>
+    <div class="examples">
+      <button class="chip" data-example="维生素C可以预防普通感冒吗？">维生素C能预防感冒？</button>
+      <button class="chip" data-example="远程兼职要求先交培训费，这是正常招聘流程吗？">兼职先交培训费正常吗？</button>
+      <button class="chip" data-example="咖啡会导致所有人脱水吗？">咖啡一定会脱水？</button>
+    </div>
+  </section>
+  <div class="error" id="error"></div>
+  <div class="state" id="loading"><div class="spinner"></div><div id="loadingText">正在找原始来源、独立证据和可能的反证……</div></div>
+  <section class="report" id="report"></section>
+  <section class="paywall" id="paywall">
+    <div class="kicker">FREE LIMIT REACHED</div><h2>你已经完成 3 次真实查证。</h2>
+    <div class="price">¥19 <small style="font-size:14px;font-weight:400">/ 月</small></div>
+    <p>无限查证（合理使用）。正式支付通道还没有启用；现在点“我要开通”只会记录真实购买意向，不会扣款。</p>
+    <button class="btn" id="checkoutBtn">我要开通</button>
+  </section>
+  <section class="method">
+    <div class="step"><b>01</b>事实</div><div class="step"><b>02</b>证据</div><div class="step"><b>03</b>反证</div><div class="step"><b>04</b>暂时结论</div>
+  </section>
+  <section class="history" id="history"><h3>最近查证</h3><div id="historyList" class="free">还没有记录。</div></section>
+  <footer>这是一项证据研究辅助工具，不声称“100%判真”。重要的法律、医疗、财务决定应继续核对原始材料与专业意见。来源强弱标签只是检索辅助，不等于权威认证。</footer>
+</main>
+<div class="modal" id="modal"><div class="modalbox"><h3>开通意向已记录</h3><p>我没有伪造一个“支付成功”。在商户支付账户真正接通前，这里只验证你是否愿意为它付费。</p><button class="btn ghost" id="closeModal">知道了</button></div></div>
+<script>
+const $=s=>document.querySelector(s);const claim=$('#claim'),btn=$('#verifyBtn'),report=$('#report'),loading=$('#loading'),error=$('#error'),paywall=$('#paywall');
+const KEY_COUNT='evidence_free_used_v1',KEY_HISTORY='evidence_history_v1';
+let used=Number(localStorage.getItem(KEY_COUNT)||0);if(!Number.isFinite(used)||used<0)used=0;
+function track(name){fetch('/event/'+encodeURIComponent(name),{method:'GET',keepalive:true}).catch(()=>{});}track('landing_view');
+function esc(s=''){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+function updateCounter(){const left=Math.max(0,3-used);$('#freeCount').textContent=`免费查证 ${left} / 3`;if(left===0){paywall.style.display='block';track('paywall_viewed');}}
+function saveHistory(item){const list=JSON.parse(localStorage.getItem(KEY_HISTORY)||'[]');list.unshift(item);localStorage.setItem(KEY_HISTORY,JSON.stringify(list.slice(0,8)));renderHistory();}
+function renderHistory(){let list=[];try{list=JSON.parse(localStorage.getItem(KEY_HISTORY)||'[]')}catch{};const box=$('#historyList');if(!list.length){box.innerHTML='<span class="free">还没有记录。</span>';return;}box.innerHTML=list.map(x=>`<div class="hist"><span>${esc(x.claim)}</span><small>${esc(x.conclusion)}</small></div>`).join('');}
+function sourceCard(s,label){if(!s||!s.url)return'';return `<a class="source" href="${esc(s.url)}" target="_blank" rel="noopener" data-source><div class="sourcehead"><span>${esc(s.source||s.url)} · ${esc(s.channel||'来源')}</span><span class="tag">${esc(s.strength||'待核')}</span></div><strong>${esc(s.title||'打开来源')}</strong><p>${esc(s.statement||s.snippet||'打开原文核对。')}</p></a>`;}
+function renderResult(d){
+ const evidence=(d.evidence||[]).map(s=>sourceCard(s,'支持')).join('')||'<div class="free">没有找到足够直接的支持证据。</div>';
+ const counter=(d.counterevidence||[]).map(s=>sourceCard(s,'反证')).join('')||'<div class="free">当前检索没有识别到明确反证；这不等于反证不存在。</div>';
+ const unknown=(d.unknowns||[]).map(x=>`<li>${esc(x)}</li>`).join('')||'<li>没有被明确列出的未知项。</li>';
+ report.innerHTML=`<div class="kicker">原主张</div><div class="claim">${esc(d.claim)}</div><div class="verdict"><h2>${esc(d.conclusion||'证据不足')}</h2><div class="confidence">置信度：<b>${esc(d.confidence||'低')}</b><br>${esc(d.confidence_reason||'')}</div></div><div class="section"><h3>关键证据</h3>${evidence}</div><div class="section"><h3>反证 / 冲突证据</h3>${counter}</div><div class="section"><h3>仍然不知道什么</h3><ul class="unknowns">${unknown}</ul></div><div class="section"><h3>证据如何导向这个暂时结论</h3><div>${esc(d.reasoning_summary||'')}</div></div>${d.warning?`<div class="section"><div class="warning">${esc(d.warning)}</div></div>`:''}<div class="section free">本次找到 ${Number(d.source_count||d.sources?.length||0)} 个去重来源 · ${esc(new Date(d.generated_at||Date.now()).toLocaleString())}</div>`;
+ report.classList.add('show');report.scrollIntoView({behavior:'smooth',block:'start'});report.querySelectorAll('[data-source]').forEach(a=>a.addEventListener('click',()=>track('source_opened')));
+}
+async function verify(){
+ error.style.display='none';report.classList.remove('show');if(used>=3){paywall.style.display='block';track('paywall_viewed');paywall.scrollIntoView({behavior:'smooth'});return;}
+ const q=claim.value.trim();if(!q){error.textContent='先输入一个要查证的说法。';error.style.display='block';return;}
+ btn.disabled=true;loading.style.display='block';track('verification_started');
+ try{const r=await fetch('/api/verify',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({claim:q})});const d=await r.json();if(!r.ok)throw new Error(d.error||'查证失败');used++;localStorage.setItem(KEY_COUNT,String(used));updateCounter();saveHistory({claim:q.slice(0,90),conclusion:d.conclusion||'证据不足',at:Date.now()});renderResult(d);track('verification_completed');}
+ catch(e){error.textContent=e.message||'查证失败，请重试。';error.style.display='block';track('verification_failed');}
+ finally{loading.style.display='none';btn.disabled=false;}
+}
+btn.addEventListener('click',verify);claim.addEventListener('input',()=>$('#charCount').textContent=`${claim.value.length} / 2000`);claim.addEventListener('keydown',e=>{if((e.ctrlKey||e.metaKey)&&e.key==='Enter')verify();});
+document.querySelectorAll('[data-example]').forEach(x=>x.addEventListener('click',()=>{claim.value=x.dataset.example;claim.dispatchEvent(new Event('input'));track('example_clicked');claim.focus();}));
+$('#checkoutBtn').addEventListener('click',()=>{track('checkout_started');$('#modal').classList.add('on')});$('#closeModal').addEventListener('click',()=>$('#modal').classList.remove('on'));$('#modal').addEventListener('click',e=>{if(e.target.id==='modal')e.currentTarget.classList.remove('on')});
+updateCounter();renderHistory();
+</script>
+</body>
+</html>
