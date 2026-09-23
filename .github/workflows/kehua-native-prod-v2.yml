@@ -50,7 +50,12 @@ jobs:
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none -dns-server 8.8.8.8
           script: |
             adb uninstall com.qxdnzbl.kehua || true
-            gradle --no-daemon :app:connectedDebugAndroidTest --rerun-tasks -Pandroid.testInstrumentationRunnerArguments.class=com.suisuinian.app.KehuaNativeE2ETest,com.suisuinian.app.KehuaNativeLaunchTest
+            gradle --no-daemon :app:connectedDebugAndroidTest --rerun-tasks -Pandroid.testInstrumentationRunnerArguments.class=com.suisuinian.app.KehuaNativeE2ETest,com.suisuinian.app.KehuaNativeLaunchTest,com.suisuinian.app.KehuaNativeVisualFlowTest
+            mkdir -p deliverable
+            for name in visual-home visual-messages visual-me visual-settings; do
+              adb exec-out run-as com.qxdnzbl.kehua cat files/$name.png > deliverable/$name.png
+              test -s deliverable/$name.png
+            done
             adb install -r app/build/outputs/apk/debug/app-debug.apk
             adb shell am force-stop com.qxdnzbl.kehua || true
             adb shell am start -W -n com.qxdnzbl.kehua/com.suisuinian.app.KehuaNativeActivity

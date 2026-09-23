@@ -318,11 +318,12 @@ private fun OriginalBottomBar(selected: Int, select: (Int) -> Unit) {
             NavigationBarItem(
                 selected = selected == index,
                 onClick = { select(index) },
+                modifier = Modifier.testTag(tags[index]),
                 icon = {
                     Icon(
                         icon,
                         contentDescription = null,
-                        modifier = Modifier.size(27.dp).testTag(tags[index])
+                        modifier = Modifier.size(27.dp)
                     )
                 },
                 colors = NavigationBarItemDefaults.colors(
