@@ -1,7 +1,9 @@
 package com.suisuinian.app
 
+import android.content.ContentValues
 import android.graphics.Bitmap
-import android.os.ParcelFileDescriptor
+import android.os.Environment
+import android.provider.MediaStore
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.compose.ui.test.assertIsDisplayed
@@ -14,8 +16,6 @@ import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
-import java.io.File
-import java.io.FileOutputStream
 
 @RunWith(AndroidJUnit4::class)
 class KehuaNativeVisualFlowTest {
@@ -24,18 +24,25 @@ class KehuaNativeVisualFlowTest {
 
     private fun saveScreen(name: String) {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val context = instrumentation.targetContext
         rule.waitForIdle()
         Thread.sleep(600)
         val bitmap = instrumentation.uiAutomation.takeScreenshot()
-        val file = File(instrumentation.targetContext.filesDir, "$name.png")
-        FileOutputStream(file).use { out ->
-            assertTrue(bitmap.compress(Bitmap.CompressFormat.PNG, 100, out))
+
+        val values = ContentValues().apply {
+            put(MediaStore.Images.Media.DISPLAY_NAME, "$name.png")
+            put(MediaStore.Images.Media.MIME_TYPE, "image/png")
+            put(MediaStore.Images.Media.RELATIVE_PATH, Environment.DIRECTORY_PICTURES + "/KehuaQA")
+            put(MediaStore.Images.Media.IS_PENDING, 1)
         }
-        assertTrue(file.length() > 0)
-        val command = "run-as " + instrumentation.targetContext.packageName +
-            " cat files/" + name + ".png > /sdcard/" + name + ".png"
-        val pipe = instrumentation.uiAutomation.executeShellCommand(command)
-        ParcelFileDescriptor.AutoCloseInputStream(pipe).use { it.readBytes() }
+        val uri = context.contentResolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values)
+            ?: throw AssertionError("Unable to create screenshot media: $name")
+        context.contentResolver.openOutputStream(uri).use { out ->
+            assertTrue(out != null && bitmap.compress(Bitmap.CompressFormat.PNG, 100, out))
+        }
+        values.clear()
+        values.put(MediaStore.Images.Media.IS_PENDING, 0)
+        context.contentResolver.update(uri, values, null, null)
     }
 
     @Test
