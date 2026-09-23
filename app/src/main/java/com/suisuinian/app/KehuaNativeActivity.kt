@@ -1151,7 +1151,7 @@ private fun SettingsScreen(
 
         Spacer(Modifier.height(12.dp))
 
-        SettingRow("编辑资料", "›", editProfile)
+        SettingRow("编辑资料", "›", click = editProfile)
         SettingRow("我的恢复码", "重新生成") {
             scope.launch {
                 api.rotateRecovery()
