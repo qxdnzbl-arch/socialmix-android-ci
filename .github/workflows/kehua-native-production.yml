@@ -1,6 +1,9 @@
 name: Kehua Native Production Candidate
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - kehua-native-prod-repair
 permissions:
   contents: read
 jobs:
