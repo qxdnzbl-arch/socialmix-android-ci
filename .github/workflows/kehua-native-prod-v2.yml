@@ -52,10 +52,14 @@ jobs:
             adb uninstall com.qxdnzbl.kehua || true
             gradle --no-daemon :app:connectedDebugAndroidTest --rerun-tasks -Pandroid.testInstrumentationRunnerArguments.class=com.suisuinian.app.KehuaNativeE2ETest,com.suisuinian.app.KehuaNativeLaunchTest,com.suisuinian.app.KehuaNativeVisualFlowTest
             mkdir -p deliverable
-            for name in visual-home visual-messages visual-me visual-settings; do
-              adb exec-out run-as com.qxdnzbl.kehua cat files/$name.png > deliverable/$name.png
-              test -s deliverable/$name.png
-            done
+            adb exec-out run-as com.qxdnzbl.kehua cat files/visual-home.png > deliverable/visual-home.png
+            test -s deliverable/visual-home.png
+            adb exec-out run-as com.qxdnzbl.kehua cat files/visual-messages.png > deliverable/visual-messages.png
+            test -s deliverable/visual-messages.png
+            adb exec-out run-as com.qxdnzbl.kehua cat files/visual-me.png > deliverable/visual-me.png
+            test -s deliverable/visual-me.png
+            adb exec-out run-as com.qxdnzbl.kehua cat files/visual-settings.png > deliverable/visual-settings.png
+            test -s deliverable/visual-settings.png
             adb install -r app/build/outputs/apk/debug/app-debug.apk
             adb shell am force-stop com.qxdnzbl.kehua || true
             adb shell am start -W -n com.qxdnzbl.kehua/com.suisuinian.app.KehuaNativeActivity
