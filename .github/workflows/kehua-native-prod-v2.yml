@@ -52,14 +52,14 @@ jobs:
             adb uninstall com.qxdnzbl.kehua || true
             gradle --no-daemon :app:connectedDebugAndroidTest --rerun-tasks -Pandroid.testInstrumentationRunnerArguments.class=com.suisuinian.app.KehuaNativeE2ETest,com.suisuinian.app.KehuaNativeLaunchTest,com.suisuinian.app.KehuaNativeVisualFlowTest
             mkdir -p deliverable
-            adb exec-out run-as com.qxdnzbl.kehua cat files/visual-home.png > deliverable/visual-home.png
-            test -s deliverable/visual-home.png
-            adb exec-out run-as com.qxdnzbl.kehua cat files/visual-messages.png > deliverable/visual-messages.png
-            test -s deliverable/visual-messages.png
-            adb exec-out run-as com.qxdnzbl.kehua cat files/visual-me.png > deliverable/visual-me.png
-            test -s deliverable/visual-me.png
-            adb exec-out run-as com.qxdnzbl.kehua cat files/visual-settings.png > deliverable/visual-settings.png
-            test -s deliverable/visual-settings.png
+            adb pull /sdcard/visual-home.png deliverable/visual-home.png
+            file deliverable/visual-home.png | grep -q 'PNG image data'
+            adb pull /sdcard/visual-messages.png deliverable/visual-messages.png
+            file deliverable/visual-messages.png | grep -q 'PNG image data'
+            adb pull /sdcard/visual-me.png deliverable/visual-me.png
+            file deliverable/visual-me.png | grep -q 'PNG image data'
+            adb pull /sdcard/visual-settings.png deliverable/visual-settings.png
+            file deliverable/visual-settings.png | grep -q 'PNG image data'
             adb install -r app/build/outputs/apk/debug/app-debug.apk
             adb shell am force-stop com.qxdnzbl.kehua || true
             adb shell am start -W -n com.qxdnzbl.kehua/com.suisuinian.app.KehuaNativeActivity

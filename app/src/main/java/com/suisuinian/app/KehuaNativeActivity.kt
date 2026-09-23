@@ -346,7 +346,7 @@ private fun Home(api: KehuaProdApi, openResonance: (NativeResonance) -> Unit) {
     val scope = rememberCoroutineScope()
     val snackbar = remember { SnackbarHostState() }
     val dateLabel = remember {
-        LocalDate.now().format(DateTimeFormatter.ofPattern("MM月dd日 EEEE", Locale.SIMPLIFIED_CHINESE))
+        LocalDate.now().format(DateTimeFormatter.ofPattern("M月d日EEEE", Locale.SIMPLIFIED_CHINESE))
     }
 
     fun load() {

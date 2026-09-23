@@ -1,6 +1,7 @@
 package com.suisuinian.app
 
 import android.graphics.Bitmap
+import android.os.ParcelFileDescriptor
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.compose.ui.test.assertIsDisplayed
@@ -31,6 +32,10 @@ class KehuaNativeVisualFlowTest {
             assertTrue(bitmap.compress(Bitmap.CompressFormat.PNG, 100, out))
         }
         assertTrue(file.length() > 0)
+        val command = "run-as " + instrumentation.targetContext.packageName +
+            " cat files/" + name + ".png > /sdcard/" + name + ".png"
+        val pipe = instrumentation.uiAutomation.executeShellCommand(command)
+        ParcelFileDescriptor.AutoCloseInputStream(pipe).use { it.readBytes() }
     }
 
     @Test
