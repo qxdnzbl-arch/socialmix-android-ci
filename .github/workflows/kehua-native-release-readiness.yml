@@ -1,0 +1,47 @@
+name: Kehua Native Release Readiness
+
+on:
+  push:
+    branches: [kehua-native-prod-repair]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  release-readiness:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout authoritative branch
+        uses: actions/checkout@v4
+      - name: Verify native production source
+        run: |
+          test "$(git rev-parse HEAD)" = "$(git rev-parse origin/kehua-native-prod-repair)"
+          grep -q 'KehuaNativeActivity' app/src/main/AndroidManifest.xml
+          grep -q 'https://kehua-api-production.up.railway.app' app/src/main/java/com/suisuinian/app/KehuaProdApi.kt
+          ! grep -R -q 'android.webkit.WebView' app/src/main/java/com/suisuinian/app
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+      - name: Build release AAB
+        run: gradle --no-daemon clean :app:bundleRelease --rerun-tasks
+      - name: Verify release bundle
+        run: |
+          test -s app/build/outputs/bundle/release/app-release.aab
+          sha256sum app/build/outputs/bundle/release/app-release.aab > app/build/outputs/bundle/release/SHA256.txt
+      - name: Upload unsigned release readiness artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Kehua-Native-Release-Readiness
+          path: |
+            app/build/outputs/bundle/release/app-release.aab
+            app/build/outputs/bundle/release/SHA256.txt
+          if-no-files-found: error
+          retention-days: 14
