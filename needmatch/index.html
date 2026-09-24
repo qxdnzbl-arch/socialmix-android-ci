@@ -14,7 +14,7 @@
 <div class="small" style="margin-top:10px">NeedMatch Pilot · Paris Workspace</div>
 <h1>先说你真正需要什么，不先推产品</h1>
 <p class="lead">把预算、安静程度、时长和硬限制说清楚，再找最低成本的合适选项。</p>
-<p class="small">目标不是让你消费，而是让你用更少的钱和时间找到合适方案。资料最后核对：2026-09-24。</p>
+<p class="small">目标不是让你消费，而是让你用更少的钱和时间找到合适方案。匿名记录本次匹配和“帮到/没帮到”反馈，用来判断这个方法是否真的有效；不收集姓名、邮箱或账号。资料最后核对：2026-09-24。</p>
 
 <section class="panel" id="form">
 <h2>你的硬条件</h2>
@@ -35,6 +35,16 @@
 </section>
 </main>
 <script>
+
+var SUPABASE_URL='https://nvwdtfnhsyfdopaxdylx.supabase.co';
+var SUPABASE_KEY='sb_publishable_S4IE-ziO7WQ_JAK9tuQGgQ_cszwKBWB';
+var sessionId=sessionStorage.getItem('needmatch_session_id');
+if(!sessionId){sessionId=crypto.randomUUID();sessionStorage.setItem('needmatch_session_id',sessionId)}
+var lastRecommendation='';
+function logEvent(type,helped,reasons){
+  var row={session_id:sessionId,event_type:type,budget:s.budget,duration:s.duration,quiet:s.quiet==='yes',wifi:s.wifi==='yes',outlet:s.outlet==='yes',late:s.late==='yes',dedicated_coworking:s.dedicated==='yes',area:s.area,recommended_place:lastRecommendation,helped:helped,reasons:reasons||[]};
+  fetch(SUPABASE_URL+'/rest/v1/needmatch_validation_events',{method:'POST',headers:{'apikey':SUPABASE_KEY,'Authorization':'Bearer '+SUPABASE_KEY,'Content-Type':'application/json','Prefer':'return=minimal'},body:JSON.stringify(row)}).catch(function(){/* recommendation must still work if logging fails */});
+}
 var s={budget:'0',duration:'short',quiet:'yes',wifi:'yes',outlet:'yes',late:'no',dedicated:'no',area:'any'};
 var o={
 saint:{name:'Bibliothèque Saint-Simon',cost:0,costText:'0€',areas:['5-8','any'],quiet:true,wifi:true,outlet:true,late:false,dedicated:false,why:'官方资料明确有静音工作位、免费 Wi‑Fi 和插座，成本为 0€。',limit:'开放时间比商业 coworking 有限；出发前核对当天开放时间。',src:[['巴黎市政府 · Saint-Simon','https://www.paris.fr/lieux/bibliotheque-saint-simon-1693']]},
@@ -47,10 +57,10 @@ function pick(){document.querySelectorAll('.field').forEach(function(f){var b=f.
 function area(x){return s.area==='any'||x.areas.indexOf(s.area)>=0}
 function hard(x){if(s.late==='yes'&&!x.late)return false;if(s.wifi==='yes'&&!x.wifi)return false;if(s.outlet==='yes'&&!x.outlet)return false;if(s.quiet==='yes'&&!x.quiet)return false;if(s.dedicated==='yes'&&!x.dedicated)return false;return true}
 function rank(){pick();var p=[],b=Number(s.budget);if(s.late==='yes'){if(b>=3&&area(o.permanence)&&hard(o.permanence))p.push('permanence');return p}if(s.dedicated==='yes'){if(b>=5&&area(o.climbing)&&hard(o.climbing))p.push('climbing');if(b>=3&&p.length<2&&area(o.permanence)&&hard(o.permanence))p.push('permanence');return p}if(s.quiet==='yes'&&s.wifi==='yes'&&s.outlet==='yes'&&(s.area==='5-8'||s.area==='any'))p.push('saint');if(s.duration==='full'&&s.quiet==='no'&&s.wifi==='yes'&&s.outlet==='yes'&&(s.area==='9-12'||s.area==='any'))p.push('bpi');if(s.quiet==='no'&&s.outlet==='no'&&area(o.municipal))p.push('municipal');if(b>=5&&p.length<3&&s.quiet==='no'&&s.outlet==='no'&&area(o.climbing))p.push('climbing');return p.slice(0,3)}
-function show(){var p=rank(),cards=document.getElementById('cards'),sum=document.getElementById('summary');cards.innerHTML='';if(!p.length){sum.innerHTML='<b>现在没有已验证方案能同时满足这些硬条件。</b><div class="warning">这里不硬塞推荐。可以提高预算、放宽条件，或继续核实更多地点。</div>'}else{sum.innerHTML='<b>当前最低成本高置信匹配：'+o[p[0]].name+'</b><div class="small">先满足硬条件，再比较价格；免费能满足时不先推付费。</div>';p.forEach(function(k,i){var x=o[k],d=document.createElement('div');d.className='card';var src=x.src.map(function(v){return '<a target="_blank" rel="noopener" href="'+v[1]+'">'+v[0]+'</a>'}).join('');d.innerHTML='<div class="rank">'+(i?'备选 '+i:'首选')+'</div><div class="name">'+x.name+'</div><span class="pill">'+x.costText+'</span>'+(x.wifi?'<span class="pill">已核实 Wi‑Fi</span>':'')+(x.outlet?'<span class="pill">已核实插座</span>':'')+(x.late?'<span class="pill">24/7</span>':'')+'<p><b>为什么匹配：</b>'+x.why+'</p><p class="constraint"><b>已知限制：</b>'+x.limit+'</p><p><b>为什么没推更贵：</b>已有更低成本方案满足当前已知硬条件，不为“看起来更专业”主动升级。</p><div class="sources"><b>官方来源：</b>'+src+'</div><div class="notad">这不是广告。</div>';cards.appendChild(d);});}document.getElementById('rules').innerHTML='1. 硬条件优先。<br>2. 免费方案满足全部硬条件时，付费方案不能当首选。<br>3. 来源没确认的设施不脑补。<br>4. 必须 coworking 时，图书馆不算 coworking。<br>5. 0€ + 必须 coworking 时，如无已验证供给就明确无匹配。<br><br>当前输入：预算 '+(s.budget==='99'?'>10€':s.budget+'€')+'；时长 '+s.duration+'；安静 '+s.quiet+'；Wi‑Fi '+s.wifi+'；插座 '+s.outlet+'；24/7 '+s.late+'；专门 coworking '+s.dedicated+'；区域 '+s.area+'。';document.getElementById('result').classList.add('show');document.getElementById('result').scrollIntoView({behavior:'smooth'});}
+function show(){var p=rank(),cards=document.getElementById('cards'),sum=document.getElementById('summary');cards.innerHTML='';lastRecommendation=p.length?o[p[0]].name:'no_verified_match';logEvent('match',null,[]);if(!p.length){sum.innerHTML='<b>现在没有已验证方案能同时满足这些硬条件。</b><div class="warning">这里不硬塞推荐。可以提高预算、放宽条件，或继续核实更多地点。</div>'}else{sum.innerHTML='<b>当前最低成本高置信匹配：'+o[p[0]].name+'</b><div class="small">先满足硬条件，再比较价格；免费能满足时不先推付费。</div>';p.forEach(function(k,i){var x=o[k],d=document.createElement('div');d.className='card';var src=x.src.map(function(v){return '<a target="_blank" rel="noopener" href="'+v[1]+'">'+v[0]+'</a>'}).join('');d.innerHTML='<div class="rank">'+(i?'备选 '+i:'首选')+'</div><div class="name">'+x.name+'</div><span class="pill">'+x.costText+'</span>'+(x.wifi?'<span class="pill">已核实 Wi‑Fi</span>':'')+(x.outlet?'<span class="pill">已核实插座</span>':'')+(x.late?'<span class="pill">24/7</span>':'')+'<p><b>为什么匹配：</b>'+x.why+'</p><p class="constraint"><b>已知限制：</b>'+x.limit+'</p><p><b>为什么没推更贵：</b>已有更低成本方案满足当前已知硬条件，不为“看起来更专业”主动升级。</p><div class="sources"><b>官方来源：</b>'+src+'</div><div class="notad">这不是广告。</div>';cards.appendChild(d);});}document.getElementById('rules').innerHTML='1. 硬条件优先。<br>2. 免费方案满足全部硬条件时，付费方案不能当首选。<br>3. 来源没确认的设施不脑补。<br>4. 必须 coworking 时，图书馆不算 coworking。<br>5. 0€ + 必须 coworking 时，如无已验证供给就明确无匹配。<br><br>当前输入：预算 '+(s.budget==='99'?'>10€':s.budget+'€')+'；时长 '+s.duration+'；安静 '+s.quiet+'；Wi‑Fi '+s.wifi+'；插座 '+s.outlet+'；24/7 '+s.late+'；专门 coworking '+s.dedicated+'；区域 '+s.area+'。';document.getElementById('result').classList.add('show');document.getElementById('result').scrollIntoView({behavior:'smooth'});}
 document.querySelectorAll('.field').forEach(function(f){f.addEventListener('click',function(e){var b=e.target.closest('.choice');if(!b)return;f.querySelectorAll('.choice').forEach(function(x){x.classList.remove('on')});b.classList.add('on')})});
 document.getElementById('go').onclick=show;
-document.querySelectorAll('.fb').forEach(function(b){b.onclick=function(){localStorage.setItem('needmatch_feedback',b.dataset.v);document.getElementById('fbmsg').textContent=b.dataset.v==='yes'?'已记录：帮到了（仅本设备）。':'已记录：没帮到。请选择主要原因。';document.getElementById('reasons').style.display=b.dataset.v==='no'?'block':'none';}});
+document.querySelectorAll('.fb').forEach(function(b){b.onclick=function(){localStorage.setItem('needmatch_feedback',b.dataset.v);logEvent('feedback',b.dataset.v==='yes',[]);document.getElementById('fbmsg').textContent=b.dataset.v==='yes'?'已记录：帮到了（仅本设备）。':'已记录：没帮到。请选择主要原因。';document.getElementById('reasons').style.display=b.dataset.v==='no'?'block':'none';}});
 document.querySelectorAll('.rs').forEach(function(b){b.onclick=function(){localStorage.setItem('needmatch_reason',b.textContent);document.getElementById('fbmsg').textContent='已记录原因：'+b.textContent+'（仅本设备）。';}});
 window.__needmatch={state:s,rank:rank};
 </script>
