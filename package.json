@@ -1,0 +1,11 @@
+{
+  "name": "kehua-v1133-production-root",
+  "private": true,
+  "version": "1.0.0",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "echo railway-node-runtime-ready"
+  }
+}
