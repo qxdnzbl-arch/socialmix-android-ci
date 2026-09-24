@@ -1,3 +1,11 @@
+# ⚠️ HISTORICAL ONLY — NOT CURRENT KEHUA PRODUCT AUTHORITY
+
+> 本文件仅保留历史工程记录。它**不得**用于定义、推断或验收当前“可话复活”的产品需求。
+> 当前唯一产品权威来自用户在聊天中亲自确认的原可话需求，并受仓库根目录 `KEHUA-REVIVAL-AUTHORITY.md` 约束。
+> 本文件中的账号/好友/聊天范围、旧 Phase 1 假设、旧验收场景及“先做什么”的优先级均不代表当前已确认产品方案；自动化、开发和测试不得据此继续扩展产品。
+
+---
+
 # SocialMix Core Stable SPEC
 
 ## One-Sentence Concept
