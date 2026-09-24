@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>NeedMatch Pilot · Paris Workspace</title>
+<style>
+:root{--bg:#f7f5ef;--fg:#171a17;--muted:#677067;--line:#d9ded4;--green:#3f6d52;--pale:#e8f0e9;--card:#fffdf8;--warn:#7a4d22}*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font-family:system-ui,-apple-system,"Noto Sans SC","PingFang SC",sans-serif;line-height:1.55}.wrap{max-width:760px;margin:auto;padding:28px 18px 64px}.badge{display:inline-block;border:1px solid var(--green);color:var(--green);border-radius:999px;padding:5px 10px;font-size:12px;font-weight:700}h1{font-size:clamp(30px,6vw,46px);line-height:1.1;margin:14px 0 8px}.lead{font-size:17px;color:#364239}.small{font-size:12px;color:var(--muted)}.panel{margin-top:26px;padding:20px;border:1px solid var(--line);border-radius:18px;background:var(--card)}.field{padding:16px 0;border-top:1px solid var(--line)}.field:first-of-type{border-top:0}.field b{display:block;margin-bottom:8px}.choices{display:flex;flex-wrap:wrap;gap:8px}.choice,.secondary{min-height:44px;padding:9px 13px;border:1px solid #bcc6bc;border-radius:12px;background:#fff;color:#243126;font-weight:650}.choice.on{border-color:var(--green);background:var(--pale);color:#1b4b31}.primary{width:100%;min-height:50px;border:0;border-radius:13px;background:var(--green);color:white;font-size:16px;font-weight:800;margin-top:14px}.result{display:none}.result.show{display:block}.summary{border-left:4px solid var(--green);padding-left:14px;margin-bottom:14px}.card{padding:18px 0;border-top:1px solid var(--line)}.rank{font-size:12px;color:var(--green);font-weight:800}.name{font-size:21px;font-weight:850}.pill{display:inline-block;margin:6px 5px 4px 0;padding:4px 8px;border-radius:999px;background:#edf2eb;font-size:12px}.constraint{color:var(--warn);font-size:14px}.sources a{color:var(--green);display:block;margin-top:3px}.notad{font-size:12px;color:var(--muted);margin-top:8px}details{margin-top:14px;padding-top:14px;border-top:1px solid var(--line)}summary{font-weight:800}.warning{background:#fff4e7;border:1px solid #efd5b3;border-radius:12px;padding:12px 14px;color:#6d451f}.feedback{margin-top:18px;padding-top:16px;border-top:1px solid var(--line)}.secondary{margin:6px 6px 0 0}@media(max-width:520px){.wrap{padding:20px 14px 50px}.panel{padding:16px}.choice{flex:1 1 calc(50% - 8px)}}
+</style>
+</head>
+<body>
+<main class="wrap">
+<span class="badge">真实需求验证原型</span>
+<div class="small" style="margin-top:10px">NeedMatch Pilot · Paris Workspace</div>
+<h1>先说你真正需要什么，不先推产品</h1>
+<p class="lead">把预算、安静程度、时长和硬限制说清楚，再找最低成本的合适选项。</p>
+<p class="small">目标不是让你消费，而是让你用更少的钱和时间找到合适方案。资料最后核对：2026-09-24。</p>
+
+<section class="panel" id="form">
+<h2>你的硬条件</h2>
+<div class="field" data-k="budget"><b>每天最多愿意花多少？</b><div class="choices"><button class="choice on" data-v="0">0€</button><button class="choice" data-v="5">≤5€</button><button class="choice" data-v="10">≤10€</button><button class="choice" data-v="99">&gt;10€</button></div></div>
+<div class="field" data-k="duration"><b>大概要待多久？</b><div class="choices"><button class="choice on" data-v="short">1–2 小时</button><button class="choice" data-v="medium">3–5 小时</button><button class="choice" data-v="full">全天</button></div></div>
+<div class="field" data-k="quiet"><b>必须非常安静吗？</b><div class="choices"><button class="choice on" data-v="yes">是</button><button class="choice" data-v="no">不是硬条件</button></div></div>
+<div class="field" data-k="wifi"><b>必须有可靠 Wi‑Fi 吗？</b><div class="choices"><button class="choice on" data-v="yes">是</button><button class="choice" data-v="no">不是硬条件</button></div></div>
+<div class="field" data-k="outlet"><b>必须有插座吗？</b><div class="choices"><button class="choice on" data-v="yes">是</button><button class="choice" data-v="no">不是硬条件</button></div></div>
+<div class="field" data-k="late"><b>必须深夜 / 24 小时可用吗？</b><div class="choices"><button class="choice on" data-v="no">不需要</button><button class="choice" data-v="yes">需要</button></div></div>
+<div class="field" data-k="dedicated"><b>必须是专门的 coworking 环境吗？</b><div class="choices"><button class="choice on" data-v="no">不需要</button><button class="choice" data-v="yes">需要</button></div></div>
+<div class="field" data-k="area"><b>更希望在哪一带？</b><div class="choices"><button class="choice on" data-v="any">不限</button><button class="choice" data-v="1-4">1–4 区</button><button class="choice" data-v="5-8">5–8 区</button><button class="choice" data-v="9-12">9–12 区</button><button class="choice" data-v="13-16">13–16 区</button><button class="choice" data-v="17-20">17–20 区</button></div></div>
+<button class="primary" id="go">给我最低成本合适方案</button>
+</section>
+
+<section class="panel result" id="result"><div class="summary" id="summary"></div><div id="cards"></div>
+<details><summary>为什么这样推荐</summary><div id="rules" class="small" style="font-size:14px;margin-top:10px"></div></details>
+<div class="feedback"><b>这个推荐真的帮你省事了吗？</b><br><button class="secondary fb" data-v="yes">帮到了</button><button class="secondary fb" data-v="no">没帮到</button><div id="reasons" style="display:none"><button class="secondary rs">太远</button><button class="secondary rs">太贵</button><button class="secondary rs">不够安静</button><button class="secondary rs">时间不合适</button><button class="secondary rs">信息不够</button><button class="secondary rs">其他</button></div><div class="small" id="fbmsg"></div></div>
+</section>
+</main>
+<script>
+var s={budget:'0',duration:'short',quiet:'yes',wifi:'yes',outlet:'yes',late:'no',dedicated:'no',area:'any'};
+var o={
+saint:{name:'Bibliothèque Saint-Simon',cost:0,costText:'0€',areas:['5-8','any'],quiet:true,wifi:true,outlet:true,late:false,dedicated:false,why:'官方资料明确有静音工作位、免费 Wi‑Fi 和插座，成本为 0€。',limit:'开放时间比商业 coworking 有限；出发前核对当天开放时间。',src:[['巴黎市政府 · Saint-Simon','https://www.paris.fr/lieux/bibliotheque-saint-simon-1693']]},
+bpi:{name:'Bpi Lumière',cost:0,costText:'0€',areas:['9-12','any'],quiet:false,wifi:true,outlet:true,late:false,dedicated:false,why:'适合预算 0€、需要 Wi‑Fi/插座并想待较长时间的人。',limit:'20:00 前需免费入场票；周末可能排队；出发前核对开放时间。',src:[['Bpi · 访问与免费票','https://www.bpi.fr/informations-pratiques/venir-a-la-bpi/acces/'],['巴黎市政府 · 免费远程办公地点','https://www.paris.fr/pages/ou-teletravailler-gratuitement-a-paris-24624']]},
+municipal:{name:'巴黎市立图书馆网络',cost:0,costText:'0€',areas:['1-4','5-8','9-12','13-16','17-20','any'],quiet:false,wifi:true,outlet:false,late:false,dedicated:false,why:'进入和上网服务免费，几乎所有巴黎市立图书馆有免费高速 Wi‑Fi。',limit:'具体分馆的插座与安静程度需要再核实；安静阅读区通常不适合打电话。',src:[['巴黎市政府 · 市立图书馆','https://www.paris.fr/en/pages/municipal-lending-libraries-31378'],['巴黎市政府 · 图书馆实用信息','https://www.paris.fr/pages/bibliotheques-infos-pratiques-2507']]},
+climbing:{name:'Climbing District coworking',cost:5,costText:'5€/天',areas:['any','5-8','9-12','13-16','17-20'],quiet:false,wifi:true,outlet:false,late:false,dedicated:true,why:'官方 FAQ 当前写明 coworking 5€/天，并提供高速网络。',limit:'官方来源未确认绝对安静、插座或电话间，这些需要再核实。',src:[['Climbing District · FAQ','https://climbingdistrict.com/en/faq/']]},
+permanence:{name:'La Permanence',cost:3,costText:'3€/小时起',areas:['any','5-8','13-16','17-20'],quiet:false,wifi:true,outlet:true,late:true,dedicated:true,why:'如果深夜/24 小时是硬条件，它解决免费图书馆做不到的时间限制。',limit:'长时间使用比免费图书馆贵；不同页面套餐可能变化，请核对当前价格。',src:[['La Permanence · café-coworking','https://la-permanence.com/cafe-coworking-paris'],['La Permanence 官网','https://la-permanence.com/']]}
+};
+function pick(){document.querySelectorAll('.field').forEach(function(f){var b=f.querySelector('.choice.on');s[f.dataset.k]=b.dataset.v;});}
+function area(x){return s.area==='any'||x.areas.indexOf(s.area)>=0}
+function hard(x){if(s.late==='yes'&&!x.late)return false;if(s.wifi==='yes'&&!x.wifi)return false;if(s.outlet==='yes'&&!x.outlet)return false;if(s.quiet==='yes'&&!x.quiet)return false;if(s.dedicated==='yes'&&!x.dedicated)return false;return true}
+function rank(){pick();var p=[],b=Number(s.budget);if(s.late==='yes'){if(b>=3&&area(o.permanence)&&hard(o.permanence))p.push('permanence');return p}if(s.dedicated==='yes'){if(b>=5&&area(o.climbing)&&hard(o.climbing))p.push('climbing');if(b>=3&&p.length<2&&area(o.permanence)&&hard(o.permanence))p.push('permanence');return p}if(s.quiet==='yes'&&s.wifi==='yes'&&s.outlet==='yes'&&(s.area==='5-8'||s.area==='any'))p.push('saint');if(s.duration==='full'&&s.quiet==='no'&&s.wifi==='yes'&&s.outlet==='yes'&&(s.area==='9-12'||s.area==='any'))p.push('bpi');if(s.quiet==='no'&&s.outlet==='no'&&area(o.municipal))p.push('municipal');if(b>=5&&p.length<3&&s.quiet==='no'&&s.outlet==='no'&&area(o.climbing))p.push('climbing');return p.slice(0,3)}
+function show(){var p=rank(),cards=document.getElementById('cards'),sum=document.getElementById('summary');cards.innerHTML='';if(!p.length){sum.innerHTML='<b>现在没有已验证方案能同时满足这些硬条件。</b><div class="warning">这里不硬塞推荐。可以提高预算、放宽条件，或继续核实更多地点。</div>'}else{sum.innerHTML='<b>当前最低成本高置信匹配：'+o[p[0]].name+'</b><div class="small">先满足硬条件，再比较价格；免费能满足时不先推付费。</div>';p.forEach(function(k,i){var x=o[k],d=document.createElement('div');d.className='card';var src=x.src.map(function(v){return '<a target="_blank" rel="noopener" href="'+v[1]+'">'+v[0]+'</a>'}).join('');d.innerHTML='<div class="rank">'+(i?'备选 '+i:'首选')+'</div><div class="name">'+x.name+'</div><span class="pill">'+x.costText+'</span>'+(x.wifi?'<span class="pill">已核实 Wi‑Fi</span>':'')+(x.outlet?'<span class="pill">已核实插座</span>':'')+(x.late?'<span class="pill">24/7</span>':'')+'<p><b>为什么匹配：</b>'+x.why+'</p><p class="constraint"><b>已知限制：</b>'+x.limit+'</p><p><b>为什么没推更贵：</b>已有更低成本方案满足当前已知硬条件，不为“看起来更专业”主动升级。</p><div class="sources"><b>官方来源：</b>'+src+'</div><div class="notad">这不是广告。</div>';cards.appendChild(d);});}document.getElementById('rules').innerHTML='1. 硬条件优先。<br>2. 免费方案满足全部硬条件时，付费方案不能当首选。<br>3. 来源没确认的设施不脑补。<br>4. 必须 coworking 时，图书馆不算 coworking。<br>5. 0€ + 必须 coworking 时，如无已验证供给就明确无匹配。<br><br>当前输入：预算 '+(s.budget==='99'?'>10€':s.budget+'€')+'；时长 '+s.duration+'；安静 '+s.quiet+'；Wi‑Fi '+s.wifi+'；插座 '+s.outlet+'；24/7 '+s.late+'；专门 coworking '+s.dedicated+'；区域 '+s.area+'。';document.getElementById('result').classList.add('show');document.getElementById('result').scrollIntoView({behavior:'smooth'});}
+document.querySelectorAll('.field').forEach(function(f){f.addEventListener('click',function(e){var b=e.target.closest('.choice');if(!b)return;f.querySelectorAll('.choice').forEach(function(x){x.classList.remove('on')});b.classList.add('on')})});
+document.getElementById('go').onclick=show;
+document.querySelectorAll('.fb').forEach(function(b){b.onclick=function(){localStorage.setItem('needmatch_feedback',b.dataset.v);document.getElementById('fbmsg').textContent=b.dataset.v==='yes'?'已记录：帮到了（仅本设备）。':'已记录：没帮到。请选择主要原因。';document.getElementById('reasons').style.display=b.dataset.v==='no'?'block':'none';}});
+document.querySelectorAll('.rs').forEach(function(b){b.onclick=function(){localStorage.setItem('needmatch_reason',b.textContent);document.getElementById('fbmsg').textContent='已记录原因：'+b.textContent+'（仅本设备）。';}});
+window.__needmatch={state:s,rank:rank};
+</script>
+</body>
+</html>
