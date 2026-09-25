@@ -1,0 +1,12 @@
+{
+  "expo": {
+    "name": "共鸣",
+    "slug": "resonance-app",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "automatic",
+    "android": {
+      "package": "com.qxdnzbl.resonanceapp"
+    }
+  }
+}
