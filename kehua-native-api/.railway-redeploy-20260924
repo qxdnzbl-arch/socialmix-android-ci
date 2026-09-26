@@ -1,2 +1,0 @@
-Trigger Railway rebuild after merging verified PR #6.
-Expected source commit contains package.json and server.js.
