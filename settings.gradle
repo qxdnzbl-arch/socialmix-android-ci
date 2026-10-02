@@ -14,5 +14,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = 'SocialMixAndroidCI'
-include ':app'
+rootProject.name = 'PromptNotebook'
+include ':promptapp'
