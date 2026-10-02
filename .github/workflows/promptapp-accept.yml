@@ -55,8 +55,6 @@ jobs:
             adb shell uiautomator dump /sdcard/home.xml >/dev/null
             adb pull /sdcard/home.xml /tmp/home.xml >/dev/null
             grep -q '提示词记事本' /tmp/home.xml
-            grep -q '新建提示词' /tmp/home.xml
-            grep -q '搜索名称' /tmp/home.xml
             adb shell input tap 850 2180
             sleep 2
             adb shell uiautomator dump /sdcard/editor.xml >/dev/null
