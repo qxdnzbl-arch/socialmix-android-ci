@@ -24,7 +24,7 @@ class PromptNotebookFlowTest {
         rule.onNodeWithTag("title_input").performTextInput("测试提示词")
         rule.onNodeWithTag("category_input").performTextInput("开发")
         rule.onNodeWithTag("content_input").performTextInput("这是用于真实验收的完整提示词")
-        rule.onNodeWithText("保存提示词").performClick()
+        rule.onNodeWithText("保存").performClick()
 
         rule.onNodeWithText("测试提示词").assertExists()
         rule.onNodeWithText("复制提示词").assertExists()
