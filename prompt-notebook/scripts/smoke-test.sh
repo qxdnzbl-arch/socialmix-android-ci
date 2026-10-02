@@ -5,11 +5,22 @@ APK="app/build/outputs/apk/debug/app-debug.apk"
 adb install -r "$APK"
 adb shell am force-stop com.nzbl.promptbox
 adb shell am start -W -n com.nzbl.promptbox/.MainActivity
-sleep 3
+sleep 4
 
 dump_ui() {
-  adb shell uiautomator dump /sdcard/window.xml >/dev/null
-  adb pull /sdcard/window.xml /tmp/window.xml >/dev/null
+  rm -f /tmp/window.xml
+  adb shell rm -f /data/local/tmp/window.xml >/dev/null 2>&1 || true
+  for i in 1 2 3 4 5; do
+    adb shell uiautomator dump /data/local/tmp/window.xml || true
+    if adb shell test -s /data/local/tmp/window.xml; then
+      adb pull /data/local/tmp/window.xml /tmp/window.xml >/dev/null
+      return 0
+    fi
+    sleep 2
+  done
+  echo "UI dump failed"
+  adb shell dumpsys window windows | tail -120 || true
+  return 1
 }
 
 tap_node() {
@@ -20,7 +31,9 @@ import re,sys,subprocess,xml.etree.ElementTree as ET
 needle=sys.argv[1]
 root=ET.parse('/tmp/window.xml').getroot()
 for n in root.iter('node'):
-    if needle in (n.attrib.get('text',''), n.attrib.get('content-desc','')):
+    text=n.attrib.get('text','')
+    desc=n.attrib.get('content-desc','')
+    if needle == text or needle == desc:
         b=n.attrib.get('bounds','')
         m=re.match(r'\[(\d+),(\d+)\]\[(\d+),(\d+)\]',b)
         if not m:
@@ -52,12 +65,17 @@ dump_ui
 grep -q "SmokeTest" /tmp/window.xml
 grep -q "HelloPrompt" /tmp/window.xml
 
+PREFS=$(adb shell run-as com.nzbl.promptbox cat shared_prefs/prompt_box_prefs.xml)
+echo "$PREFS" | grep -q "SmokeTest"
+echo "$PREFS" | grep -q "HelloPrompt"
+
 adb shell am force-stop com.nzbl.promptbox
 adb shell am start -W -n com.nzbl.promptbox/.MainActivity
-sleep 2
+sleep 3
 dump_ui
 grep -q "SmokeTest" /tmp/window.xml
 
 tap_node "复制提示词"
+adb shell dumpsys activity activities | grep -q "com.nzbl.promptbox/.MainActivity"
 
 echo "SMOKE_TEST_OK"
