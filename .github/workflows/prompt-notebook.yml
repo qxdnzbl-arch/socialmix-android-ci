@@ -1,4 +1,4 @@
-name: Prompt Notebook APK
+name: Prompt Notebook Final APK
 
 on:
   push:
@@ -6,10 +6,13 @@ on:
       - prompt-notebook-apk
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 45
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -25,15 +28,37 @@ jobs:
         with:
           gradle-version: '8.11.1'
 
-      - name: Build installable debug APK
-        run: gradle :promptapp:assembleDebug --stacktrace
+      - name: Build APK and test APK
+        run: gradle :promptapp:assembleDebug :promptapp:assembleDebugAndroidTest --stacktrace
 
-      - name: Rename APK
-        run: cp promptapp/build/outputs/apk/debug/promptapp-debug.apk prompt-notebook.apk
+      - name: Run real emulator UI test
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          target: google_apis
+          profile: pixel_6
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none
+          script: gradle :promptapp:connectedDebugAndroidTest --stacktrace
 
-      - name: Upload APK
+      - name: Package APK
+        run: |
+          test -s promptapp/build/outputs/apk/debug/promptapp-debug.apk
+          mkdir -p deliverable
+          cp promptapp/build/outputs/apk/debug/promptapp-debug.apk deliverable/PromptNotebook-v1.0.0.apk
+          sha256sum deliverable/PromptNotebook-v1.0.0.apk > deliverable/SHA256.txt
+          unzip -t deliverable/PromptNotebook-v1.0.0.apk >/dev/null
+
+      - name: Upload verified APK
         uses: actions/upload-artifact@v4
         with:
-          name: prompt-notebook-apk
-          path: prompt-notebook.apk
+          name: PromptNotebook-Final-APK
+          path: deliverable/
           if-no-files-found: error
+          retention-days: 14
+
+      - name: Delivery marker
+        run: |
+          echo "Build, emulator UI test, APK package check and artifact upload succeeded."
+          exit 1
