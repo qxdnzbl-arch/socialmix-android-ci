@@ -26,6 +26,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -228,7 +229,7 @@ fun PromptNotebookApp() {
             OutlinedTextField(
                 value = query,
                 onValueChange = { query = it },
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp).testTag("search_input"),
                 singleLine = true,
                 placeholder = { Text("搜索名称、分类、标签、正文或备注") },
                 leadingIcon = { Icon(Icons.Rounded.Search, null) },
@@ -610,7 +611,7 @@ private fun EditorScreen(
                     onValueChange = { title = it },
                     label = { Text("名称") },
                     placeholder = { Text("例如：Claude 视觉母版提示词") },
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier.fillMaxWidth().testTag("title_input"),
                     singleLine = true,
                     shape = RoundedCornerShape(15.dp)
                 )
@@ -621,7 +622,7 @@ private fun EditorScreen(
                     onValueChange = { category = it },
                     label = { Text("分类") },
                     placeholder = { Text("例如：软件、写作、生图") },
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier.fillMaxWidth().testTag("category_input"),
                     singleLine = true,
                     shape = RoundedCornerShape(15.dp)
                 )
@@ -633,7 +634,7 @@ private fun EditorScreen(
                     label = { Text("标签") },
                     placeholder = { Text("用逗号分开，例如：Claude，视觉，母版") },
                     supportingText = { Text("标签方便以后跨分类搜索") },
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier.fillMaxWidth().testTag("tags_input"),
                     shape = RoundedCornerShape(15.dp)
                 )
             }
