@@ -1,39 +1,10 @@
-name: Build Prompt Notebook APK
+name: Archived old prompt notebook workflow
 
 on:
-  push:
-    branches:
-      - prompt-notebook-apk
-
-permissions:
-  contents: read
+  workflow_dispatch:
 
 jobs:
-  build:
+  archived:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: '17'
-      - uses: gradle/actions/setup-gradle@v4
-        with:
-          gradle-version: '8.11.1'
-      - uses: android-actions/setup-android@v3
-      - name: Install Android SDK
-        run: sdkmanager "platforms;android-35" "build-tools;35.0.0"
-      - name: Build and lint
-        working-directory: prompt-notebook
-        run: gradle --no-daemon :app:lintDebug :app:assembleDebug
-      - name: Verify APK
-        run: |
-          test -f prompt-notebook/app/build/outputs/apk/debug/app-debug.apk
-          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging prompt-notebook/app/build/outputs/apk/debug/app-debug.apk
-          sha256sum prompt-notebook/app/build/outputs/apk/debug/app-debug.apk
-      - uses: actions/upload-artifact@v4
-        with:
-          name: prompt-notebook-apk
-          path: prompt-notebook/app/build/outputs/apk/debug/app-debug.apk
-          if-no-files-found: error
+      - run: echo "Archived; final prompt notebook uses the dedicated final workflow."
