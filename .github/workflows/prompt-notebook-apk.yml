@@ -11,7 +11,7 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     defaults:
       run:
         working-directory: prompt-notebook
@@ -26,10 +26,56 @@ jobs:
           gradle-version: '8.11.1'
       - name: Build APK
         run: gradle --no-daemon :app:assembleDebug
-      - name: Smoke-check APK
+      - name: Package structure check
         run: |
           test -s app/build/outputs/apk/debug/app-debug.apk
           unzip -t app/build/outputs/apk/debug/app-debug.apk >/dev/null
+      - name: Enable KVM
+        run: |
+          if [ -e /dev/kvm ]; then sudo chmod 666 /dev/kvm; fi
+      - name: Real emulator smoke test
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          target: google_apis
+          profile: pixel_6
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none
+          script: |
+            adb install -r prompt-notebook/app/build/outputs/apk/debug/app-debug.apk
+            adb shell am force-stop com.nzbl.promptbook || true
+            adb shell am start -n com.nzbl.promptbook/.MainActivity
+            sleep 3
+            adb shell pidof com.nzbl.promptbook
+            adb shell uiautomator dump /sdcard/home.xml >/dev/null
+            adb pull /sdcard/home.xml /tmp/home.xml >/dev/null
+            grep -q '提示词本' /tmp/home.xml
+            grep -q '新建提示词' /tmp/home.xml
+
+            adb shell input tap 540 2180
+            sleep 2
+            adb shell uiautomator dump /sdcard/editor.xml >/dev/null
+            adb pull /sdcard/editor.xml /tmp/editor.xml >/dev/null
+            grep -q '完整提示词' /tmp/editor.xml
+            grep -q '保存' /tmp/editor.xml
+
+            adb shell input tap 540 190
+            adb shell input text PromptTest
+            adb shell input keyevent 4
+            sleep 1
+            adb shell input tap 800 2180
+            sleep 2
+            adb shell uiautomator dump /sdcard/saved.xml >/dev/null
+            adb pull /sdcard/saved.xml /tmp/saved.xml >/dev/null
+            grep -q 'PromptTest' /tmp/saved.xml
+
+            adb shell am force-stop com.nzbl.promptbook
+            adb shell am start -n com.nzbl.promptbook/.MainActivity
+            sleep 2
+            adb shell uiautomator dump /sdcard/relaunch.xml >/dev/null
+            adb pull /sdcard/relaunch.xml /tmp/relaunch.xml >/dev/null
+            grep -q 'PromptTest' /tmp/relaunch.xml
       - name: Package
         run: |
           mkdir -p deliverable
