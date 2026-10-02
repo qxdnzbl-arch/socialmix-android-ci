@@ -52,79 +52,51 @@ jobs:
             PKG=com.promptnotebook.app
             ACT=com.promptnotebook.app/.MainActivity
 
-            dump_ui() {
-              adb shell uiautomator dump /sdcard/ui.xml >/dev/null
-              adb pull /sdcard/ui.xml /tmp/ui.xml >/dev/null
-            }
-
-            tap_match() {
-              MATCH="$1"
-              dump_ui
-              python3 - "$MATCH" <<'PY'
-import re, sys, xml.etree.ElementTree as ET, subprocess
-match=sys.argv[1]
-root=ET.parse('/tmp/ui.xml').getroot()
-for node in root.iter('node'):
-    text=(node.attrib.get('text') or '') + ' ' + (node.attrib.get('content-desc') or '')
-    if match in text:
-        m=re.match(r'\[(\d+),(\d+)\]\[(\d+),(\d+)\]', node.attrib.get('bounds',''))
-        if m:
-            x1,y1,x2,y2=map(int,m.groups())
-            subprocess.check_call(['adb','shell','input','tap',str((x1+x2)//2),str((y1+y2)//2)])
-            sys.exit(0)
-raise SystemExit('UI match not found: '+match)
-PY
-            }
-
             adb install -r "$APK"
             adb shell am force-stop "$PKG" || true
             adb shell am start -n "$ACT"
             sleep 3
             adb shell pidof "$PKG"
 
-            dump_ui
-            grep -q '提示词记事本' /tmp/ui.xml
-            grep -q '新建提示词' /tmp/ui.xml
-            grep -q '搜索名称' /tmp/ui.xml
+            adb shell uiautomator dump /sdcard/home.xml >/dev/null
+            adb pull /sdcard/home.xml /tmp/home.xml >/dev/null
+            grep -q '提示词记事本' /tmp/home.xml
+            grep -q '新建提示词' /tmp/home.xml
+            grep -q '搜索名称' /tmp/home.xml
 
-            tap_match '新建提示词'
-            sleep 1
-            dump_ui
-            grep -q '新建提示词' /tmp/ui.xml
-            grep -q '名称' /tmp/ui.xml
-            grep -q '完整提示词' /tmp/ui.xml
-            grep -q '保存' /tmp/ui.xml
+            adb shell input tap 850 2180
+            sleep 2
+            adb shell uiautomator dump /sdcard/editor.xml >/dev/null
+            adb pull /sdcard/editor.xml /tmp/editor.xml >/dev/null
+            grep -q '新建提示词' /tmp/editor.xml
+            grep -q '名称' /tmp/editor.xml
+            grep -q '完整提示词' /tmp/editor.xml
+            grep -q '保存' /tmp/editor.xml
 
-            python3 <<'PY'
-import re, xml.etree.ElementTree as ET, subprocess
-root=ET.parse('/tmp/ui.xml').getroot()
-edits=[n for n in root.iter('node') if n.attrib.get('class')=='android.widget.EditText']
-if not edits:
-    raise SystemExit('No editable field found')
-m=re.match(r'\[(\d+),(\d+)\]\[(\d+),(\d+)\]', edits[0].attrib['bounds'])
-x1,y1,x2,y2=map(int,m.groups())
-subprocess.check_call(['adb','shell','input','tap',str((x1+x2)//2),str((y1+y2)//2)])
-PY
+            adb shell input tap 540 360
             adb shell input text PromptTest
             adb shell input keyevent 4
             adb shell input swipe 540 1700 540 800 450
             adb shell pidof "$PKG"
 
-            tap_match '保存'
+            adb shell input tap 965 120
             sleep 2
-            dump_ui
-            grep -q 'PromptTest' /tmp/ui.xml
+            adb shell uiautomator dump /sdcard/saved.xml >/dev/null
+            adb pull /sdcard/saved.xml /tmp/saved.xml >/dev/null
+            grep -q 'PromptTest' /tmp/saved.xml
 
             adb shell am force-stop "$PKG"
             adb shell am start -n "$ACT"
             sleep 2
-            dump_ui
-            grep -q 'PromptTest' /tmp/ui.xml
+            adb shell uiautomator dump /sdcard/relaunch.xml >/dev/null
+            adb pull /sdcard/relaunch.xml /tmp/relaunch.xml >/dev/null
+            grep -q 'PromptTest' /tmp/relaunch.xml
 
-            tap_match 'PromptTest'
+            adb shell input tap 540 480
             sleep 1
-            dump_ui
-            grep -q '编辑提示词' /tmp/ui.xml
+            adb shell uiautomator dump /sdcard/reopen.xml >/dev/null
+            adb pull /sdcard/reopen.xml /tmp/reopen.xml >/dev/null
+            grep -q '编辑提示词' /tmp/reopen.xml
             adb shell input keyevent 4
             sleep 1
             adb shell pidof "$PKG"
