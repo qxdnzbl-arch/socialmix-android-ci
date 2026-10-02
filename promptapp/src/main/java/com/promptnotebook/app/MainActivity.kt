@@ -643,7 +643,7 @@ private fun EditorScreen(
                     onValueChange = { content = it },
                     label = { Text("完整提示词") },
                     placeholder = { Text("把需要反复使用的完整提示词放在这里……") },
-                    modifier = Modifier.fillMaxWidth().heightIn(min = 250.dp),
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 250.dp).testTag("content_input"),
                     minLines = 10,
                     shape = RoundedCornerShape(15.dp)
                 )
