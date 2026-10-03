@@ -29,6 +29,9 @@ def tap_bounds(bounds):
     return True
 
 def start_app():
+    print("IMES", adb("shell ime list -s", False))
+    print("DEFAULT_IME", adb("shell settings get secure default_input_method", False))
+    adb("shell settings put secure show_ime_with_hard_keyboard 1", False)
     adb(f"shell am force-stop {APP}", False)
     adb(f"shell monkey -p {APP} -c android.intent.category.LAUNCHER 1")
     time.sleep(4)
