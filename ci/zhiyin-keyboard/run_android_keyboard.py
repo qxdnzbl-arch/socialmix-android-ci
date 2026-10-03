@@ -108,8 +108,12 @@ def test_write(cdp):
     wait_for(lambda: cdp.js("!!document.querySelector('#w-text')"), name="write page")
     before=metrics(cdp); shot("01_write_before.png")
     cdp.touch("#w-text")
-    wait_for(lambda: ime_visible() or metrics(cdp)["vv"] < before["vv"]-100, timeout=12, name="IME open on write")
-    time.sleep(1)
+    wait_for(lambda: metrics(cdp)["active"] == "w-text", timeout=5, name="write input focus")
+    time.sleep(.8)
+    if not metrics(cdp)["vv"] < before["vv"]-100:
+        cdp.touch("#w-text")
+    wait_for(lambda: metrics(cdp)["vv"] < before["vv"]-100, timeout=12, name="write viewport resize by real IME")
+    time.sleep(.5)
     m=metrics(cdp); shot("02_write_keyboard.png")
     assert "focused" in m["wrap"], m
     assert m["vv"] < before["vv"]-100, (before,m)
@@ -148,12 +152,12 @@ def test_chat(cdp):
     b=cdp.js("visualViewport.height")
     cdp.touch("#c-in")
     wait_for(lambda: cdp.js("document.activeElement && document.activeElement.id === 'c-in'"), timeout=5, name="chat input focus")
-    time.sleep(1.2)
-    if not (ime_visible() or cdp.js("visualViewport.height") < b-100):
-        # Second real touch handles Android IME's short reopen cooldown after a previous dismissal.
-        cdp.touch("#c-in")
-    wait_for(lambda: ime_visible() or cdp.js("visualViewport.height") < b-100, timeout=12, name="IME open chat")
     time.sleep(.8)
+    if not cdp.js("visualViewport.height") < b-100:
+        # Retry the real touch if Android is still finishing the previous IME dismissal.
+        cdp.touch("#c-in")
+    wait_for(lambda: cdp.js("visualViewport.height") < b-100, timeout=12, name="chat viewport resize by real IME")
+    time.sleep(.5)
     m=cdp.js("""(()=>{let e=document.querySelector('.cbar'),i=document.querySelector('#c-in'),s=document.querySelector('.csend');let q=x=>{let r=x.getBoundingClientRect();return{y:r.y,b:r.bottom,h:r.height,display:getComputedStyle(x).display}};return{vv:visualViewport.height,bar:q(e),input:q(i),send:q(s),active:document.activeElement.id}})()""")
     shot("05_chat_keyboard.png")
     assert m["active"]=="c-in", m
