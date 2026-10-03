@@ -138,13 +138,21 @@ def test_restore():
     return c
 
 def test_chat(cdp):
-    # Open chat tab with a real touch.
+    # Use a known active conversation; do not accidentally choose a pending/locked thread.
     cdp.touch('.nav button[data-t="chat"]')
     wait_for(lambda: cdp.js("!!document.querySelector('.crow .cm')"), name="chat list")
-    cdp.touch(".crow .cm")
+    cdp.touch('.cm[data-p="wanfeng"]')
     wait_for(lambda: cdp.js("!!document.querySelector('#c-in')"), name="conversation composer")
+    shot("05_chat_before_keyboard.png")
+    adb("shell input keyevent 4", False)
+    time.sleep(.8)
     b=cdp.js("visualViewport.height")
     cdp.touch("#c-in")
+    wait_for(lambda: cdp.js("document.activeElement && document.activeElement.id === 'c-in'"), timeout=5, name="chat input focus")
+    time.sleep(1.2)
+    if not (ime_visible() or cdp.js("visualViewport.height") < b-100):
+        # Second real touch handles Android IME's short reopen cooldown after a previous dismissal.
+        cdp.touch("#c-in")
     wait_for(lambda: ime_visible() or cdp.js("visualViewport.height") < b-100, timeout=12, name="IME open chat")
     time.sleep(.8)
     m=cdp.js("""(()=>{let e=document.querySelector('.cbar'),i=document.querySelector('#c-in'),s=document.querySelector('.csend');let q=x=>{let r=x.getBoundingClientRect();return{y:r.y,b:r.bottom,h:r.height,display:getComputedStyle(x).display}};return{vv:visualViewport.height,bar:q(e),input:q(i),send:q(s),active:document.activeElement.id}})()""")
@@ -167,8 +175,8 @@ def main():
     c=CDP()
     print("UA",c.js("navigator.userAgent"))
     test_write(c)
-    c=test_restore()
     test_chat(c)
+    c=test_restore()
     print("ALL_ANDROID_KEYBOARD_TESTS_PASS")
 
 if __name__=="__main__": main()
