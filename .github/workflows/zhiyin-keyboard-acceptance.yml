@@ -32,7 +32,79 @@ jobs:
           Path("/tmp/zhiyin-site/index.html").write_text(p+"\n")
           PY
           base64 -d ci/zhiyin-keyboard/tail.b64 >> /tmp/zhiyin-site/index.html
-          echo "f8ebe6b770d800fb62d2124ae86493838c46fbfd9b67a49965be31b47881a229  /tmp/zhiyin-site/index.html" | sha256sum -c -
+          python3 - <<'PY'
+          from pathlib import Path
+          path=Path("/tmp/zhiyin-site/index.html")
+          p=path.read_text()
+
+          p=p.replace(', interactive-widget=resizes-content','')
+          p=p.replace(
+              '<button class="wcancel" data-a="w-cancel" data-nofocus aria-label="取消编辑并保存草稿">取消</button>',
+              '<button class="wcancel" data-a="w-cancel" aria-label="取消编辑并保存草稿">取消</button>',
+              1
+          )
+
+          needle='.write-wrap.hasdraft:not(.typing) .wcardbox #w-text{pointer-events:none}\n\n'
+          css='''/* ===== Android 写页键盘：只处理写页，不改变其他页面 =====
+   键盘打开时保留原来的完整编辑页，只把写页底部工具栏抬到键盘上方。 */
+@media (max-width:639px){
+  html.write-kbd #stage{height:var(--vvmax,100dvh);min-height:var(--vvmax,100dvh)}
+  html.write-kbd #phone{height:var(--vvmax,100dvh)!important}
+  html.write-kbd .write-wrap.focused .wbar{
+    z-index:12;
+    background:var(--bg);
+    transform:translateY(calc(-1 * var(--kbd-shift,0px)));
+  }
+}
+
+'''
+          assert needle in p
+          p=p.replace(needle, needle+css, 1)
+
+          old="T.wFocus = false; T.visOpen = false; T.keyboardOpen = false;\n    if (t) t.blur();"
+          new="T.wFocus = false; T.visOpen = false; T.keyboardOpen = false;\n    document.documentElement.classList.remove('write-kbd');\n    if (t) t.blur();"
+          assert old in p
+          p=p.replace(old,new,1)
+
+          oldvv='''  const vv = () => {
+    const h = window.visualViewport ? window.visualViewport.height : window.innerHeight;
+    document.documentElement.style.setProperty('--vvh', h + 'px');
+    T.vvMax = Math.max(T.vvMax || 0, h);
+    const open = (T.vvMax - h) > 120;
+    const wasOpen = !!T.keyboardOpen;
+    T.keyboardOpen = open;
+    // 安卓用键盘收起键时 focusout 有时不会可靠触发；视口恢复后兜底恢复写页导航。
+    if (wasOpen && !open && T.wFocus && topR().r === 'write') {
+      T.wFocus = false;
+      const t = $('#w-text'); if (t) t.blur();
+      if (!T.sheet) render();
+    }
+  };'''
+          newvv='''  const vv = () => {
+    const h = window.visualViewport ? window.visualViewport.height : window.innerHeight;
+    const root = document.documentElement;
+    root.style.setProperty('--vvh', h + 'px');
+    T.vvMax = Math.max(T.vvMax || 0, h);
+    root.style.setProperty('--vvmax', (T.vvMax || h) + 'px');
+    const shift = Math.max(0, (T.vvMax || h) - h);
+    root.style.setProperty('--kbd-shift', shift + 'px');
+    const open = shift > 120;
+    const wasOpen = !!T.keyboardOpen;
+    T.keyboardOpen = open;
+    root.classList.toggle('write-kbd', !!(open && T.wFocus && topR().r === 'write'));
+    // 安卓用键盘收起键时 focusout 有时不会可靠触发；视口恢复后兜底恢复写页导航。
+    if (wasOpen && !open && T.wFocus && topR().r === 'write') {
+      root.classList.remove('write-kbd');
+      T.wFocus = false;
+      const t = $('#w-text'); if (t) t.blur();
+      if (!T.sheet) render();
+    }
+  };'''
+          assert oldvv in p
+          p=p.replace(oldvv,newvv,1)
+          path.write_text(p)
+          PY
+          echo "58625fb468b6ae3fbc127d12266476ca813640631d645d74c235b7f96a20c1ad  /tmp/zhiyin-site/index.html" | sha256sum -c -
           wc -c -l /tmp/zhiyin-site/index.html
 
       - name: Prepare Android test shell asset
