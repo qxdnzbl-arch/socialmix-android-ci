@@ -1,0 +1,66 @@
+name: Zhiyin Android Keyboard Acceptance
+
+on:
+  push:
+    branches:
+      - zhiyin-keyboard-verify
+    paths:
+      - "ci/zhiyin-keyboard/**"
+      - ".github/workflows/zhiyin-keyboard-acceptance.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  android-keyboard:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Reconstruct exact candidate
+        shell: bash
+        run: |
+          mkdir -p /tmp/zhiyin-site ci/zhiyin-keyboard/artifacts
+          cat ci/zhiyin-keyboard/zhiyin_v3.9.2.html > /tmp/zhiyin-site/index.html
+          base64 -d ci/zhiyin-keyboard/tail.b64 >> /tmp/zhiyin-site/index.html
+          echo "f8ebe6b770d800fb62d2124ae86493838c46fbfd9b67a49965be31b47881a229  /tmp/zhiyin-site/index.html" | sha256sum -c -
+          wc -c -l /tmp/zhiyin-site/index.html
+
+      - name: Start test web server
+        shell: bash
+        run: |
+          nohup python3 -m http.server 8765 --directory /tmp/zhiyin-site >/tmp/zhiyin-http.log 2>&1 &
+          sleep 2
+          curl -f http://127.0.0.1:8765/index.html >/dev/null
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Install test dependency
+        run: python3 -m pip install --user websocket-client
+
+      - name: Run on Android emulator with real IME
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          target: google_apis_playstore
+          arch: x86_64
+          profile: pixel_6
+          disable-animations: true
+          emulator-options: -no-snapshot -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          script: python3 ci/zhiyin-keyboard/run_android_keyboard.py
+
+      - name: Upload acceptance screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: zhiyin-android-keyboard-acceptance
+          path: |
+            ci/zhiyin-keyboard/artifacts
+            /tmp/zhiyin-http.log
+          if-no-files-found: warn
