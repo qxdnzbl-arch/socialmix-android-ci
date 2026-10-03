@@ -48,7 +48,7 @@ class CDP:
     def __init__(self):
         ps=pages()
         p=next((x for x in ps if "android_asset/index.html" in x.get("url","")), ps[0])
-        self.ws=websocket.create_connection(p["webSocketDebuggerUrl"], timeout=10, origin="http://localhost")
+        self.ws=websocket.create_connection(p["webSocketDebuggerUrl"], timeout=10, suppress_origin=True)
         self.i=0
     def call(self,method,params=None):
         self.i+=1
