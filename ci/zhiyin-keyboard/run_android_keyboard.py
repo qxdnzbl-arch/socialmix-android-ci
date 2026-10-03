@@ -144,7 +144,6 @@ def test_chat(cdp):
     cdp.touch('.cm[data-p="wanfeng"]')
     wait_for(lambda: cdp.js("!!document.querySelector('#c-in')"), name="conversation composer")
     shot("05_chat_before_keyboard.png")
-    adb("shell input keyevent 4", False)
     time.sleep(.8)
     b=cdp.js("visualViewport.height")
     cdp.touch("#c-in")
