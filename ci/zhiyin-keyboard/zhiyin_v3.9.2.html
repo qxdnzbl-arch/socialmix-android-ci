@@ -1,0 +1,1000 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, interactive-widget=resizes-content">
+<meta name="theme-color" content="#F4F5F1">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>知音 · 交互母版 v3.7</title>
+<style>
+:root{
+  --bg:#F4F5F1;--card:#FFFFFF;--sunk:#EAEDE8;--ink:#252A28;--ink2:#5B6460;--ink3:#667069;--line:#E1E5DF;
+  --lake:#46716B;--drop:#9CC4BD;--mist:#D6E6E2;--apricot:#F2DCD2;--sand:#EDE5D8;
+  --sh:0 6px 24px rgba(37,42,40,.06);--cardline:transparent;--track:#DCE1DB;--onLake:#FFFFFF;
+  --scrim:rgba(30,36,34,.30);--toast:#2C3230;--toastInk:#F4F5F1;--outer:#E4E8E3;--frame:#1F2423;
+  --serif:"Songti SC","STSong","Noto Serif SC","Source Han Serif SC","Source Han Serif CN","Noto Serif CJK SC","SimSun",serif;
+  --sans:-apple-system,BlinkMacSystemFont,"PingFang SC","HarmonyOS Sans SC","MiSans","Noto Sans SC","Microsoft YaHei",sans-serif;
+  --st:max(env(safe-area-inset-top,0px),6px);--sb:max(env(safe-area-inset-bottom,0px),12px);
+  --ease:cubic-bezier(.3,.7,.2,1);
+}
+[data-theme=dark]{
+  --bg:#131716;--card:#1B201F;--sunk:#242A28;--ink:#E3E7E4;--ink2:#A0A9A5;--ink3:#8B9490;--line:#2A302E;
+  --lake:#8FBFB7;--drop:#7FB2A9;--mist:#2C4541;--apricot:#5B423B;--sand:#3A352D;
+  --sh:none;--cardline:#2A302E;--track:#353C3A;--onLake:#131716;
+  --scrim:rgba(0,0,0,.55);--toast:#E3E7E4;--toastInk:#131716;--outer:#0C0F0E;--frame:#2A302E;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;height:100%;background:var(--outer);color:var(--ink);font-family:var(--sans);-webkit-font-smoothing:antialiased;overscroll-behavior:none}
+button{font:inherit;color:inherit;background:none;border:0;padding:0;margin:0;cursor:pointer}
+button:focus-visible,[tabindex]:focus-visible{outline:2px solid var(--lake);outline-offset:2px;border-radius:10px}
+input,textarea{font:inherit;color:inherit}
+p{margin:0}
+#stage{min-height:100%;display:flex;align-items:center;justify-content:center;gap:48px}
+#phone{position:relative;width:100vw;height:var(--vvh,100dvh);overflow:hidden;background:var(--bg);color:var(--ink);transition:background .4s}
+#side{display:none}
+.sbar{display:none}
+@media (min-width:640px){
+  #stage{padding:28px}
+  #phone{width:390px;height:844px;border-radius:46px;box-shadow:0 0 0 9px var(--frame),0 40px 90px rgba(20,30,26,.22);--st:44px;--sb:20px}
+  .sbar{display:flex;position:absolute;left:0;right:0;top:0;height:44px;align-items:center;justify-content:space-between;padding:4px 30px 0 34px;font-size:14px;letter-spacing:.02em;color:var(--ink);z-index:40;pointer-events:none}
+  .sbar i{display:inline-block;width:24px;height:11px;border:1.2px solid var(--ink2);border-radius:3px;position:relative;opacity:.8}
+  .sbar i:after{content:"";position:absolute;left:1.5px;top:1.5px;bottom:1.5px;width:62%;background:var(--ink2);border-radius:1px}
+  #side{display:flex;flex-direction:column;gap:14px;width:200px;color:var(--ink2);font-size:14px;line-height:1.7}
+  #side h2{margin:0;font-weight:400;font-size:16px;color:var(--ink);letter-spacing:.06em}
+  #side .sbtn{display:flex;align-items:center;justify-content:space-between;height:40px;padding:0 14px;border-radius:20px;background:var(--card);box-shadow:var(--sh);border:1px solid var(--cardline);font-size:14px;color:var(--ink)}
+  #side .seg2{display:flex;gap:4px;padding:4px;border-radius:22px;background:var(--sunk)}
+  #side .seg2 button{flex:1;height:32px;border-radius:16px;font-size:14px;color:var(--ink2)}
+  #side .seg2 button.on{background:var(--card);color:var(--ink);box-shadow:var(--sh)}
+}
+/* screen */
+.screen{position:absolute;inset:0;display:flex;flex-direction:column;background:var(--bg)}
+.screen.push{animation:pushIn .34s var(--ease)}
+.screen.pop{animation:popIn .3s var(--ease)}
+.screen.fade{animation:fadeIn .25s ease}
+@keyframes pushIn{from{transform:translateX(28px);opacity:.0}to{transform:none;opacity:1}}
+@keyframes popIn{from{transform:translateX(-18px);opacity:.0}to{transform:none;opacity:1}}
+@keyframes fadeIn{from{opacity:0}to{opacity:1}}
+.hd{flex:none;display:flex;align-items:center;justify-content:space-between;padding:calc(var(--st) + 10px) 22px 8px;min-height:62px}
+.hd .l,.hd .r{width:64px;min-height:44px;display:flex;align-items:center}
+.hd .r{justify-content:flex-end}
+.hd h1{margin:0;font-size:16px;font-weight:400;letter-spacing:.08em;color:var(--ink2);text-align:center;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ib{width:44px;height:44px;display:flex;align-items:center;justify-content:center;color:var(--ink2);border-radius:22px}
+.hd .l .ib{margin-left:-12px}.hd .r .ib{margin-right:-11px}
+.hd .who{display:flex;align-items:center;gap:8px;min-height:44px;margin-top:0;padding-top:0;border-top:0;width:auto;font-size:16px;letter-spacing:.06em;color:var(--ink)}
+.scroll{flex:1;overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch;overscroll-behavior:contain}
+.scroll::-webkit-scrollbar{width:0;height:0}
+.pad{padding:6px 22px 28px}
+/* nav */
+.nav{flex:none;display:grid;grid-template-columns:repeat(4,1fr);padding:4px 12px var(--sb);background:var(--bg)}
+.nav button{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;min-height:54px;font-size:16px;letter-spacing:.08em;color:var(--ink2)}
+.nav button.on{color:var(--ink)}
+.nav .dot{height:9px;display:block}
+/* type */
+.serif{font-family:var(--serif)}
+.t-body{font-family:var(--serif);font-size:18px;line-height:1.9;letter-spacing:.02em;white-space:pre-wrap;word-break:break-word}
+.t-body16{font-family:var(--serif);font-size:16px;line-height:1.8;letter-spacing:.02em;white-space:pre-wrap;word-break:break-word}
+.t-sub{font-size:14px;color:var(--ink2);letter-spacing:.04em;line-height:1.6}
+.t-tag{font-size:14px;color:var(--ink3);letter-spacing:.04em;line-height:1.6}
+.clamp1{display:-webkit-box;-webkit-line-clamp:1;-webkit-box-orient:vertical;overflow:hidden}
+.clamp2{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.clamp6{display:-webkit-box;-webkit-line-clamp:7;-webkit-box-orient:vertical;overflow:hidden}
+.label{font-size:14px;color:var(--ink3);letter-spacing:.1em;margin:22px 0 4px}
+/* surfaces */
+.card{background:var(--card);border-radius:26px;box-shadow:var(--sh);border:1px solid var(--cardline)}
+.card.m{border-radius:20px}
+.sunkbox{background:var(--sunk);border-radius:14px;padding:12px 14px}
+.mistbox{background:var(--mist);border-radius:14px;padding:12px 14px}
+.av{flex:none;border-radius:50%;display:flex;align-items:center;justify-content:center;font-family:var(--serif);color:var(--ink);position:relative}
+.av.mist{background:var(--mist)}.av.apricot{background:var(--apricot)}.av.sand{background:var(--sand)}.av.sunk{background:var(--sunk)}
+button.av{cursor:pointer}
+.pill{display:inline-flex;align-items:center;gap:6px;height:36px;padding:0 13px;border-radius:18px;border:1px solid var(--line);font-size:14px;letter-spacing:.06em;color:var(--ink2)}
+.pill.on{color:var(--lake);border-color:color-mix(in srgb,var(--lake) 35%,var(--line))}
+.btn{height:46px;border-radius:23px;padding:0 22px;font-size:16px;letter-spacing:.08em;display:inline-flex;align-items:center;justify-content:center}
+.btn.pri{background:var(--lake);color:var(--onLake)}
+.btn.sec{background:var(--sunk);color:var(--ink)}
+.btn.danger{background:var(--sunk);color:#A0453A}
+[data-theme=dark] .btn.danger{color:#E59C90}
+.btn.wide{width:100%}
+.link{font-size:16px;letter-spacing:.08em;color:var(--ink2);padding:12px 14px;min-height:44px;display:inline-flex;align-items:center}
+.link.lake{color:var(--lake)}
+.softlink{font-size:14px;letter-spacing:.05em;color:var(--ink2);padding:10px 8px;min-height:44px;display:inline-flex;align-items:center;justify-content:center;text-align:center;line-height:1.7}
+.lakelink{font-size:14px;letter-spacing:.06em;color:var(--lake);min-height:44px;display:inline-flex;align-items:center}
+/* toggles & chips */
+.tg{width:44px;height:26px;border-radius:13px;background:var(--track);position:relative;flex:none;transition:background .25s}
+.tg:after{content:"";position:absolute;left:2px;top:2px;width:22px;height:22px;border-radius:50%;background:#FFF;transition:transform .25s var(--ease);box-shadow:0 1px 3px rgba(0,0,0,.08)}
+[data-theme=dark] .tg:after{background:#E3E7E4}
+.tg.on{background:var(--lake)}
+.tg.on:after{transform:translateX(18px)}
+[data-theme=dark] .tg.on:after{background:#131716}
+.tgwrap{min-width:44px;min-height:44px;display:flex;align-items:center;justify-content:flex-end}
+.chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+.chip{height:34px;padding:0 14px;border-radius:17px;border:1px solid var(--line);font-size:14px;letter-spacing:.04em;color:var(--ink2);background:transparent}
+.chip.on{background:var(--mist);border-color:transparent;color:var(--ink)}
+.row{display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:56px;padding:8px 0;border-bottom:1px solid var(--line);width:100%;text-align:left}
+.row .rl{display:flex;flex-direction:column;gap:3px;min-width:0}
+.row .rt{font-size:16px;letter-spacing:.04em;color:var(--ink)}
+.row .rv{font-size:14px;color:var(--ink2);display:flex;align-items:center;gap:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:56%}
+.row.block{display:block}
+.note{font-size:14px;color:var(--ink3);line-height:1.7;letter-spacing:.03em}
+/* empty */
+.empty{display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:14px;padding:44px 22px;color:var(--ink2);font-size:16px;letter-spacing:.06em;line-height:1.8}
+.empty.tall{min-height:58vh}
+.empty .ttl{font-family:var(--serif);font-size:18px;color:var(--ink);letter-spacing:.06em}
+/* write */
+.write-wrap{flex:1;display:flex;flex-direction:column;min-height:0}
+.write-scroll{flex:1;padding:calc(var(--st) + 22px) 30px 16px}
+#w-text{width:100%;border:0;outline:0;resize:none;background:transparent;padding:0;margin:0;font-family:var(--serif);font-size:18px;line-height:1.85;letter-spacing:.03em;color:var(--ink);caret-color:var(--lake);min-height:40vh;display:block}
+#w-text::placeholder{color:var(--ink3)}
+.wbar{flex:none;display:flex;align-items:center;justify-content:space-between;padding:8px 18px calc(var(--sb) + 4px) 14px;animation:fadeIn .35s ease;position:relative}
+.wbar .tools{display:flex;gap:0}
+.wbar .tools button{width:44px;height:44px;display:flex;align-items:center;justify-content:center;color:var(--ink2)}
+.wbar .tools button:disabled{opacity:.3;cursor:default}
+.wbar .rightside{display:flex;align-items:center;gap:6px}
+.vislab{font-size:14px;color:var(--ink2);letter-spacing:.04em;display:flex;align-items:center;gap:2px;min-height:44px;padding:0 6px}
+.send{width:48px;height:48px;border-radius:50%;background:var(--sunk);display:flex;align-items:center;justify-content:center}
+.send:disabled{opacity:.45;cursor:default}
+.breathe{animation:breathe 3.6s ease-in-out infinite;transform-origin:50% 90%}
+@keyframes breathe{0%,100%{transform:translateY(0) scale(1)}50%{transform:translateY(-2px) scale(1.04)}}
+.visbub{position:absolute;right:16px;bottom:calc(100% + 4px);width:224px;padding:6px 16px;border-radius:20px;background:var(--card);box-shadow:0 10px 36px rgba(37,42,40,.12);border:1px solid var(--cardline);animation:bubIn .22s var(--ease);z-index:5}
+.visbub .row{min-height:50px}.visbub .row:last-child{border-bottom:0}
+@keyframes bubIn{from{opacity:0;transform:translateY(6px) scale(.98)}to{opacity:1;transform:none}}
+.att{margin-top:18px;display:flex;flex-direction:column;gap:10px}
+.grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:7px}
+.tile{position:relative;border-radius:14px;aspect-ratio:1;overflow:hidden}
+.tile.big{aspect-ratio:4/3}
+.tile svg{position:absolute;inset:0;width:100%;height:100%}
+.tile .x{position:absolute;right:6px;top:6px;width:26px;height:26px;border-radius:50%;background:var(--card);display:flex;align-items:center;justify-content:center;color:var(--ink2);opacity:.92}
+.tile .more{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(37,42,40,.32);color:#fff;font-size:14px;letter-spacing:.1em}
+.tile.add{border:1px dashed var(--line);display:flex;align-items:center;justify-content:center;color:var(--ink3);background:transparent}
+.imgs2{display:grid;grid-template-columns:1fr 1fr;gap:7px}
+.vid{position:relative;border-radius:20px;aspect-ratio:16/10;background:var(--mist);overflow:hidden}
+.vid .play{position:absolute;left:50%;top:50%;width:46px;height:46px;margin:-23px 0 0 -23px;border-radius:50%;background:var(--card);display:flex;align-items:center;justify-content:center;color:var(--ink)}
+.vid .dur{position:absolute;right:12px;bottom:10px;font-size:14px;color:var(--ink);opacity:.75}
+.voice{background:var(--sunk);border-radius:20px;padding:12px 14px;display:flex;flex-direction:column;gap:8px}
+.voice .wv{display:flex;align-items:center;gap:10px}
+.voice .pb{width:30px;height:30px;border-radius:50%;background:var(--card);display:flex;align-items:center;justify-content:center;color:var(--ink)}
+.bars{display:flex;align-items:center;gap:2px;height:20px}
+.bars i{display:block;width:2px;border-radius:1px;background:var(--lake);opacity:.7}
+.wcard{display:flex;align-items:center;gap:12px;background:var(--sunk);border-radius:16px;padding:10px 12px;position:relative}
+.cover{flex:none;border-radius:6px;background:var(--sand);display:flex;align-items:center;justify-content:center;color:var(--ink2)}
+.cover.song{width:42px;height:42px}.cover.tall{width:32px;height:44px}.cover.wide{width:54px;height:32px}
+.wcard .ct{font-size:14px;color:var(--ink);letter-spacing:.03em}
+.wcard .cq{font-size:14px;color:var(--ink2);margin-top:2px}
+.wcard .x{position:absolute;right:6px;top:6px;width:30px;height:30px;display:flex;align-items:center;justify-content:center;color:var(--ink3)}
+/* done */
+.done{flex:1;display:flex;flex-direction:column;align-items:center;padding:calc(var(--st) + 150px) 30px 30px;position:relative}
+.pond{position:relative;width:200px;height:120px}
+.pond svg{position:absolute;inset:0;overflow:visible}
+.fall{animation:fall .8s cubic-bezier(.45,0,.75,1) both}
+@keyframes fall{0%{transform:translateY(-140px);opacity:0}25%{opacity:1}100%{transform:translateY(0)}}
+.ring{transform-origin:100px 96px;animation:ring 1.4s .72s ease-out both}
+.ring.r2{animation-delay:.95s}
+@keyframes ring{from{opacity:.9;transform:scale(.15)}to{opacity:.0;transform:scale(1.15)}}
+.ringstay{transform-origin:100px 96px;animation:ringstay 1s 1.1s ease-out both}
+@keyframes ringstay{from{opacity:0;transform:scale(.3)}to{opacity:1;transform:scale(1)}}
+.up1{animation:up .6s 1.2s ease-out both}.up2{animation:up .6s 1.5s ease-out both}.up3{animation:up .6s 1.8s ease-out both}
+@keyframes up{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+.done-ttl{font-family:var(--serif);font-size:18px;letter-spacing:.08em;margin-top:14px;color:var(--ink)}
+.care{margin-top:34px;width:100%;background:var(--mist);border-radius:22px;padding:18px 18px 10px;position:relative}
+.care .x{position:absolute;right:6px;top:6px;width:40px;height:40px;display:flex;align-items:center;justify-content:center;color:var(--ink2)}
+/* meet */
+.seg{display:flex;gap:4px;padding:4px;margin:2px 22px 0;border-radius:23px;background:var(--sunk);flex:none}
+.seg button{flex:1;height:38px;border-radius:19px;font-size:16px;letter-spacing:.06em;color:var(--ink2);transition:background .2s}
+.seg button.on{background:var(--card);color:var(--ink);box-shadow:var(--sh)}
+[data-theme=dark] .seg button.on{box-shadow:inset 0 0 0 1px var(--line)}
+.stackwrap{padding:22px 22px 30px;position:relative}
+.mcard{padding:24px;touch-action:pan-y;user-select:none;-webkit-user-select:none;position:relative;z-index:2;will-change:transform}
+.mcard.leave{transition:transform .38s cubic-bezier(.5,0,.8,.4),opacity .38s;transform:translateX(-130%) rotate(-6deg)!important;opacity:0}
+.mcard.back{transition:transform .3s var(--ease)}
+.mcard.rise{animation:rise .45s var(--ease)}
+@keyframes rise{from{transform:translateY(14px) scale(.97);opacity:.0}to{transform:none;opacity:1}}
+.under{position:absolute;left:34px;right:34px;top:30px;height:60px;border-radius:26px;background:var(--card);opacity:.5;z-index:1;border:1px solid var(--cardline)}
+.mbody{display:block;width:100%;text-align:left}
+.who{display:flex;align-items:center;gap:10px;margin-top:22px;padding-top:16px;border-top:1px solid var(--line);width:100%;text-align:left;min-height:44px}
+.who .nm{display:flex;flex-direction:column;flex:1;min-width:0}
+.who .nm b{font-weight:400;font-size:16px}
+.who .nm span{font-size:14px;color:var(--ink2)}
+.mact{display:flex;align-items:center;justify-content:space-between;margin-top:14px;padding:0 4px;min-height:44px}
+.hint{text-align:center;font-size:14px;color:var(--ink3);letter-spacing:.05em;margin-top:18px}
+.res{display:block;overflow:visible}
+.res circle{fill:none;stroke:var(--lake);stroke-width:1.6;transition:transform .9s var(--ease),fill-opacity .9s;fill:var(--lake);fill-opacity:0}
+.res .c1{transform:translateX(-2px)}.res .c2{transform:translateX(2px)}
+.res.on .c1,.res.on .c2{transform:none;fill-opacity:.2}
+.water{position:relative;width:240px;height:120px;margin:0 auto}
+.wring{transform-origin:120px 70px;animation:wring 5.2s ease-out infinite}
+.wring.b{animation-delay:1.7s}.wring.c{animation-delay:3.4s}
+@keyframes wring{0%{transform:scale(.2);opacity:0}15%{opacity:.9}100%{transform:scale(1.25);opacity:0}}
+.hang{animation:hang 3.6s ease-in-out infinite;transform-origin:120px 40px}
+@keyframes hang{0%,100%{transform:translateY(0)}50%{transform:translateY(3px)}}
+.region{margin-top:18px;padding:18px 18px 8px}
+.region-hd{display:flex;align-items:center;justify-content:space-between;width:100%;min-height:40px;font-size:16px;letter-spacing:.06em;color:var(--ink)}
+.region-hd .chev{color:var(--ink3)}
+.prow{display:flex;gap:12px;padding:12px 0;border-top:1px solid var(--line);align-items:flex-start}
+.prow:first-of-type{border-top:0}
+.prow .pmain{flex:1;min-width:0;display:flex;flex-direction:column;gap:6px;text-align:left}
+.prow .pn{font-size:16px;color:var(--ink);letter-spacing:.04em}
+.after-line{font-family:var(--serif);font-size:16px;color:var(--ink2);letter-spacing:.03em;line-height:1.8;padding:0 28px 4px;text-align:center}
+/* chat */
+.crow{display:flex;gap:12px;align-items:center;padding:12px 0;width:100%;text-align:left;min-height:68px}
+.crow .cm{flex:1;min-width:0}
+.crow .cn{display:flex;justify-content:space-between;align-items:baseline;gap:10px}
+.crow .cn b{font-weight:400;font-size:16px;letter-spacing:.04em}
+.crow .cn span{font-size:14px;color:var(--ink3);flex:none}
+.crow .cp{font-size:14px;color:var(--ink3);margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;letter-spacing:.03em}
+.crow .cp.unread{color:var(--ink)}
+.crow .cp.ended{font-family:var(--serif)}
+.msgs{display:flex;flex-direction:column;gap:10px;padding:4px 22px 20px}
+.tstamp{align-self:center;font-size:14px;color:var(--ink3);letter-spacing:.04em;padding:6px 0}
+.bub{max-width:78%;padding:11px 15px;font-family:var(--serif);font-size:16px;line-height:1.75;letter-spacing:.02em;white-space:pre-wrap;word-break:break-word;animation:fadeIn .3s ease}
+.bub.me{align-self:flex-end;background:var(--mist);border-radius:20px 20px 6px 20px}
+.bub.them{align-self:flex-start;background:var(--card);border-radius:20px 20px 20px 6px;box-shadow:var(--sh);border:1px solid var(--cardline)}
+.bub.media{padding:0;background:transparent;box-shadow:none;border:0}
+.sysline{align-self:center;font-size:14px;color:var(--ink3);letter-spacing:.04em;text-align:center;padding:4px 10px;line-height:1.7}
+.endline{align-self:center;font-family:var(--serif);font-size:16px;color:var(--ink2);letter-spacing:.06em;padding:14px 0 4px}
+.cbar{flex:none;display:flex;align-items:flex-end;gap:8px;padding:8px 14px var(--sb);background:var(--bg);position:relative}
+.cbar .plus{width:40px;height:44px;display:flex;align-items:center;justify-content:center;color:var(--ink2);flex:none}
+.cin{flex:1;min-height:44px;max-height:120px;border-radius:22px;background:var(--sunk);border:0;outline:0;padding:11px 16px;font-size:16px;line-height:1.5;resize:none;display:block;color:var(--ink)}
+.cin::placeholder{color:var(--ink3)}
+.cin.locked{opacity:.45}
+.csend{width:44px;height:44px;border-radius:50%;background:var(--sunk);display:flex;align-items:center;justify-content:center;flex:none}
+.csend:disabled{opacity:.4}
+.cbar-msg{flex:none;text-align:center;font-size:14px;color:var(--ink2);letter-spacing:.04em;padding:16px 26px var(--sb);line-height:1.7}
+.floathint{position:absolute;left:50%;bottom:calc(100% + 6px);transform:translateX(-50%);background:var(--toast);color:var(--toastInk);font-size:14px;padding:8px 14px;border-radius:16px;white-space:nowrap;animation:fadeIn .2s ease;pointer-events:none}
+.notice{align-self:center;max-width:92%;font-size:14px;color:var(--ink2);background:var(--sunk);border-radius:14px;padding:8px 12px;line-height:1.7;letter-spacing:.03em;text-align:center}
+.topline{align-self:center;font-size:14px;letter-spacing:.05em;color:var(--ink3);padding:2px 14px 8px;min-height:32px;display:flex;align-items:center;justify-content:center;flex:none}
+/* profile */
+.phead{display:flex;align-items:center;gap:14px;padding:6px 0 4px}
+.phead .pnm{flex:1;min-width:0}
+.phead .pnm b{display:block;font-weight:400;font-size:18px;letter-spacing:.06em}
+.phead .pnm span{display:block;font-size:14px;color:var(--ink2);margin-top:4px;line-height:1.6}
+.mods{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:18px}
+.mod{border-radius:20px;padding:14px 16px;min-height:76px}
+.mod.ap{background:var(--apricot)}.mod.sa{background:var(--sand)}
+.mod .ml{font-size:14px;color:var(--ink2);display:flex;justify-content:space-between;align-items:center}
+.mod .mv{font-size:16px;color:var(--ink);margin-top:6px;letter-spacing:.03em;line-height:1.5}
+.mod.full{grid-column:1/-1}
+.hpost{padding:18px 20px 12px;margin-top:10px}
+.hpost .acts{display:flex;justify-content:flex-end;align-items:center;gap:6px;margin-top:10px}
+.edited{font-size:14px;color:var(--ink3);margin-top:6px}
+/* threads */
+.thread{background:var(--sunk);border-radius:20px;padding:14px 16px 6px;margin-top:10px}
+.thread.mine{background:var(--card);box-shadow:var(--sh);border:1px solid var(--cardline)}
+.thread.hl{animation:hl 1.6s ease}
+@keyframes hl{0%{box-shadow:0 0 0 2px var(--lake)}100%{box-shadow:0 0 0 2px transparent}}
+.th-hd{display:flex;align-items:center;gap:8px;margin-bottom:8px}
+.th-hd .tn{font-size:14px;color:var(--ink2);flex:1;letter-spacing:.04em}
+.th-tag{font-size:14px;color:var(--ink3);letter-spacing:.04em}
+.cmt{display:block;width:100%;text-align:left;padding:6px 0 8px}
+.cmt .cw{font-size:14px;color:var(--ink3);letter-spacing:.04em;margin-bottom:2px}
+.cmt.auth{padding-left:12px;border-left:2px solid color-mix(in srgb,var(--lake) 45%,transparent)}
+.th-acts{display:flex;gap:4px;justify-content:flex-end;border-top:1px solid var(--line);margin-top:6px}
+.th-acts button{font-size:14px;color:var(--lake);letter-spacing:.06em;min-height:40px;padding:0 10px}
+.th-acts button.g{color:var(--ink2)}
+/* me */
+.mehead{display:flex;flex-direction:column;align-items:center;text-align:center;padding:10px 0 6px}
+.mehead .nm{font-size:18px;letter-spacing:.08em;margin-top:12px}
+.mehead .it{font-size:14px;color:var(--ink2);margin-top:6px;line-height:1.7;max-width:280px}
+.mehead .md{display:inline-flex;align-items:center;gap:6px;margin-top:10px;height:30px;padding:0 12px;border-radius:15px;background:var(--apricot);font-size:14px;color:var(--ink)}
+.myhome{display:flex;align-items:center;justify-content:space-between;width:100%;min-height:60px;padding:14px 18px;margin-top:18px}
+.months{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.month{background:var(--sunk);border-radius:18px;padding:14px 16px;text-align:left;min-height:96px;display:flex;flex-direction:column;gap:6px}
+.month .mt{font-size:14px;color:var(--ink2);letter-spacing:.06em}
+.month .ms{font-family:var(--serif);font-size:16px;line-height:1.7;color:var(--ink)}
+.mypost{padding:16px 18px;margin-top:10px;display:block;width:100%;text-align:left}
+.badges{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px}
+.badge{font-size:14px;color:var(--ink2);background:var(--sunk);border-radius:10px;padding:2px 8px;letter-spacing:.04em}
+/* overlays */
+#ov{position:absolute;inset:0;z-index:50;pointer-events:none}
+.scrim{position:absolute;inset:0;background:var(--scrim);pointer-events:auto;animation:fadeIn .22s ease}
+.sheet{position:absolute;left:0;right:0;bottom:0;max-height:88%;display:flex;flex-direction:column;background:var(--card);border-radius:26px 26px 0 0;pointer-events:auto;animation:sheetIn .32s var(--ease);border-top:1px solid var(--cardline)}
+[data-theme=dark] .sheet{background:#1E2423}
+@keyframes sheetIn{from{transform:translateY(100%)}to{transform:none}}
+.sheet .grab{flex:none;display:flex;justify-content:center;padding:10px 0 6px;touch-action:none;cursor:grab}
+.sheet .grab i{width:36px;height:4px;border-radius:2px;background:var(--line)}
+.sheet .sbody{overflow-y:auto;padding:4px 22px calc(var(--sb) + 14px)}
+.sheet .sttl{font-size:16px;letter-spacing:.06em;color:var(--ink);padding:6px 0 4px}
+.sheet .sitem{display:flex;align-items:center;justify-content:space-between;width:100%;min-height:54px;border-bottom:1px solid var(--line);font-size:16px;letter-spacing:.04em;text-align:left}
+.sheet .sitem:last-child{border-bottom:0}
+.sheet .sitem.danger{color:#A0453A}
+[data-theme=dark] .sheet .sitem.danger{color:#E59C90}
+.confirm{position:absolute;left:24px;right:24px;top:50%;transform:translateY(-50%);background:var(--card);border-radius:26px;padding:24px 20px 18px;text-align:center;pointer-events:auto;animation:popc .22s var(--ease);border:1px solid var(--cardline)}
+[data-theme=dark] .confirm{background:#1E2423}
+@keyframes popc{from{opacity:0;transform:translateY(-46%) scale(.97)}to{opacity:1;transform:translateY(-50%)}}
+.confirm h3{margin:0;font-weight:400;font-size:18px;letter-spacing:.06em}
+.confirm p{font-size:14px;color:var(--ink2);margin-top:10px;line-height:1.8}
+.confirm .cbtns{display:flex;gap:10px;margin-top:20px}
+.confirm .cbtns .btn{flex:1;padding:0 10px}
+.field{width:100%;border:0;outline:0;background:var(--sunk);border-radius:16px;padding:12px 14px;font-size:16px;line-height:1.6;resize:none;color:var(--ink);display:block}
+.field.serif{font-family:var(--serif);font-size:16px}
+.field::placeholder{color:var(--ink3)}
+#toast{position:absolute;left:50%;bottom:110px;transform:translateX(-50%) translateY(8px);background:var(--toast);color:var(--toastInk);font-size:14px;letter-spacing:.04em;line-height:1.6;padding:9px 16px;border-radius:18px;max-width:84%;text-align:center;opacity:0;transition:opacity .25s,transform .25s;pointer-events:none;z-index:80}
+#toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+.tt{position:absolute;inset:0;z-index:90;display:flex;flex-direction:column;background:var(--bg);animation:sheetIn .3s var(--ease)}
+.tt .tthd{display:flex;align-items:center;justify-content:space-between;padding:calc(var(--st) + 8px) 18px 8px}
+.tt .tthd b{font-weight:400;font-size:16px;letter-spacing:.06em}
+.tt .ttb{flex:1;overflow-y:auto;padding:0 18px 30px}
+.tt .tg-h{font-size:14px;color:var(--ink3);letter-spacing:.08em;margin:18px 0 8px}
+.tt .tchips{display:flex;flex-wrap:wrap;gap:8px}
+.tt .tchip{min-height:36px;padding:6px 12px;border-radius:12px;background:var(--card);border:1px solid var(--line);font-size:14px;color:var(--ink);text-align:left;line-height:1.4}
+.tt .tchip.on{background:var(--mist);border-color:transparent}
+.tt .vrow{display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--line);width:100%;text-align:left}
+.tt .vrow .vm{flex:1;min-width:0;font-size:14px;line-height:1.6}
+.tt .vrow .vm small{display:block;color:var(--ink2);font-size:14px}
+.tt .ok{color:var(--lake)}.tt .no{color:#A0453A}
+[data-theme=dark] .tt .no{color:#E59C90}
+.visitbar{flex:none;background:var(--sunk);font-size:14px;color:var(--ink2);text-align:center;padding:8px 14px;letter-spacing:.04em}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+
+.static *,.static *:before,.static *:after{animation:none!important;transition:none!important}
+.cbar-note{flex:none;text-align:center;font-size:14px;color:var(--ink3);padding:6px 20px 0;letter-spacing:.04em}
+.nav{position:relative}.nav:before{content:"";position:absolute;left:0;right:0;top:-18px;height:18px;background:linear-gradient(to bottom,transparent,var(--bg));pointer-events:none}
+.mehead{padding-top:4px}
+.roottop{flex:none;display:flex;align-items:center;gap:6px;padding:calc(var(--st) + 14px) 10px 4px 22px}
+.roottop .seg{flex:1;margin:0}
+.roottopPad{padding-top:calc(var(--st) + 14px)!important}
+.metune{position:absolute;right:11px;top:calc(var(--st) + 6px)}
+
+/* 四个主页面统一：内容都从“我”页头像的同一高度起步 */
+.wdate{font-size:14px;letter-spacing:.12em;color:var(--ink3);text-align:center;margin:0 0 26px}
+.write-scroll{padding-top:calc(var(--st) + 22px)!important}
+.roottop{justify-content:center;padding:calc(var(--st) + 14px) 22px 4px}
+.roottop .seg{flex:none;width:248px;margin:0}
+
+/* ===== 统一留白：卡片内 24、列表行 16、页面边距 24 ===== */
+.pad{padding-left:24px!important;padding-right:24px!important}
+.mcard{padding:28px}
+.region{padding:24px 24px 12px}
+.region + .region{margin-top:16px}
+.hpost{padding:24px 24px 16px}
+.hpost + .hpost{margin-top:14px}
+.thread{padding:20px 20px 10px}
+.thread + .thread{margin-top:14px}
+.mod{padding:18px 20px}
+.myhome{padding:20px 24px!important;margin-top:24px!important}
+.month{padding:20px!important;min-height:112px!important;gap:8px!important}
+.months{gap:12px!important}
+.card[style*="padding:22px"]{padding:26px!important}
+.sunkbox,.mistbox{padding:16px 18px}
+.prow,.crow{padding:16px 0}
+.row{padding:12px 0;min-height:58px}
+.label{margin-top:28px;margin-bottom:6px}
+/* 我页：头像缩小，与文字比例协调 */
+.mehead .av{width:60px!important;height:60px!important;font-size:25px!important}
+.mehead .nm{margin-top:14px}
+.mehead .it{margin-top:8px;max-width:300px}
+.mehead .md{height:32px;padding:0 14px;margin-top:12px}
+/* 写过的：和其他内容一样用白卡，不再用灰块 */
+.month{background:var(--card)!important;box-shadow:var(--sh);border:1px solid var(--cardline)}
+/* 写页：顶部一滴作为落点，与“我”页头像同一高度 */
+.wmark{display:flex;justify-content:center;margin:6px 0 30px;opacity:.85}
+
+/* ================= v3.4 布局规格 =================
+   头像：32 / 40 / 48 / 56    圆角：24 卡片 / 16 小块 / 全圆
+   间距：左右 24，卡片内边距 20，分组间 32，组内 16       */
+:root{--gx:24px;--top:32px}
+/* 左右边距 24 */
+.hd{padding-left:var(--gx);padding-right:var(--gx)}
+.pad{padding:8px var(--gx) 32px}
+.seg{margin:2px var(--gx) 0}
+.stackwrap{padding:24px var(--gx) 32px}
+.msgs{padding:8px var(--gx) 24px}
+.sheet .sbody{padding-left:var(--gx);padding-right:var(--gx)}
+/* 圆角三档 */
+.card,.card.m,.under,.care{border-radius:24px}
+.thread,.month,.mod,.sunkbox,.mistbox,.wcard,.voice,.vid,.tile,.visbub,.notice{border-radius:16px}
+/* 卡片内边距 20 */
+.mcard{padding:24px 20px 8px}
+.region{padding:20px}
+.hpost{padding:20px 20px 12px}
+.thread{padding:16px 20px 8px}
+.month{padding:18px 20px;min-height:116px}
+.card.m.myhome,.card.m.mypost{padding:18px 20px}
+/* 分组节奏：组间 32，组内 16 */
+.label{margin:32px 0 8px}
+.pad > .label:first-child,.pad > p.label:first-child{margin-top:8px}
+.row{min-height:56px}
+/* 四个主页面：内容统一从安全区下方 32 开始 */
+.roottop{padding:calc(var(--st) + var(--top)) var(--gx) 12px;justify-content:center}
+.roottop .seg{flex:1;width:auto;margin:0}
+.roottopPad{padding-top:calc(var(--st) + var(--top))!important}
+.write-scroll{padding:calc(var(--st) + var(--top)) var(--gx) 16px!important}
+.metune{top:calc(var(--st) + 24px);right:calc(var(--gx) - 13px)}
+/* 写页：去掉小水滴，提示字下移到上三分之一，重心落稳 */
+.wmark{display:none}
+.write-scroll{padding-top:calc(var(--vvh,100vh)*.15)!important}
+/* “我”页 */
+.mehead{padding:0 0 8px}
+.mehead .nm{margin-top:14px}
+.mehead .it{max-width:none;padding:0 8px;text-wrap:balance;margin-top:8px}
+.mehead .md{height:34px;padding:0 14px;margin-top:12px}
+.months{gap:12px}
+/* 聊天列表行距 */
+.crow{padding:12px 0}
+/* 底部导航与内容不挤 */
+.nav button{min-height:56px}
+
+/* 写页：输入从底部开始，靠近拇指；写长了向上长 */
+.write-scroll{display:flex;flex-direction:column;padding:calc(var(--st) + var(--top)) var(--gx) 20px!important;cursor:text}
+#w-text{margin-top:auto;min-height:0!important}
+
+/* ===== 写页 v3.5：上方一滴探出水平线，下方整块白色输入卡 ===== */
+.write-wrap{flex:1;display:flex;flex-direction:column;min-height:0}
+.whero{flex:0 0 auto;height:32%;min-height:150px;max-height:280px;display:flex;align-items:flex-end;justify-content:center;padding:var(--st) 20px 0}
+.wdate{padding:0 var(--gx);margin:14px 0 12px;font-size:14px;color:var(--ink2);letter-spacing:.06em}
+.write-wrap.typing .whero{display:none}
+.write-wrap.typing .wdate{margin-top:calc(var(--st) + 24px)}
+.wcardbox{flex:1;min-height:0;display:flex;flex-direction:column;margin:0 12px;background:var(--card);border-radius:28px 28px 0 0;box-shadow:var(--sh);border:1px solid var(--cardline);border-bottom:0;cursor:text;overflow:hidden;position:relative}
+.write-wrap.typing .wcardbox{border-radius:28px;margin-bottom:6px;border-bottom:1px solid var(--cardline)}
+.wcardbox .write-scroll{flex:1;display:block!important;padding:24px 22px 16px!important}
+.wcardbox #w-text{margin-top:0!important;min-height:36vh!important;height:auto}
+.wmark{display:none}
+.wdate{text-align:left}
+
+
+/* ===== 正式排版系统：全 App 只认这一套 =====
+   只有两种字族：
+   1. 内容字（宋体）：用户真正写下/说出的内容
+   2. 界面字（无衬线）：标题、名字、按钮、标签、时间、状态、导航
+   字号只保留三级：18 阅读 / 16 界面 / 15 辅助；不再使用 17、14 等中间字号。 */
+:root{
+  --font-content:var(--serif);
+  --font-ui:var(--sans);
+  --fs-read:18px;
+  --fs-ui:16px;
+  --fs-meta:15px;
+  --lh-read:1.8;
+  --lh-ui:1.55;
+  --lh-meta:1.65;
+}
+html,body,button,input,textarea{font-family:var(--font-ui)}
+
+/* A. 用户内容：统一宋体 18 */
+.t-body,.t-body16,#w-text,.bub,.cmtq,.field.serif,.month .ms,.after-line{
+  font-family:var(--font-content);font-size:var(--fs-read);line-height:var(--lh-read);letter-spacing:.02em
+}
+/* 列表里的内容预览仍属于“内容”，但为了单行信息密度使用统一界面字号。 */
+.crow .cp{font-family:var(--font-content);font-size:var(--fs-ui);line-height:1.6;letter-spacing:.02em}
+
+/* B. 主界面信息：统一无衬线 16 */
+.hd h1,.hd .who,.nav button,.btn,.link,.row .rt,.seg button,.who .nm b,.region-hd,.prow .pn,
+.crow .cn b,.cin,.mod .mv,.sheet .sttl,.sheet .sitem,.field:not(.serif),.empty,.wcard .ct,.cbar-msg,
+.pill,.lakelink,.softlink,.th-acts button,.endline{
+  font-family:var(--font-ui);font-size:var(--fs-ui);line-height:var(--lh-ui)
+}
+
+/* C. 辅助信息：统一无衬线 15 */
+.t-sub,.t-tag,.label,.chip,.row .rv,.note,.vislab,.wcard .cq,.who .nm span,.hint,.crow .cn span,
+.tstamp,.sysline,.floathint,.notice,.topline,.phead .pnm span,.mod .ml,.edited,.th-hd .tn,.th-tag,
+.cmt .cw,.mehead .it,.mehead .md,.month .mt,.badge,.confirm p,#toast,.visitbar,.cbar-note,.vid .dur,.tile .more,.wdate{
+  font-family:var(--font-ui);font-size:var(--fs-meta);line-height:var(--lh-meta);letter-spacing:.03em
+}
+
+/* D. 状态标题 / 人物主标题：18，但仍属于界面字，不混入内容宋体。 */
+.empty .ttl,.done-ttl,.phead .pnm b,.mehead .nm,.confirm h3{
+  font-family:var(--font-ui);font-size:var(--fs-read);line-height:1.5;letter-spacing:.04em
+}
+
+/* 头像只是识别符，不再额外切宋体，避免同一屏出现第三种视觉字形。 */
+.av{font-family:var(--font-ui)}
+
+/* 清理历史内联小字号：正式页面里任何 14px 文本统一抬到辅助级 15px。 */
+.screen [style*="font-size:14px"]:not(.av){font-size:var(--fs-meta)!important}
+
+/* “遇见”两页专项约束：正文 / 人名 / 时间 / 操作 / 提示严格五类，不允许局部另起字号。 */
+.stackwrap .t-body{font-family:var(--font-content);font-size:var(--fs-read)}
+.stackwrap .who .nm b,.stackwrap .mact .link,.stackwrap .mact .pill,.region-hd,.prow .pn{font-family:var(--font-ui);font-size:var(--fs-ui)}
+.stackwrap .who .nm span,.stackwrap .hint,.prow .t-sub,.prow .t-tag{font-family:var(--font-ui);font-size:var(--fs-meta)}
+
+/* 聊天列表和对话页也服从同一层级，不再出现 17px 特例。 */
+.crow{min-height:76px;padding:13px 0}
+.crow .cn b{font-size:var(--fs-ui)}
+.crow .cp{margin-top:4px}
+.msgs{gap:12px}
+.bub{padding:12px 16px}
+.cin{font-size:var(--fs-ui)}
+.cbar-msg{font-size:var(--fs-ui)}
+
+/* “我”页同样只用 18 / 16 / 15。 */
+.mehead .it{font-size:var(--fs-meta)}
+.myhome .t-tag,.month .mt{font-size:var(--fs-meta)}
+.month .ms{font-size:var(--fs-read)}
+
+/* 写页：工具栏始终预渲染，焦点变化只切状态，不重建 textarea。 */
+.write-wrap:not(.typing) .wbar{display:none}
+.write-wrap.typing .whero{display:none}
+.write-wrap.focused ~ .nav{display:none!important}
+.write-wrap.typing .wdate{margin-top:calc(var(--st) + 18px)}
+/* 写页退出编辑：明确的一键“取消”，只结束编辑，不删除内容。 */
+.wbar{position:relative}
+.wcancel{
+  position:absolute;right:18px;bottom:calc(100% + 8px);height:40px;min-width:60px;padding:0 14px;
+  border-radius:20px;background:var(--sunk);color:var(--ink2);font-family:var(--font-ui);font-size:var(--fs-meta);
+  line-height:40px;letter-spacing:.03em;box-shadow:var(--sh);z-index:4
+}
+.write-wrap:not(.focused) .wcancel{display:none}
+/* 有草稿但没有在编辑时，回到正常写页节奏；草稿仍留在卡片里，点卡片即可继续。 */
+.write-wrap.hasdraft:not(.typing) .wcardbox #w-text{pointer-events:none}
+
+</style>
+</head>
+<body>
+<div id="stage">
+  <aside id="side"></aside>
+  <div id="phone">
+    <div class="sbar" aria-hidden="true"><span id="sbt">9:41</span><i></i></div>
+    <div id="host"></div>
+    <div id="ov"></div>
+    <div id="toast" role="status" aria-live="polite"></div>
+  </div>
+</div>
+<script>
+/* ============ 种子数据（模拟世界） ============ */
+const TODAY = new Date(2026, 9, 3); // 2026-10-03 周六
+const GUIDE = ['此刻，窗外是什么声音？', '最近一件小小的开心事。', '今天有没有一句没说出口的话？', '想到什么，就写什么。'];
+const MOODS = ['想去看海', '想让生活慢一点', '刚刚好', '有点累', '想被好好听一次', '在慢慢变好'];
+const DEFAULT_ACCESS = () => ({ met: true, resonated: true, commented: true, chatted: true });
+
+function P(id, name, av, bg, o = {}) {
+  return Object.assign({
+    id, name, av, bg, intro: '', mood: '', like: null,
+    show: { intro: true, mood: true, like: true },
+    access: DEFAULT_ACCESS(), whoFirst: 'all', met: false, metMe: false, years: 25, gender: '女', blockedMe: false, frozen: false
+  }, o);
+}
+function seedPeople() {
+  const L = [
+    P('wanfeng', '晚风', '晚', 'apricot', { intro: '夜里比白天更像自己。', mood: '想慢慢走回家', like: { type: '歌', title: '晚安小调' } }),
+    P('shannabian', '山那边', '山', 'sand', { intro: '在山脚下的小城上班。' }),
+    P('shanlan', '山岚', '岚', 'sand', { intro: '喜欢黄昏以后慢慢亮起来的窗。', mood: '想让生活慢一点', like: { type: '歌', title: '一首走夜路的歌' } }),
+    P('xiaoman', '小满', '满', 'mist', { intro: '把日子重新放回手里。', mood: '刚刚好', like: { type: '书', title: '夏天的旧书' } }),
+    P('yuanzhou', '远舟', '远', 'sand', { intro: '十六岁以后就很少吵架了。', like: { type: '电影', title: '长夜漫游' }, whoFirst: 'none' }),
+    P('yizhie', '一只鹅', '鹅', 'sunk', { intro: '慢一点也没关系。', mood: '在慢慢变好' }),
+    P('linjian', '林间', '林', 'mist', { intro: '常坐夜班公交。' }),
+    P('qiuchi', '秋池', '秋', 'apricot', { intro: '五月出生，喜欢河边。' }),
+    P('wuli', '雾里', '雾', 'sunk', {}),
+    P('shiyu', '拾雨', '拾', 'mist', { intro: '还在找自己的节奏。' }),
+    // 每日遇见候选
+    P('qingwu', '青梧', '梧', 'sand', { intro: '一个人住，养了一盆薄荷。', mood: '有点累' }),
+    P('banxia', '半夏', '夏', 'apricot', { intro: '搬来这座城市第二个月。', like: { type: '电影', title: '长夜漫游' } }),
+    P('nanzhi', '南枝', '枝', 'mist', { intro: '阳台是我的小岛。', mood: '刚刚好', whoFirst: 'resonated' }),
+    P('ali', '阿栗', '栗', 'sand', { intro: '常常加班，常常吃面。' }),
+    P('bailu', '白露', '露', 'mist', { intro: '学着照顾自己。', like: { type: '书', title: '一个人的好天气' } }),
+    P('mumu', '木木', '木', 'apricot', { intro: '离家八百公里。', mood: '想家' }),
+    P('shiguang', '拾光', '光', 'sand', { intro: '还没去看海。' }),
+    P('yusheng', '雨声', '雨', 'mist', { intro: '下雨天最安静。', like: { type: '歌', title: '雨停之后' } }),
+    P('lujiao', '鹿角', '鹿', 'sand', { intro: '每周跑三次。' }),
+    P('xiaohan', '小寒', '寒', 'apricot', { intro: '毕业第三年。' }),
+    // 写后遇见候选
+    P('fengling', '风铃', '铃', 'mist', { intro: '在慢慢适应新的城市。', mood: '想家', like: { type: '歌', title: '回家的路' } }),
+    P('yanxia', '檐下', '檐', 'apricot', { intro: '把日子过成小时候的样子。' }),
+    P('yizhan', '一盏', '盏', 'sand', { intro: '喜欢看别人家的窗。', mood: '想去看海' }),
+    P('guitu', '归途', '归', 'mist', { intro: '便利店常客。' }),
+    P('manman', '慢慢', '慢', 'sand', { intro: '一个人也可以。', like: { type: '书', title: '安静的力量' } }),
+  ];
+  // 仅用于演示“年龄段 / 性别”筛选，不是正式推荐参数
+  L.forEach((p, i) => { p.years = 21 + (i * 7) % 10; p.gender = i % 3 === 0 ? '男' : '女'; });
+  const o = {}; L.forEach(p => o[p.id] = p); return o;
+}
+
+let _pid = 0;
+function PO(author, text, o = {}) {
+  return Object.assign({
+    id: o.id || ('p' + (++_pid)), author, text, ym: '2026-10', age: 0, part: '',
+    discoverable: true, onHome: false, whoComment: 'all', commentVis: 'private',
+    sleep: null, ver: 1, edited: false, att: null, card: null, careShown: false, risk: 0, after: null
+  }, o);
+}
+function seedPosts() {
+  const L = [
+    // 我的
+    PO('me', '下班路上下起了雨，没带伞，在便利店门口站了很久。', { id: 'm1', age: 1, part: '傍晚', onHome: true }),
+    PO('me', '下班路过一家亮着暖灯的小店，忽然很想念小时候家门口的那盏灯。可能想念的不是一个地方，是有人等我回去。', { id: 'm2', age: 2, part: '夜里', after: { list: ['yizhan', 'yanxia', 'guitu'], done: ['yizhan', 'yanxia', 'guitu'] } }),
+    PO('me', '终于把那一箱旧书搬完了。有几本翻开，还夹着高中时候的便签。', { id: 'm3', ym: '2026-09', age: 20, onHome: true }),
+    PO('me', '搬完最后一箱书，屋子一下子空了。', { id: 'm4', ym: '2026-09', age: 25 }),
+    PO('me', '新家楼下有一只橘猫，每天傍晚准时出现。', { id: 'm5', ym: '2026-09', age: 28, discoverable: false }),
+    PO('me', '第一次一个人去海边，风很大。', { id: 'm6', ym: '2026-08', age: 50, att: { kind: 'images', tones: ['mist', 'sand'] } }),
+    PO('me', '毕业照里我笑得有点僵。现在再看，倒觉得那时候挺好的。', { id: 'm7', ym: '2026-05', age: 140 }),
+    // 别人的
+    PO('wanfeng', '路边的灯一盏一盏亮起来，像有人在替我回家。', { id: 'w1', age: 3, onHome: true }),
+    PO('wanfeng', '今晚的风有点像夏天快结束的时候。', { id: 'w2', age: 6, onHome: true }),
+    PO('shanlan', '第一次一个人在陌生的房间里醒来，窗外的声音听起来都没有名字。', { id: 's1', age: 2, onHome: true, commentVis: 'public' }),
+    PO('shanlan', '雨停以后，街角的树闻起来很像小时候。今天终于认得回家的那条路了。', { id: 's2', age: 9, onHome: true }),
+    PO('xiaoman', '把阳台上的花换了一轮，今年想种一点会结果的东西。', { id: 'x1', age: 4, onHome: true }),
+    PO('yuanzhou', '十六岁那年，我和爸妈几乎每天都在吵。后来我开始每天写一点东西，写着写着发现，很多话不一定要当面说赢。', { id: 'y1', age: 5, onHome: true }),
+    PO('yizhie', '九月最后一场雨，把窗台上的灰都冲干净了。', { id: 'e1', ym: '2026-09', age: 12, onHome: true }),
+    PO('shannabian', '便利店门口的伞架，总有一把没人认领的伞。', { id: 'n1', age: 3, onHome: true }),
+    PO('linjian', '夜班公交上只有我和司机，他放的歌我竟然都会唱。', { id: 'l1', age: 4, onHome: true }),
+    PO('qiuchi', '五月的风很软，适合什么都不想。', { id: 'q1', ym: '2026-05', age: 150, onHome: true }),
+    PO('shiyu', '还没想好要写什么，就先写下今天的天气：多云。', { id: 'r1', age: 3 }),
+    // 每日遇见
+    PO('qingwu', '整理旧物时没有哭。把最后一张车票丢掉后，我去窗边给那盆快枯掉的薄荷浇了水。', { id: 'd1', age: 0, part: '傍晚', onHome: true }),
+    PO('banxia', '搬来这座城市的第二个月。今天一个人去看了场电影，散场出来，走廊的灯都亮着，忽然很想跟谁说一句“好看”。后来想想，说给这里也行。', { id: 'd2', age: 1, part: '夜里', onHome: true, card: { type: '电影', title: '长夜漫游', quote: '结尾那个很长的镜头' } }),
+    PO('nanzhi', '今天把阳台收拾出来了，傍晚的光一照，像换了一个家。', { id: 'd3', age: 0, part: '傍晚', onHome: true, att: { kind: 'images', tones: ['mist', 'sand', 'apricot', 'mist', 'sand'] } }),
+    PO('ali', '加班到十点，楼下的面馆还开着。老板多给了一个蛋，说看你脸色不太好。', { id: 'd4', age: 1, part: '夜里' }),
+    PO('bailu', '第一次一个人去医院复查，结果没事。走出来的时候阳光很好，我在门口站了一会儿，不知道该告诉谁。', { id: 'd5', age: 2, onHome: true }),
+    PO('mumu', '收到妈妈寄来的一箱橘子，每个都用报纸包着。剥开一个，满手都是家里的味道。', { id: 'd6', age: 0, onHome: true, att: { kind: 'images', tones: ['apricot'] } }),
+    PO('shiguang', '旧手机里翻到三年前的备忘录，写着“明年一定要去看海”。今年还是没去，但我把它抄进了新手机。', { id: 'd7', age: 1, onHome: true }),
+    PO('yusheng', '下雨天把窗开一条缝，听了一整晚。好像所有说不出口的话，都被雨替我说了。', { id: 'd8', age: 0, part: '夜里', card: { type: '歌', title: '雨停之后', quote: '第二段副歌' } }),
+    PO('lujiao', '跑完五公里，坐在操场边上喘气。月亮很低，好像伸手就能碰到。', { id: 'd9', age: 2, onHome: true }),
+    PO('xiaohan', '毕业三年，第一次梦到考试没写完。醒来以后笑了很久，原来那些慌张也会变成想念。', { id: 'd10', age: 1, onHome: true }),
+    // 写后遇见
+    PO('fengling', '搬来这座城以后，我也总在下班的地铁里突然想家。', { id: 'a1', age: 0, onHome: true }),
+    PO('yanxia', '小时候外婆家门口也有一盏灯，下雨天会有很多小飞虫围着它。', { id: 'a2', age: 1, onHome: true }),
+    PO('yizhan', '下班路上看到别人家的窗亮着，会站一会儿，想象里面的人在说什么。', { id: 'a3', age: 0, part: '傍晚', onHome: true }),
+    PO('guitu', '每次加班到很晚，最期待的是转角那家还亮着灯的便利店。', { id: 'a4', age: 2, onHome: true }),
+    PO('manman', '最近学着一个人吃饭，一个人散步，一个人把灯关掉。也没那么难。', { id: 'a5', age: 1, onHome: true }),
+  ];
+  const o = {}; L.forEach(p => o[p.id] = p); return o;
+}
+const DAILY_POOL = ['qingwu', 'banxia', 'nanzhi', 'ali', 'bailu', 'mumu', 'shiguang', 'yusheng', 'lujiao', 'xiaohan'];
+const AFTER_POOL = ['fengling', 'yanxia', 'yizhan', 'guitu', 'manman', 'qingwu', 'banxia', 'nanzhi', 'ali', 'bailu', 'mumu', 'shiguang', 'yusheng', 'lujiao', 'xiaohan'];
+const MEET_POST = { qingwu: 'd1', banxia: 'd2', nanzhi: 'd3', ali: 'd4', bailu: 'd5', mumu: 'd6', shiguang: 'd7', yusheng: 'd8', lujiao: 'd9', xiaohan: 'd10', fengling: 'a1', yanxia: 'a2', yizhan: 'a3', guitu: 'a4', manman: 'a5' };
+
+let _cid = 0;
+const C = (by, text, o = {}) => Object.assign({ id: 'c' + (++_cid), by, text, pub: false, ver: 1, t: '周三' }, o);
+function seedResonances() {
+  return [
+    { from: 'shanlan', post: 'm2', ver: 1, t: 1 },
+    { from: 'yuanzhou', post: 'm3', ver: 1, t: 2 },
+    { from: 'xiaoman', post: 'm3', ver: 1, t: 3 },
+    { from: 'wanfeng', post: 'm2', ver: 1, t: 4 },
+    { from: 'shiyu', post: 'm6', ver: 1, t: 5 },
+    { from: 'me', post: 'w1', ver: 1, t: 6 },
+  ];
+}
+function seedThreads() {
+  return [
+    { id: 't1', post: 'm3', commenter: 'xiaoman', comments: [
+      C('xiaoman', '便签上写了什么呀？我有一张，是同桌画的一只猫。', { t: '九月' }),
+      C('me', '写的是“别怕”。你那张猫画得好看吗？', { t: '九月' }),
+      C('xiaoman', '歪歪扭扭的，但我留到现在。', { t: '昨天' })] },
+    { id: 't2', post: 'm1', commenter: 'shannabian', comments: [
+      C('shannabian', '我也在那家便利店门口躲过雨，老板会借伞。', { t: '昨天' })] },
+    { id: 't3', post: 's1', commenter: 'xiaoman', comments: [
+      C('xiaoman', '我第一次在外面住的时候，也是听了一整晚的空调声。', { pub: true, t: '周四' }),
+      C('shanlan', '后来慢慢就有名字了，比如楼下那只总叫的狗。', { pub: true, t: '周四' }),
+      C('xiaoman', '那只狗也算邻居了。', { pub: true, t: '周五' })] },
+    { id: 't4', post: 's1', commenter: 'yuanzhou', comments: [
+      C('yuanzhou', '陌生的声音听久了，也会变成家的一部分。', { pub: true, t: '周五' })] },
+    { id: 't5', post: 's1', commenter: 'shiguang', comments: [
+      C('shiguang', '想问问你后来在那里住了多久？', { pub: false, t: '周五' })] },
+  ];
+}
+let _mid = 0;
+const M = (by, text, t, o = {}) => Object.assign({ id: 'x' + (++_mid), by, text, t, kind: 'text', age: 0 }, o);
+function seedConvs() {
+  return {
+    wanfeng: { status: 'chatting', pending: null, origin: 'm2', firstChat: 1, ended: null, seq: 50, unread: true, warned: false, cleared: false, msgs: [
+      M('me', '你写的那盏灯，让我想起了很久以前的家。', '昨天', { age: 1 }),
+      M('wanfeng', '谢谢你告诉我。原来一句话真的可以被另一个人接住。', '昨天', { age: 1 }),
+      M('wanfeng', '刚走到那家店门口，灯还亮着。', '刚刚', { kind: 'voice', dur: '0:09' }),
+      M('wanfeng', '晚安小调', '刚刚', { kind: 'card', ctype: '歌', quote: '适合走夜路' }),
+      M('wanfeng', '那家影院后排的位置最好，下次可以试试。', '刚刚')] },
+    shannabian: { status: 'pending', pending: 'me', origin: null, firstChat: null, ended: null, seq: 40, unread: false, warned: false, cleared: false, msgs: [
+      M('me', '你说的那家便利店，老板真的会借伞吗？', '昨天', { age: 1 })] },
+    linjian: { status: 'pending', pending: 'linjian', origin: 'm1', firstChat: null, ended: null, seq: 45, unread: true, warned: false, cleared: false, msgs: [
+      M('linjian', '你写的那句关于下雨的，我也在便利店门口站过。', '周一', { age: 5 })] },
+    yizhie: { status: 'ended', pending: null, origin: 'e1', firstChat: 1, ended: 1, seq: 20, unread: false, warned: false, cleared: false, msgs: [
+      M('yizhie', '那天的雨后来停了吗？', '九月', { age: 20 }),
+      M('me', '停了，路边的积水里全是天空。', '九月', { age: 20 })] },
+    qiuchi: { status: 'chatting', pending: null, origin: 'q1', firstChat: 1, ended: null, seq: 10, unread: false, warned: false, cleared: false, msgs: [
+      M('qiuchi', '五月的风真的很软。', '五月', { age: 150 }),
+      M('me', '适合在河边坐一下午。', '五月', { age: 150 })] },
+  };
+}
+const REPLIES = ['嗯，我懂。', '真好，谢谢你愿意说给我听。', '我这边也下过一样的雨。', '慢慢来，不着急。', '今天也辛苦了。', '哈哈，我也是这样。'];
+
+/* ============ 状态 ============ */
+const KEY = 'zhiyin_interactive_master_v3_2';
+const DRAFT_KEY = KEY + '_draft_live';
+const CATS = [['met', '我遇见的人'], ['resonated', '共鸣过我的人'], ['commented', '给我留言的人'], ['chatted', '和我聊过的人']];
+const emptyDraft = () => ({ text: '', imgs: [], video: null, voice: null, card: null, disc: null, home: null });
+let S, T = { anim: '', scroll: {}, cdraft: {}, mdraft: '', form: {}, origin: {}, sheet: null, confirm: null, tool: false, wFocus: false, visOpen: false, replyTo: null, doneId: null, doneAnimFor: null, lastCardKey: null, justRes: null, newMsg: null, scrollBottom: false, sheetFresh: false, toolTarget: 'others', toolJump: true, careOpen: {} };
+
+function fresh() {
+  _pid = 0; _cid = 0; _mid = 0;
+  const s = {
+    v: 8, theme: (S && S.theme) || 'light',
+    me: { name: '一叶舟', av: '舟', bg: 'sand', intro: '在南方的北方人。喜欢夜里散步，和有雨的周末。', mood: '想去看海', like: { type: '歌', title: '雨停之后' }, show: { intro: true, mood: true, like: true }, access: DEFAULT_ACCESS() },
+    set: { newDisc: true, newHome: false, afterWrite: true, daily: true, dailyCount: 5, sigText: true, sigExp: true, age: '不限', gender: '不限', newWho: 'all', whoFirst: 'all', pushMsg: false, pushRes: false, pushCmt: false, retention: 'forever', sleepOld: false },
+    people: seedPeople(), posts: seedPosts(), res: seedResonances(), threads: seedThreads(), convs: seedConvs(),
+    blocks: ['wuli'],
+    daily: { gen: false, list: [], done: [], count: 5 },
+    draft: emptyDraft(), monthNote: { '2026-09': '那个搬家的月份' },
+    frozen: false, seq: 1000, opens: 0,
+    test: { auto: true, a11y: false },
+    ui: { tab: 'write', stacks: { write: [{ r: 'write' }], meet: [{ r: 'meet' }], chat: [{ r: 'chats' }], me: [{ r: 'me' }] }, seg: 'mine' }
+  };
+  ['wanfeng', 'linjian', 'yizhie', 'yizhan', 'yanxia', 'guitu', 'qiuchi'].forEach(id => s.people[id].met = true);
+  // 演示数据：这些人在自己的遇见里遇见过我
+  ['wanfeng', 'linjian', 'yizhie', 'qiuchi', 'shanlan', 'xiaoman', 'shannabian', 'yuanzhou'].forEach(id => s.people[id].metMe = true);
+  return s;
+}
+function load() {
+  try { const raw = localStorage.getItem(KEY); if (raw) { const o = JSON.parse(raw); if (o && o.v === 8) return o; } } catch (e) { }
+  return null;
+}
+let _saveT = 0;
+function saveNow() {
+  clearTimeout(_saveT);
+  try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) { }
+}
+function save() { clearTimeout(_saveT); _saveT = setTimeout(saveNow, 120); }
+function saveDraftNow() {
+  try {
+    const d = (S && S.draft) || emptyDraft();
+    const has = !!(String(d.text || '').trim() || (d.imgs && d.imgs.length) || d.video || d.voice || d.card);
+    /* 连“已经清空”也落盘：避免主状态尚未刷新时，大退后旧草稿又复活。 */
+    localStorage.setItem(DRAFT_KEY, JSON.stringify({ v: 1, draft: d, has, ts: Date.now() }));
+  } catch (e) { }
+}
+function restoreLiveDraft(s) {
+  try {
+    const raw = localStorage.getItem(DRAFT_KEY); if (!raw) return s;
+    const x = JSON.parse(raw); if (!x || x.v !== 1 || !x.draft) return s;
+    const d = x.draft;
+    s.draft = Object.assign(emptyDraft(), d, { imgs: Array.isArray(d.imgs) ? d.imgs : [] });
+  } catch (e) { }
+  return s;
+}
+function flushState() { saveDraftNow(); saveNow(); }
+
+/* ============ 工具 ============ */
+const $ = (s, r = document) => r.querySelector(s);
+const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const clip = (s, n) => { s = String(s || '').replace(/\s+/g, ' '); return s.length > n ? s.slice(0, n) + '…' : s; };
+const firstLine = s => String(s || '').split(/\n/)[0];
+const WK = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
+const MN = ['一月', '二月', '三月', '四月', '五月', '六月', '七月', '八月', '九月', '十月', '十一月', '十二月'];
+function tw(age) { if (age <= 0) return '今天'; if (age === 1) return '昨天'; const d = new Date(TODAY); d.setDate(d.getDate() - age); if (age < 7) return WK[d.getDay()]; return MN[d.getMonth()]; }
+const person = id => S.people[id];
+const post = id => S.posts[id];
+const nameOf = id => id === 'me' ? S.me.name : (S.people[id] ? S.people[id].name : '');
+const myPosts = () => Object.values(S.posts).filter(p => p.author === 'me').sort((a, b) => a.age - b.age || (b.id > a.id ? 1 : -1));
+const hasDraft = () => { const d = S.draft; return !!(d.text.trim() || d.imgs.length || d.video || d.voice || d.card); };
+
+/* ============ 权限规则（v3.2） ============ */
+// 安全层
+const blockedEither = pid => S.blocks.includes(pid) || !!(S.people[pid] && S.people[pid].blockedMe);
+// 动态基础可见（不含主页入口判断，避免循环）
+const baseVis = p => !!p && !p.sleep && (p.discoverable || p.onHome);
+// 别人的动态对我是否可见（2.2）
+function visibleToMe(p) {
+  if (!p) return false; if (p.author === 'me') return true;
+  const a = S.people[p.author]; if (!a || blockedEither(a.id) || a.frozen) return false;
+  if (p.sleep) return false;
+  return p.discoverable || (p.onHome && canEnterHome(a.id));
+}
+// 我的动态对某人是否可见
+function myPostVisibleTo(p, pid) {
+  if (!p || blockedEither(pid)) return false; if (p.sleep) return false;
+  return p.discoverable || (p.onHome && visitorCanEnterMine(pid));
+}
+// 主页入口关系：按两人之间是否发生过这类关系来算，不分方向（v3.2 第 3.3 节；v3.3 决定 1 已更正）
+// 例：我在遇见里看到了 TA 的卡片，对 TA 的主页来说，我就属于 TA 的“我遇见的人”。
+function relPair(pid) {
+  const c = S.convs[pid], pe = S.people[pid] || {};
+  return {
+    met: !!(pe.met || pe.metMe),
+    resonated: S.res.some(r => { const p = post(r.post); return !!(p && baseVis(p) && ((r.from === 'me' && p.author === pid) || (r.from === pid && p.author === 'me'))); }),
+    commented: S.threads.some(t => { const p = post(t.post); return !!(p && baseVis(p) && t.comments.length && ((p.author === pid && t.commenter === 'me') || (p.author === 'me' && t.commenter === pid))); }),
+    chatted: !!(c && c.firstChat)
+  };
+}
+const relToMe = relPair, relToThem = relPair;
+// 我能否进入某人主页（3.1 任一已开启类别即可）
+function canEnterHome(pid) {
+  const p = S.people[pid]; if (!p || blockedEither(pid) || p.frozen) return false;
+  const r = relToThem(pid); return CATS.some(([k]) => r[k] && p.access[k]);
+}
+// 某人能否进入我的主页（访客视角）
+function visitorCanEnterMine(pid) {
+  if (blockedEither(pid)) return false; const r = relToMe(pid);
+  return CATS.some(([k]) => r[k] && S.me.access[k]);
+}
+const myRes = postId => S.res.some(r => r.from === 'me' && r.post === postId);
+const myResOnAuthor = pid => S.res.some(r => r.from === 'me' && post(r.post) && post(r.post).author === pid && visibleToMe(post(r.post)));
+const theirResOnMe = pid => S.res.some(r => r.from === pid && post(r.post) && post(r.post).author === 'me' && myPostVisibleTo(post(r.post), pid));
+function canFirst(pid) { const p = S.people[pid]; return p.whoFirst === 'all' || (p.whoFirst === 'resonated' && myResOnAuthor(pid)); }
+// 说话（9.2）
+function talkState(pid) {
+  const p = S.people[pid]; if (!p) return 'none';
+  if (p.blockedMe) return 'blockedMe'; if (S.blocks.includes(pid)) return 'iBlocked'; if (p.frozen) return 'frozen';
+  const c = S.convs[pid];
+  if (c && (c.status === 'pending' || c.status === 'chatting')) return 'open';
+  if (c && c.status === 'ended') return canFirst(pid) ? 'restart' : 'endedLocked';
+  return canFirst(pid) ? 'new' : 'none';
+}
+const talkShown = pid => ['open', 'restart', 'new'].includes(talkState(pid));
+function visitorTalk(pid) {
+  if (blockedEither(pid)) return false; const c = S.convs[pid];
+  if (c && (c.status === 'pending' || c.status === 'chatting')) return true;
+  const ok = S.set.whoFirst === 'all' || (S.set.whoFirst === 'resonated' && theirResOnMe(pid));
+  if (c && c.status === 'ended') return ok;
+  return ok;
+}
+// 留言（8.2）
+function canComment(p) {
+  if (!visibleToMe(p)) return { ok: false, why: '这条内容刚刚不可见了，没有发送出去。' };
+  if (p.whoComment === 'off') return { ok: false, why: '这条动态的留言已关闭。' };
+  if (p.whoComment === 'resonated' && !myRes(p.id)) return { ok: false, why: '共鸣这一条以后，就可以留言。' };
+  return { ok: true };
+}
+function threadVisibleComments(t, viewer) {
+  const p = post(t.post); if (!p) return [];
+  if (viewer === 'participant') return t.comments;
+  if (p.commentVis !== 'public') return [];
+  return t.comments.filter(c => c.pub);
+}
+// 遇见我的人：两个独立区域
+function quietList() {
+  const by = {};
+  S.res.forEach(r => {
+    const p = post(r.post); if (!p || p.author !== 'me' || r.from === 'me') return;
+    const pe = S.people[r.from]; if (!pe || blockedEither(r.from) || pe.frozen) return;
+    if (!myPostVisibleTo(p, r.from)) return;
+    if (!by[r.from] || by[r.from].r.t < r.t) by[r.from] = { pid: r.from, post: p, r };
+  });
+  return Object.values(by).sort((a, b) => b.r.t - a.r.t);
+}
+function commenterList() {
+  const by = {};
+  S.threads.forEach(t => {
+    const p = post(t.post); if (!p || p.author !== 'me' || !t.comments.length) return;
+    const pe = S.people[t.commenter]; if (!pe || blockedEither(t.commenter) || pe.frozen) return;
+    if (!myPostVisibleTo(p, t.commenter)) return;
+    const mine = t.comments.filter(c => c.by === t.commenter); if (!mine.length) return;
+    const last = mine[mine.length - 1]; const k = parseInt(last.id.replace(/\D/g, '')) || 0;
+    if (!by[t.commenter] || by[t.commenter].k < k) by[t.commenter] = { pid: t.commenter, post: p, thread: t, c: last, k };
+  });
+  return Object.values(by).sort((a, b) => b.k - a.k);
+}
+// 推荐候选（5.2）
+function filterOK(pe) {
+  if (S.set.gender !== '不限' && pe.gender && pe.gender !== S.set.gender) return false;
+  const a = pe.years || 25, me = 25;
+  if (S.set.age === '相近' && Math.abs(a - me) > 3) return false;
+  if (S.set.age === '小' && !(a < me)) return false;
+  if (S.set.age === '大' && !(a > me)) return false;
+  return true;
+}
+const todayKey = () => { const d = new Date(); return d.getFullYear() + '-' + (d.getMonth() + 1) + '-' + d.getDate(); };
+// 同一个人一天只在“每日遇见 / 写后遇见”出现一次（v3.3 决定 3）
+function ensureDay() {
+  const k = todayKey();
+  if (!S.day || S.day.k !== k) { S.day = { k, seen: [] }; S.daily = { gen: false, list: [], done: [], count: S.set.dailyCount }; }
+}
+function seeToday(L) { ensureDay(); L.forEach(pid => { if (!S.day.seen.includes(pid)) S.day.seen.push(pid); }); }
+function candidateOK(pid) {
+  const pe = S.people[pid]; if (!pe || blockedEither(pid) || pe.frozen || !filterOK(pe)) return false;
+  const c = S.convs[pid]; if (c && (c.status === 'pending' || c.status === 'chatting')) return false;
+  const p = post(MEET_POST[pid]); return !!(p && p.discoverable && visibleToMe(p));
+}
+function ensureDaily() {
+  ensureDay(); if (S.daily.gen) return;
+  const n = S.set.dailyCount;
+  S.daily = { gen: true, list: DAILY_POOL.filter(pid => candidateOK(pid) && !S.day.seen.includes(pid)).slice(0, n), done: [], count: n };
+  seeToday(S.daily.list);
+}
+function dailyState() {
+  if (!S.set.daily) return { k: 'off' };
+  if (!S.set.sigText && !S.set.sigExp) return { k: 'signals' };
+  if (!myPosts().some(p => p.discoverable && !p.sleep)) return { k: 'nocontent' };
+  ensureDaily();
+  const cur = S.daily.list.find(pid => !S.daily.done.includes(pid) && candidateOK(pid));
+  if (cur) return { k: 'card', pid: cur, more: S.daily.list.filter(x => !S.daily.done.includes(x) && candidateOK(x)).length > 1 };
+  if (S.daily.list.length === 0 || S.daily.list.length < S.daily.count) return { k: 'few' };
+  return { k: 'end' };
+}
+function genAfter() {
+  ensureDay();
+  const pool = AFTER_POOL.filter(pid => candidateOK(pid) && !S.day.seen.includes(pid));
+  const out = pool.slice(0, 3); seeToday(out);
+  return { list: out, done: [] };
+}
+function afterState(p) {
+  const a = p.after || { list: [], done: [] };
+  const live = a.list.filter(pid => candidateOK(pid));
+  const cur = live.find(pid => !a.done.includes(pid));
+  if (!a.list.length) return { k: 'zero' };
+  if (cur) return { k: 'card', pid: cur, more: live.filter(x => !a.done.includes(x)).length > 1 };
+  return { k: 'end' };
+}
+function monthGroup(ym) {
+  if (ym === '2026-10') return { k: '2026-10', t: '十月的我' };
+  if (ym === '2026-09') return { k: '2026-09', t: '九月的我' };
+  if (ym === '2026-08' || ym === '2026-07') return { k: 'summer', t: '夏末的我' };
+  return { k: 'early', t: '更早的我' };
+}
+function months() {
+  const g = {}; const order = [];
+  myPosts().forEach(p => { const m = monthGroup(p.ym); if (!g[m.k]) { g[m.k] = { ...m, posts: [] }; order.push(m.k); } g[m.k].posts.push(p); });
+  return order.map(k => { const x = g[k]; const oldest = x.posts.slice().sort((a, b) => b.age - a.age)[0]; x.first = firstLine(oldest.text) || '（一条没有文字的动态）'; x.summary = S.monthNote[k] || x.first; return x; });
+}
+function delPost(id) {
+  delete S.posts[id];
+  S.res = S.res.filter(r => r.post !== id);
+  S.threads = S.threads.filter(t => t.post !== id);
+  if (T.doneId === id) T.doneId = null;
+}
+function visLabel(disc, home) { return disc && home ? '可被遇见，放上主页' : disc ? '可被遇见' : home ? '放上主页' : '只自己'; }
+function accessSummary(a) { const on = CATS.filter(([k]) => a[k]).map(([, l]) => l); return on.length === 4 ? '四类都可以' : on.length ? on.join('、') : '都关闭'; }
+
+/* ============ 图标 ============ */
+const sv = (inner, s = 22, extra = '') => `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ${extra}>${inner}</svg>`;
+const I = {
+  back: sv('<path d="M14.5 5.5L8 12l6.5 6.5"/>'),
+  chev: sv('<path d="M9.5 5.5L16 12l-6.5 6.5"/>', 18),
+  tune: sv('<path d="M5 8h9M18 8h1M5 16h1M10 16h9"/><circle cx="16" cy="8" r="2"/><circle cx="8" cy="16" r="2"/>'),
+  more: sv('<circle cx="6" cy="12" r="1.1"/><circle cx="12" cy="12" r="1.1"/><circle cx="18" cy="12" r="1.1"/>'),
+  img: sv('<rect x="4" y="5" width="16" height="14" rx="3"/><circle cx="9.5" cy="10" r="1.5"/><path d="M5 17l4.5-4 3.5 3 2.5-2 3.5 3"/>'),
+  vid: sv('<rect x="3.5" y="6.5" width="12" height="11" rx="2.5"/><path d="M15.5 10.5l5-3v9l-5-3"/>'),
+  mic: sv('<rect x="9" y="3.5" width="6" height="11" rx="3"/><path d="M6 11.5a6 6 0 0 0 12 0M12 17.5v3"/>'),
+  disc: sv('<circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="2.2"/>'),
+  plus: sv('<path d="M12 5v14M5 12h14"/>'),
+  x: sv('<path d="M7 7l10 10M17 7L7 17"/>', 14),
+  xl: sv('<path d="M7 7l10 10M17 7L7 17"/>', 18),
+  play: '<svg width="14" height="14" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5.5l11 6.5-11 6.5z" fill="currentColor"/></svg>',
+  down: sv('<path d="M7 10l5 5 5-5"/>', 14),
+};
+function dropSvg(w = 8, h = 9, face = false) {
+  return `<svg width="${w}" height="${h}" viewBox="0 0 20 22" aria-hidden="true" style="display:block"><path d="M10 1.5C13.6 5.6 17 9.3 17 13.2a7 7 0 0 1-14 0C3 9.3 6.4 5.6 10 1.5z" fill="var(--drop)"/><ellipse cx="7.2" cy="9.6" rx="1.2" ry="1.8" fill="#FFFFFF" opacity=".55"/>${face ? '<circle cx="7.7" cy="14" r="1.05" fill="#252A28"/><circle cx="12.3" cy="14" r="1.05" fill="#252A28"/><circle cx="5.6" cy="16" r="1.3" fill="#F2DCD2"/><circle cx="14.4" cy="16" r="1.3" fill="#F2DCD2"/>' : ''}</svg>`;
+}
+function resIcon(on, turnon) { return `<svg class="res ${on ? 'on' : ''}" ${turnon ? 'data-turnon' : ''} width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><circle class="c1" cx="9" cy="12" r="6"/><circle class="c2" cx="15" cy="12" r="6"/></svg>`; }
+
+/* ============ 组件 ============ */
+function Hd(title, o = {}) {
+  const back = o.back !== false;
+  return `<header class="hd"><div class="l">${back ? `<button class="ib" data-a="back" aria-label="返回">${I.back}</button>` : ''}</div>${o.who ? `<div style="flex:1;display:flex;justify-content:center;min-width:0">${o.who}</div>` : `<h1>${esc(title)}</h1>`}<div class="r">${o.right || ''}</div></header>`;
+}
+function Nav() {
+  const t = S.ui.tab;
+  return `<nav class="nav" aria-label="主导航">${[['write', '写'], ['meet', '遇见'], ['chat', '聊天'], ['me', '我']].map(([k, l]) => `<button class="${t === k ? 'on' : ''}" data-a="tab" data-t="${k}" ${t === k ? 'aria-current="page"' : ''}>${l}<span class="dot">${t === k ? dropSvg(8, 9) : ''}</span></button>`).join('')}</nav>`;
+}
+// 头像：click=true 时按主页入口资格决定是否可点
+function Av(pid, size = 40, o = {}) {
+  const p = pid === 'me' ? S.me : S.people[pid]; if (!p) return '';
+  const st = `width:${size}px;height:${size}px;font-size:${size <= 32 ? 14 : size <= 40 ? 17 : size <= 48 ? 20 : 24}px`;
+  const inner = p.frozen ? dropSvg(Math.round(size * .42), Math.round(size * .46)) : esc(p.av);
+  let can = false, act = 'profile';
+  if (o.click) { if (pid === 'me') { can = true; act = 'myhome'; } else can = canEnterHome(pid) || (o.allowBlockedMsg && p.blockedMe); }
+  if (can) return `<button class="av ${p.bg}" style="${st}" data-a="${act}" data-p="${pid}" aria-label="进入${esc(p.name)}的主页">${inner}</button>`;
+  return `<span class="av ${p.bg}" style="${st}" aria-hidden="true">${inner}</span>`;
+}
+function ResBtn(postId) {
+  const on = myRes(postId); const fresh = on && T.justRes === postId;
+  return `<button class="pill ${on ? 'on' : ''}" data-a="res" data-post="${postId}" aria-pressed="${on}" aria-label="共鸣">${resIcon(on && !fresh, fresh)}共鸣</button>`;
+}
+function Tg(on, act, data = '', label = '') { return `<button class="tgwrap" data-a="${act}" ${data} role="switch" aria-checked="${!!on}" aria-label="${esc(label)}"><span class="tg ${on ? 'on' : ''}"></span></button>`; }
+function Chips(opts, val, act, key) { return `<div class="chips">${opts.map(([v, l]) => `<button class="chip ${v === val ? 'on' : ''}" data-a="${act}" data-k="${key}" data-v="${v}" aria-pressed="${v === val}">${l}</button>`).join('')}</div>`; }
+function Empty(ttl, sub = '', btn = '', tall = true) { return `<div class="empty ${tall ? 'tall' : ''}">${ttl ? `<p class="ttl">${ttl}</p>` : ''}${sub ? `<p>${sub}</p>` : ''}${btn}</div>`; }
+function tileArt(tone, i) {
+  const v = i % 3;
+  const shape = v === 0 ? '<circle cx="68" cy="34" r="12" fill="var(--card)" opacity=".55"/><path d="M0 72 Q30 60 55 70 T100 66 V100 H0Z" fill="var(--ink)" opacity=".06"/>'
+    : v === 1 ? '<path d="M0 64 L34 42 L58 58 L80 46 L100 60 V100 H0Z" fill="var(--ink)" opacity=".07"/><circle cx="26" cy="26" r="7" fill="var(--card)" opacity=".5"/>'
+      : '<rect x="18" y="30" width="30" height="44" rx="4" fill="var(--card)" opacity=".45"/><rect x="54" y="46" width="28" height="28" rx="4" fill="var(--ink)" opacity=".05"/>';
+  return `<svg viewBox="0 0 100 100" preserveAspectRatio="xMidYMid slice" aria-hidden="true"><rect width="100" height="100" fill="var(--${tone})"/>${shape}</svg>`;
+}
+const bars = n => `<span class="bars">${Array.from({ length: n }, (_, i) => `<i style="height:${6 + ((i * 7) % 13)}px"></i>`).join('')}</span>`;
+function coverCls(t) { return t === '歌' ? 'song' : t === '视频' ? 'wide' : 'tall'; }
+function CardAtt(card, who) {
+  return `<div class="wcard"><span class="cover ${coverCls(card.type)}">${I.disc}</span><span style="min-width:0"><p class="ct">${esc(card.type)}，${esc(card.title)}</p>${card.quote ? `<p class="cq">${who === 'me' ? '打动我的' : '打动 TA 的'}：${esc(card.quote)}</p>` : ''}</span></div>`;
+}
+function AttView(p, mode) {
+  let h = '';
+  const a = p.att;
+  if (a && a.kind === 'images') {
+    const n = a.tones.length;
+    if (n === 1) h += `<div class="tile big">${tileArt(a.tones[0], 0)}</div>`;
+    else if (n === 2) h += `<div class="imgs2">${a.tones.map((t, i) => `<div class="tile">${tileArt(t, i)}</div>`).join('')}</div>`;
+    else { const show = mode === 'meet' ? a.tones.slice(0, 3) : a.tones; h += `<div class="grid3">${show.map((t, i) => `<div class="tile">${tileArt(t, i)}${mode === 'meet' && i === 2 && n > 3 ? '<span class="more">更多</span>' : ''}</div>`).join('')}</div>`; }
+  }
+  if (a && a.kind === 'video') h += `<div class="vid"><span class="play">${I.play}</span><span class="dur">${esc(a.dur)}</span></div>`;
+  if (a && a.kind === 'voice') h += `<div class="voice"><span class="wv"><span class="pb">${I.play}</span>${bars(18)}<span class="t-tag">${esc(a.dur)}</span></span>${a.text ? `<p class="t-sub">转文字：${esc(a.text)}</p>` : ''}</div>`;
+  if (p.card) h += CardAtt(p.card, p.author === 'me' ? 'me' : 'ta');
+  return h ? `<div class="att">${h}</div>` : '';
+}
+function mbody(p, clampCls = '') { return `${p.text ? `<p class="t-body ${clampCls}">${esc(p.text)}</p>` : ''}${p.edited ? '<p class="edited">已编辑</p>' : ''}${AttView(p, clampCls ? 'meet' : 'full')}`; }
+
+// 遇见卡（每日遇见 / 写后遇见 共用）
+function MeetCard(pid, postId, ctx, more) {
