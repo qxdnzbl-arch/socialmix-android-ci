@@ -1,7 +1,7 @@
 import json, os, re, subprocess, sys, time, urllib.request, xml.etree.ElementTree as ET
 import websocket
 
-URL = "http://10.0.2.2:8765/index.html"
+APP = "com.qxdnzbl.zhiyintest"
 ART = os.environ.get("GITHUB_WORKSPACE", ".") + "/ci/zhiyin-keyboard/artifacts"
 os.makedirs(ART, exist_ok=True)
 
@@ -28,49 +28,26 @@ def tap_bounds(bounds):
     adb(f"shell input tap {x} {y}")
     return True
 
-def dismiss_fre():
-    for _ in range(8):
-        adb("shell uiautomator dump /sdcard/window.xml", False)
-        xml=adb("shell cat /sdcard/window.xml", False)
-        if not xml: return
-        try: root=ET.fromstring(xml)
-        except Exception: return
-        did=False
-        priorities=[
-            "Accept & continue","Use without an account","No thanks","Got it",
-            "Continue","Skip","Not now","接受并继续","不用账号","不用了","知道了","继续","跳过"
-        ]
-        for wanted in priorities:
-            for n in root.iter("node"):
-                txt=(n.attrib.get("text") or "").strip()
-                desc=(n.attrib.get("content-desc") or "").strip()
-                rid=n.attrib.get("resource-id") or ""
-                if txt==wanted or desc==wanted or any(k in rid for k in ["terms_accept","signin_fre_dismiss","negative_button"]):
-                    if tap_bounds(n.attrib.get("bounds")):
-                        time.sleep(1.2); did=True; break
-            if did: break
-        if not did: return
-
-def start_chrome():
-    adb("shell am force-stop com.android.chrome", False)
-    adb(f"shell am start -a android.intent.action.VIEW -d '{URL}' com.android.chrome", False)
-    time.sleep(3)
-    dismiss_fre()
-    adb(f"shell am start -a android.intent.action.VIEW -d '{URL}' com.android.chrome", False)
-    time.sleep(3)
-    adb("forward tcp:9222 localabstract:chrome_devtools_remote", False)
+def start_app():
+    adb(f"shell am force-stop {APP}", False)
+    adb(f"shell monkey -p {APP} -c android.intent.category.LAUNCHER 1")
+    time.sleep(4)
+    pid=wait_for(lambda: adb(f"shell pidof {APP}", False), timeout=15, name="test app pid")
+    adb("forward --remove tcp:9222", False)
+    adb(f"forward tcp:9222 localabstract:webview_devtools_remote_{pid}")
+    return pid
 
 def pages():
     for _ in range(30):
         try:
             return json.load(urllib.request.urlopen("http://127.0.0.1:9222/json", timeout=2))
         except Exception: time.sleep(1)
-    raise SystemExit("Chrome DevTools endpoint unavailable")
+    raise SystemExit("Android WebView DevTools endpoint unavailable")
 
 class CDP:
     def __init__(self):
         ps=pages()
-        p=next((x for x in ps if "10.0.2.2:8765" in x.get("url","")), ps[0])
+        p=next((x for x in ps if "android_asset/index.html" in x.get("url","")), ps[0])
         self.ws=websocket.create_connection(p["webSocketDebuggerUrl"], timeout=10, origin="http://localhost")
         self.i=0
     def call(self,method,params=None):
@@ -143,11 +120,9 @@ def test_write(cdp):
     print("WRITE_PASS",json.dumps({"before_vv":before["vv"],"keyboard_vv":m["vv"],"card_h":m["card"]["h"],"bar_bottom":m["bar"]["b"],"cancel_bottom":m["cancel"]["b"]}))
 
 def test_restore():
-    adb("shell am force-stop com.android.chrome", False)
+    adb(f"shell am force-stop {APP}", False)
     time.sleep(1)
-    adb(f"shell am start -a android.intent.action.VIEW -d '{URL}' com.android.chrome", False)
-    time.sleep(4)
-    adb("forward tcp:9222 localabstract:chrome_devtools_remote", False)
+    start_app()
     c=CDP()
     wait_for(lambda: c.js("!!document.querySelector('#w-text')"), name="restore page")
     m=metrics(c); shot("04_write_restored.png")
@@ -180,8 +155,8 @@ def test_chat(cdp):
 
 def main():
     print("DEVICE",adb("shell getprop ro.product.model",False),adb("shell getprop ro.build.version.release",False))
-    print("CHROME",adb("shell dumpsys package com.android.chrome | grep versionName | head -1",False))
-    start_chrome()
+    print("WEBVIEW",adb("shell dumpsys package com.google.android.webview | grep versionName | head -1",False))
+    start_app()
     c=CDP()
     print("UA",c.js("navigator.userAgent"))
     test_write(c)
