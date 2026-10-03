@@ -23,7 +23,14 @@ jobs:
         shell: bash
         run: |
           mkdir -p /tmp/zhiyin-site ci/zhiyin-keyboard/artifacts
-          cat ci/zhiyin-keyboard/zhiyin_v3.9.2.html > /tmp/zhiyin-site/index.html
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path("ci/zhiyin-keyboard/zhiyin_v3.9.2.html").read_text()
+          marker="function MeetCard(pid, postId, ctx, more) {  const pe = S.people[pid], po = post(postId);"
+          assert marker in p, "chunk boundary marker missing"
+          p=p.replace(marker, "function MeetCard(pid, postId, ctx, more) {\n  const pe = S.people[pid], po = post(postId);", 1)
+          Path("/tmp/zhiyin-site/index.html").write_text(p+"\n")
+          PY
           base64 -d ci/zhiyin-keyboard/tail.b64 >> /tmp/zhiyin-site/index.html
           echo "f8ebe6b770d800fb62d2124ae86493838c46fbfd9b67a49965be31b47881a229  /tmp/zhiyin-site/index.html" | sha256sum -c -
           wc -c -l /tmp/zhiyin-site/index.html
