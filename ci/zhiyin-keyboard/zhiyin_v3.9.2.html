@@ -997,4 +997,1003 @@ function AttView(p, mode) {
 function mbody(p, clampCls = '') { return `${p.text ? `<p class="t-body ${clampCls}">${esc(p.text)}</p>` : ''}${p.edited ? '<p class="edited">已编辑</p>' : ''}${AttView(p, clampCls ? 'meet' : 'full')}`; }
 
 // 遇见卡（每日遇见 / 写后遇见 共用）
-function MeetCard(pid, postId, ctx, more) {
+function MeetCard(pid, postId, ctx, more) {  const pe = S.people[pid], po = post(postId);
+  const can = canEnterHome(pid);
+  const key = ctx + pid; const rise = T.lastCardKey !== key; T.lastCardKey = key;
+  const when = `${tw(po.age)}${po.part || ''}写的`;
+  const whoInner = `${Av(pid, 40)}<span class="nm"><b>${esc(pe.name)}</b><span>${when}</span></span>`;
+  return `<div class="stackwrap">${more ? '<div class="under"></div>' : ''}
+  <div class="card mcard ${rise ? 'rise' : ''}" data-swipe data-ctx="${ctx}" data-p="${pid}">
+    <button class="mbody" data-a="openPost" data-post="${postId}">${mbody(po, 'clamp6')}</button>
+    ${can ? `<button class="who" data-a="profile" data-p="${pid}" aria-label="进入${esc(pe.name)}的主页">${whoInner}<span style="color:var(--ink3)">${I.chev}</span></button>` : `<div class="who">${whoInner}</div>`}
+  </div>
+  <div class="mact">${talkShown(pid) ? `<button class="link" data-a="talk" data-p="${pid}" data-origin="${postId}">说话</button>` : '<span></span>'}${ResBtn(postId)}</div>
+  ${S.test.a11y ? `<div style="display:flex;justify-content:center"><button class="link" data-a="swipe" data-ctx="${ctx}" data-p="${pid}">划过</button></div>` : ''}
+  <p class="hint">不像的话，往左轻轻一划，它就过去了</p></div>`;
+}
+function Water(kind) {
+  if (kind === 'end') return `<div class="water"><svg width="240" height="120" viewBox="0 0 240 120" aria-hidden="true" style="overflow:visible">
+    <ellipse class="wring" cx="120" cy="70" rx="100" ry="16" fill="none" stroke="var(--drop)" stroke-width="1.2"/>
+    <ellipse class="wring b" cx="120" cy="70" rx="100" ry="16" fill="none" stroke="var(--drop)" stroke-width="1.2"/>
+    <ellipse class="wring c" cx="120" cy="70" rx="100" ry="16" fill="none" stroke="var(--drop)" stroke-width="1.2"/>
+    <ellipse cx="120" cy="70" rx="34" ry="5.5" fill="none" stroke="var(--drop)" stroke-width="1.2" opacity=".7"/>
+    <g transform="translate(108 40)"><g class="hang">${dropSvg(24, 27, true).replace('<svg', '<svg x="0" y="0"')}</g></g></svg></div>`;
+  return `<div class="water"><svg width="240" height="120" viewBox="0 0 240 120" aria-hidden="true">
+    <line x1="40" y1="78" x2="200" y2="78" stroke="var(--line)" stroke-width="1.2"/>
+    <ellipse cx="120" cy="78" rx="22" ry="3.5" fill="none" stroke="var(--drop)" stroke-width="1.1" opacity=".6"/>
+    <g transform="translate(111 42)"><g class="hang">${dropSvg(18, 20).replace('<svg', '<svg x="0" y="0"')}</g></g></svg></div>`;
+}
+
+/* ============ 页面 ============ */
+const NAV_ROUTES = new Set(['write', 'meet', 'chats', 'me']);
+const PAGES = {};
+
+/* ---------- 写 ---------- */
+function writeDate() {
+  const d = new Date();
+  const cn = ['', '一', '二', '三', '四', '五', '六', '七', '八', '九', '十'], n = d.getDate();
+  const day = n <= 10 ? cn[n] : n < 20 ? '十' + cn[n - 10] : n === 20 ? '二十' : n < 30 ? '二十' + cn[n - 20] : n === 30 ? '三十' : '三十一';
+  return `${MN[d.getMonth()]}${day}日 · ${WK[d.getDay()]}`;
+}
+// 写页顶部：一条水平线，一滴水从线后探出头（知音自己的意象）
+function WriteHero() {
+  return `<svg viewBox="0 0 390 220" width="100%" height="100%" preserveAspectRatio="xMidYMax meet" aria-hidden="true" style="display:block;overflow:visible">
+    <defs><clipPath id="wclip"><rect x="0" y="0" width="390" height="176"/></clipPath></defs>
+    <ellipse cx="195" cy="176" rx="70" ry="6" fill="none" stroke="var(--drop)" stroke-width="1.2" opacity=".55"/>
+    <ellipse cx="195" cy="176" rx="118" ry="10" fill="none" stroke="var(--drop)" stroke-width="1.2" opacity=".28"/>
+    <g clip-path="url(#wclip)"><g transform="translate(163 118) scale(3.2)"><path d="M10 1.5C13.6 5.6 17 9.3 17 13.2a7 7 0 0 1-14 0C3 9.3 6.4 5.6 10 1.5z" fill="var(--drop)"/><ellipse cx="7.2" cy="9.6" rx="1.2" ry="1.8" fill="#FFFFFF" opacity=".55"/><circle cx="7.7" cy="14" r="1.05" fill="#252A28"/><circle cx="12.3" cy="14" r="1.05" fill="#252A28"/></g></g>
+    <line x1="0" y1="176" x2="390" y2="176" stroke="var(--line)" stroke-width="1.4"/></svg>`;
+}
+PAGES.write = () => {
+  if (T.doneId && post(T.doneId)) return WriteDone(post(T.doneId));
+  const d = S.draft; const has = hasDraft();
+  const ph = myPosts().length === 0 ? GUIDE[S.opens % GUIDE.length] : '想到什么，就写什么。';
+  return `<div class="write-wrap ${T.wFocus ? 'typing focused' : ''} ${has ? 'hasdraft' : ''}">
+    <div class="whero">${WriteHero()}</div>
+    <p class="wdate">${writeDate()}</p>
+    <div class="wcardbox" data-a="w-focus"><div class="scroll write-scroll" data-sk="write">
+      <label for="w-text" style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)">写下此刻</label>
+      <textarea id="w-text" maxlength="5000" placeholder="${esc(ph)}">${esc(d.text)}</textarea>${DraftAtt(d)}</div></div>
+    ${WriteBar(d)}</div>`;
+};
+function draftMain(d) { return d.imgs.length ? 'img' : d.video ? 'vid' : d.voice ? 'voice' : null; }
+function DraftAtt(d) {
+  let h = '';
+  if (d.imgs.length) h += `<div class="grid3">${d.imgs.map((t, i) => `<div class="tile">${tileArt(t, i)}<button class="x" data-a="w-rm" data-k="img" data-i="${i}" data-nofocus aria-label="移除这张图片">${I.x}</button></div>`).join('')}${d.imgs.length < 9 ? `<button class="tile add" data-a="w-img" data-nofocus aria-label="再加一张">${I.plus}</button>` : ''}</div>`;
+  if (d.video) h += `<div class="vid"><span class="play">${I.play}</span><span class="dur">${d.video.dur}</span><button class="x" style="position:absolute;right:10px;top:10px;width:30px;height:30px;border-radius:50%;background:var(--card);display:flex;align-items:center;justify-content:center;color:var(--ink2)" data-a="w-rm" data-k="video" data-nofocus aria-label="移除视频">${I.x}</button></div>`;
+  if (d.voice) h += `<div class="voice" style="position:relative"><span class="wv"><span class="pb">${I.play}</span>${bars(18)}<span class="t-tag">${d.voice.dur}</span></span><p class="t-sub">转文字：${esc(d.voice.text)}</p><button class="x" style="position:absolute;right:4px;top:4px;width:36px;height:36px;display:flex;align-items:center;justify-content:center;color:var(--ink3)" data-a="w-rm" data-k="voice" data-nofocus aria-label="移除语音">${I.x}</button></div>`;
+  if (d.card) h += `<div class="wcard"><span class="cover ${coverCls(d.card.type)}">${I.disc}</span><span style="min-width:0;padding-right:28px"><p class="ct">${esc(d.card.type)}，${esc(d.card.title)}</p>${d.card.quote ? `<p class="cq">打动我的：${esc(d.card.quote)}</p>` : ''}</span><button class="x" data-a="w-rm" data-k="card" data-nofocus aria-label="移除卡片">${I.x}</button></div>`;
+  return h ? `<div class="att">${h}</div>` : '';
+}
+function WriteBar(d) {
+  const m = draftMain(d);
+  const disc = d.disc == null ? S.set.newDisc : d.disc, home = d.home == null ? S.set.newHome : d.home;
+  const dis = k => (m && m !== k) ? 'disabled' : '';
+  return `<div class="wbar" data-nofocus>
+    <button class="wcancel" data-a="w-cancel" data-nofocus aria-label="取消编辑并保存草稿">取消</button>
+    ${T.visOpen ? `<div class="visbub" role="dialog" aria-label="可见范围"><div class="row"><span class="rt">可被遇见</span>${Tg(disc, 'w-disc', '', '可被遇见')}</div><div class="row"><span class="rt">放上主页</span>${Tg(home, 'w-home', '', '放上主页')}</div></div>` : ''}
+    <div class="tools">
+      <button data-a="w-img" data-nofocus aria-label="图片" ${dis('img') || (d.imgs.length >= 9 ? 'disabled' : '')}>${I.img}</button>
+      <button data-a="w-vid" data-nofocus aria-label="视频" ${dis('vid') || (d.video ? 'disabled' : '')}>${I.vid}</button>
+      <button data-a="w-voice" data-nofocus aria-label="语音" ${dis('voice') || (d.voice ? 'disabled' : '')}>${I.mic}</button>
+      <button data-a="w-card" data-nofocus aria-label="卡片" ${d.card ? 'disabled' : ''}>${I.disc}</button>
+    </div>
+    <div class="rightside"><button class="vislab" data-a="w-vis" data-nofocus aria-expanded="${T.visOpen}">${visLabel(disc, home)}${I.down}</button>
+      <button class="send" id="w-send" data-a="w-send" data-nofocus aria-label="发送" ${hasDraft() ? '' : 'disabled'}><span class="breathe">${dropSvg(20, 22, true)}</span></button></div>
+  </div>`;
+}
+function WriteDone(p) {
+  const animate = T.doneAnimFor !== p.id; T.doneAnimFor = p.id;
+  const showCare = p.risk >= 2 && !p.careShown;
+  return `<div class="done ${animate ? '' : 'static'}" data-a="done-blank">
+    <div class="pond"><svg viewBox="0 0 200 120" width="200" height="120" aria-hidden="true">
+      <ellipse class="ring" cx="100" cy="96" rx="80" ry="13" fill="none" stroke="var(--drop)" stroke-width="1.2"/>
+      <ellipse class="ring r2" cx="100" cy="96" rx="80" ry="13" fill="none" stroke="var(--drop)" stroke-width="1.2"/>
+      <ellipse class="ringstay" cx="100" cy="96" rx="40" ry="6.5" fill="none" stroke="var(--drop)" stroke-width="1.2" opacity=".75"/>
+      <g class="fall"><g transform="translate(88 60)">${dropSvg(24, 27, true).replace('<svg', '<svg x="0" y="0"')}</g></g></svg></div>
+    <p class="done-ttl up1">已经说出来了</p>
+    ${S.set.afterWrite ? `<button class="softlink up2" style="margin-top:14px;color:var(--lake)" data-a="open-after" data-post="${p.id}">也有人这样过 →</button>` : ''}
+    ${showCare ? `<div class="care up3" data-a="noop"><button class="x" data-a="care-close" data-post="${p.id}" aria-label="关闭">${I.xl}</button>
+      <p style="font-size:16px;letter-spacing:.06em">先陪自己待一会儿</p><p class="t-sub" style="margin-top:6px">难受的话，这里有人可以陪你说说。</p>
+      <button class="lakelink" data-a="care-help">可以立即联系的帮助 →</button></div>` : ''}
+  </div>`;
+}
+PAGES.after = r => {
+  const p = post(r.post);
+  if (!p) return Hd('由这句话带来的遇见') + `<div class="scroll" data-sk="after">${Empty('这条动态已经删除了。')}</div>`;
+  const st = afterState(p);
+  let body;
+  if (st.k === 'zero') body = Empty('', '这一次还没有遇到和你相近的人。');
+  else if (st.k === 'end') body = Empty('', '这次遇见的都看完了。');
+  else body = MeetCard(st.pid, MEET_POST[st.pid], 'after:' + p.id, st.more);
+  return Hd('由这句话带来的遇见') + `<div class="scroll" data-sk="after-${p.id}"><p class="after-line clamp2">${esc(firstLine(p.text) || '（一条没有文字的动态）')}</p>${body}</div>`;
+};
+
+/* ---------- 遇见 ---------- */
+PAGES.meet = () => {
+  const seg = S.ui.seg;
+  return `<div class="roottop"><div class="seg" role="tablist"><button class="${seg === 'mine' ? 'on' : ''}" data-a="seg" data-v="mine" role="tab" aria-selected="${seg === 'mine'}">我遇见的人</button><button class="${seg === 'me' ? 'on' : ''}" data-a="seg" data-v="me" role="tab" aria-selected="${seg === 'me'}">遇见我的人</button></div></div>
+    <div class="scroll" data-sk="meet-${seg}">${seg === 'mine' ? DailyBody() : MeetMeBody()}</div>`;
+};
+function DailyBody() {
+  const st = dailyState();
+  const toSet = `<button class="btn sec" data-a="set-meet">去设置</button>`;
+  if (st.k === 'off') return Empty('每日遇见已暂停', '', toSet);
+  if (st.k === 'signals') return Empty('', '现在没有开启的遇见方式。<br>打开“说的话像”或“经历的事一样”，<br>就可以继续遇见。', toSet);
+  if (st.k === 'nocontent') return Empty('', '还没有可以帮你遇见人的内容。', `<button class="btn sec" data-a="tab" data-t="write">去写</button>`);
+  if (st.k === 'few') return `<div class="empty tall">${Water('few')}<p class="ttl">今天和你像的人还不多</p></div>`;
+  if (st.k === 'end') return `<div class="empty tall">${Water('end')}<p class="ttl">今天的都在这里了</p></div>`;
+  return MeetCard(st.pid, MEET_POST[st.pid], 'daily', st.more);
+}
+function QuietRow(x) {
+  return `<div class="prow">${Av(x.pid, 40, { click: true })}<button class="pmain" data-a="openPost" data-post="${x.post.id}"><span class="pn">${esc(nameOf(x.pid))}</span><span class="t-sub">在你写下「${esc(clip(firstLine(x.post.text) || '一条动态', 18))}」时轻轻共鸣了</span>${x.r.ver < x.post.ver ? '<span class="t-tag">共鸣发生在修改前</span>' : ''}</button></div>`;
+}
+function CmtRow(x) {
+  return `<div class="prow">${Av(x.pid, 40, { click: true })}<button class="pmain" data-a="openPost" data-post="${x.post.id}" data-thread="${x.thread.id}"><span class="pn">${esc(nameOf(x.pid))}</span><span class="cmtq clamp2">${esc(x.c.text)}</span><span class="t-tag">在「${esc(clip(firstLine(x.post.text) || '一条动态', 14))}」下留言</span></button></div>`;
+}
+function MeetMeBody() {
+  const q = quietList(), c = commenterList();
+  const region = (title, r, rows, emptyText) => `<section class="card region"><button class="region-hd" data-a="go" data-r="${r}"><span>${title}</span><span class="chev">${I.chev}</span></button>
+    ${rows.length ? rows.slice(0, 3).join('') + (rows.length > 3 ? `<div style="text-align:center"><button class="softlink" data-a="go" data-r="${r}">看全部 →</button></div>` : '') : `<p class="t-sub" style="padding:14px 0 16px">${emptyText}</p>`}</section>`;
+  return `<div class="pad" style="padding-top:2px">${region('安静的共鸣', 'quiet', q.map(QuietRow), '这里还没有共鸣。')}${region('给我留言的人', 'commenters', c.map(CmtRow), '这里还没有留言。')}</div>`;
+}
+PAGES.quiet = () => { const q = quietList(); return Hd('安静的共鸣') + `<div class="scroll" data-sk="quiet"><div class="pad">${q.length ? q.map(QuietRow).join('') : Empty('', '这里还没有共鸣。')}</div></div>`; };
+PAGES.commenters = () => { const c = commenterList(); return Hd('给我留言的人') + `<div class="scroll" data-sk="commenters"><div class="pad">${c.length ? c.map(CmtRow).join('') : Empty('', '这里还没有留言。')}</div></div>`; };
+
+/* ---------- 人物主页 ---------- */
+function HomeContent(o) {
+  // o: {pid|'me', talk:boolean, viewerIsMe}
+  const isMe = o.pid === 'me'; const p = isMe ? S.me : S.people[o.pid];
+  const showIntro = p.show.intro && p.intro, showMood = p.show.mood && p.mood, showLike = p.show.like && p.like;
+  const posts = Object.values(S.posts).filter(x => x.author === o.pid && x.onHome && !x.sleep && (isMe || visibleToMe(x))).sort((a, b) => a.age - b.age);
+  let h = `<div class="phead">${Av(o.pid, 48)}<div class="pnm"><b>${esc(p.name)}</b>${showIntro ? `<span>${esc(p.intro)}</span>` : ''}</div>${o.talk ? `<button class="link lake" style="padding-right:0" data-a="${o.preview ? 'preview-talk' : 'talk'}" data-p="${o.pid}">说话</button>` : ''}</div>`;
+  if (showMood || showLike) h += `<div class="mods">${showMood ? `<div class="mod ap ${showLike ? '' : 'full'}"><p class="ml">最近的心情${dropSvg(12, 13, true)}</p><p class="mv">${esc(p.mood)}</p></div>` : ''}${showLike ? `<div class="mod sa ${showMood ? '' : 'full'}"><p class="ml">喜欢的歌影书</p><p class="mv">${esc(p.like.type)}，${esc(p.like.title)}</p></div>` : ''}</div>`;
+  if (posts.length) h += `<p class="label">放在主页的</p>` + posts.map(x => `<div class="card hpost"><button class="mbody" data-a="${o.preview ? 'noop' : 'openPost'}" data-post="${x.id}">${mbody(x)}</button>${isMe ? '' : `<div class="acts"><button class="lakelink" style="padding:0 10px" data-a="openPost" data-post="${x.id}">留言</button>${ResBtn(x.id)}</div>`}</div>`).join('');
+  if (!showIntro && !showMood && !showLike && !posts.length) h += `<p class="t-sub" style="margin-top:28px;text-align:center">${isMe ? '你的主页上还没有放内容。' : 'TA 的主页上还没有放内容。'}</p>`;
+  return h;
+}
+PAGES.profile = r => {
+  const pid = r.p, pe = S.people[pid];
+  if (!pe) return Hd('TA 的主页') + Empty('', '找不到这个人。');
+  if (pe.blockedMe) return Hd('TA 的主页') + `<div class="scroll" data-sk="pf">${Empty('', '你已被对方拉黑，无法继续查看主页、留言、共鸣或发消息。')}</div>`;
+  if (S.blocks.includes(pid)) return Hd('TA 的主页') + `<div class="scroll" data-sk="pf">${Empty('', '你已拉黑 TA。可以在“设置 → 黑名单”里解除。')}</div>`;
+  if (pe.gone) return Hd('TA 的主页') + `<div class="scroll" data-sk="pf">${Empty('', '对方已离开。')}</div>`;
+  if (pe.frozen) return Hd('TA 的主页') + `<div class="scroll pad" data-sk="pf"><div class="phead">${Av(pid, 48)}<div class="pnm"><b>${esc(pe.name)}</b><span>TA 暂时离开了</span></div></div></div>`;
+  if (!canEnterHome(pid)) return Hd('TA 的主页') + `<div class="scroll" data-sk="pf">${Empty('', '现在没有进入 TA 主页的入口。')}</div>`;
+  return Hd('TA 的主页', { right: `<button class="ib" data-a="sheet" data-k="profMenu" data-p="${pid}" aria-label="更多">${I.more}</button>` }) + `<div class="scroll" data-sk="pf-${pid}"><div class="pad">${HomeContent({ pid, talk: talkShown(pid) })}</div></div>`;
+};
+
+/* ---------- 动态详情 + 留言线 ---------- */
+function CmtLine(c, th, p, canDel) {
+  const auth = c.by === p.author;
+  return `<button class="cmt ${auth ? 'auth' : ''}" ${canDel ? `data-a="sheet" data-k="cmtMenu" data-th="${th.id}" data-c="${c.id}"` : 'data-a="noop"'}><p class="cw">${esc(nameOf(c.by))}${c.by === 'me' ? '（你）' : ''}${c.ver < p.ver ? '，留言于修改前' : ''}</p><p class="t-body16">${esc(c.text)}</p></button>`;
+}
+function threadTag(th, p) {
+  if (p.commentVis !== 'public') return '仅彼此';
+  const pub = th.comments.filter(c => c.pub).length;
+  return pub === th.comments.length ? '公开' : pub ? '部分公开' : '仅彼此';
+}
+PAGES.post = r => {
+  const p = post(r.post);
+  if (!p) return Hd('动态') + Empty('', '这条动态已经不在了。');
+  return p.author === 'me' ? MyPost(p, r) : OtherPost(p, r);
+};
+function OtherPost(p, r) {
+  if (!visibleToMe(p)) return Hd('动态') + Empty('', '这条内容现在看不到了。');
+  const a = S.people[p.author];
+  const mine = S.threads.find(t => t.post === p.id && t.commenter === 'me' && t.comments.length);
+  const others = S.threads.filter(t => t.post === p.id && t.commenter !== 'me' && !blockedEither(t.commenter)).map(t => ({ t, cs: threadVisibleComments(t, 'third') })).filter(x => x.cs.length);
+  let th = '';
+  if (mine) th += `<div class="thread mine ${r.thread === mine.id ? 'hl' : ''}"><div class="th-hd">${Av('me', 32)}<span class="tn">你和 ${esc(a.name)}</span><span class="th-tag">${threadTag(mine, p)}</span></div>${mine.comments.map(c => CmtLine(c, mine, p, c.by === 'me')).join('')}${talkShown(a.id) ? `<div class="th-acts"><button data-a="talk" data-p="${a.id}" data-origin="${p.id}">转到聊天</button></div>` : ''}</div>`;
+  // 第三方公开留言线：只读，头像不可点，不能插入
+  th += others.map(x => `<div class="thread"><div class="th-hd">${Av(x.t.commenter, 32)}<span class="tn">${esc(nameOf(x.t.commenter))} 和 ${esc(a.name)}</span><span class="th-tag">公开</span></div>${x.cs.map(c => CmtLine(c, x.t, p, false)).join('')}</div>`).join('');
+  const cc = canComment(p);
+  const composer = cc.ok ? `<div class="cbar"><textarea id="m-in" class="cin" rows="1" placeholder="${mine ? '接着说' : '留言给 ' + esc(a.name)}">${esc(T.mdraft)}</textarea><button class="csend" data-a="cmt-send" data-post="${p.id}" aria-label="发送留言">${dropSvg(18, 20)}</button></div>` : `<div class="cbar-msg">${cc.why}</div>`;
+  return Hd('动态') + `<div class="scroll" data-sk="post-${p.id}"><div class="pad">
+    <div class="phead" style="padding-top:0">${Av(a.id, 40, { click: true })}<div class="pnm"><b style="font-size:16px">${esc(a.name)}</b><span style="font-size:15px;margin-top:0">${tw(p.age)}${p.part || ''}写的</span></div></div>
+    <div class="card" style="padding:22px;margin-top:12px">${mbody(p)}<div style="display:flex;justify-content:flex-end;margin-top:14px">${ResBtn(p.id)}</div></div>
+    <p class="label">留言</p>${th || `<p class="t-sub" style="padding:10px 0">这里还没有留言。</p>`}
+  </div></div>${composer}`;
+}
+function MyPost(p, r) {
+  const ths = S.threads.filter(t => t.post === p.id && t.comments.length && !blockedEither(t.commenter) && !(S.people[t.commenter] || {}).frozen);
+  const badges = [visLabel(p.discoverable, p.onHome)];
+  if (p.sleep) badges.unshift(p.sleep === 'old' ? '超过三个月，只自己可见' : '已隐藏');
+  badges.push('留言：' + ({ all: '所有人', resonated: '有共鸣的人', off: '关闭' })[p.whoComment]);
+  badges.push('留言可见：' + (p.commentVis === 'public' ? '公开' : '仅彼此'));
+  const thHtml = ths.map(t => {
+    const nm = nameOf(t.commenter);
+    return `<div class="thread ${r.thread === t.id ? 'hl' : ''}"><div class="th-hd">${Av(t.commenter, 32, { click: true })}<span class="tn">${esc(nm)} 和你</span><span class="th-tag">${threadTag(t, p)}</span></div>${t.comments.map(c => CmtLine(c, t, p, true)).join('')}<div class="th-acts"><button data-a="reply" data-th="${t.id}">回复</button>${talkShown(t.commenter) ? `<button class="g" data-a="talk" data-p="${t.commenter}" data-origin="${p.id}">转到聊天</button>` : ''}</div></div>`;
+  }).join('');
+  const rt = T.replyTo && S.threads.find(t => t.id === T.replyTo && t.post === p.id);
+  const composer = rt ? `<div class="cbar"><button class="plus" data-a="reply-cancel" aria-label="取消回复">${I.xl}</button><textarea id="m-in" class="cin" rows="1" placeholder="回复 ${esc(nameOf(rt.commenter))}">${esc(T.mdraft)}</textarea><button class="csend" data-a="cmt-send" data-post="${p.id}" aria-label="发送回复">${dropSvg(18, 20)}</button></div>` : '';
+  return Hd('我写的', { right: `<button class="ib" data-a="sheet" data-k="postMenu" data-post="${p.id}" aria-label="这条动态的设置">${I.more}</button>` }) + `<div class="scroll" data-sk="post-${p.id}"><div class="pad">
+    <p class="t-tag">${tw(p.age)}${p.part || ''}写的</p>
+    <div class="card" style="padding:22px;margin-top:8px">${mbody(p)}<div class="badges">${badges.map(b => `<span class="badge">${b}</span>`).join('')}</div></div>
+    ${S.set.afterWrite ? `<div style="text-align:center"><button class="softlink" style="color:var(--lake)" data-a="open-after" data-post="${p.id}">也有人这样过 →</button></div>` : ''}
+    <p class="label">留言</p>${thHtml || `<p class="t-sub" style="padding:10px 0">这里还没有留言。</p>`}
+  </div></div>${composer}`;
+}
+
+/* ---------- 聊天 ---------- */
+function msgPreview(m) { const t = m.kind === 'voice' ? '一段语音' : m.kind === 'image' ? '一张图片' : m.kind === 'card' ? `${m.ctype}，${m.text}` : m.text; return (m.by === 'me' ? '你：' : '') + t; }
+PAGES.chats = () => {
+  const L = Object.entries(S.convs).filter(([pid]) => !S.blocks.includes(pid) && S.people[pid]).sort((a, b) => b[1].seq - a[1].seq);
+  const rows = L.map(([pid, c]) => {
+    const last = c.msgs[c.msgs.length - 1];
+    let pv, cls = '';
+    if (S.people[pid].gone) { pv = '对方已离开'; cls = 'ended'; }
+    else if (c.status === 'ended' && !S.people[pid].blockedMe) { pv = '这段对话安静地结束了'; cls = 'ended'; }
+    else if (!last) pv = '更早的消息已按你的保留设置删除。';
+    else { pv = msgPreview(last); if (c.unread) cls = 'unread'; }
+    return `<div class="crow">${Av(pid, 40, { click: true })}<button class="cm" style="text-align:left" data-a="conv" data-p="${pid}"><span class="cn"><b>${esc(nameOf(pid))}</b><span>${last ? last.t : ''}</span></span><p class="cp ${cls}">${esc(pv)}</p></button></div>`;
+  }).join('');
+  return `<div class="scroll" data-sk="chats"><div class="pad roottopPad">${rows || Empty('', '这里还没有聊起来的人。')}</div></div>`;
+};
+function Bubble(m, pid) {
+  const side = m.by === 'me' ? 'me' : 'them'; const nw = m.id === T.newMsg ? '' : 'style="animation:none"';
+  if (m.kind === 'voice') return `<div class="bub ${side}" ${nw}><span style="display:flex;align-items:center;gap:10px"><span class="pb" style="width:28px;height:28px;border-radius:50%;background:var(--sunk);display:flex;align-items:center;justify-content:center">${I.play}</span>${bars(14)}<span class="t-tag">${m.dur || '0:06'}</span></span></div>${m.text ? `<p class="t-tag" style="align-self:${side === 'me' ? 'flex-end' : 'flex-start'};padding:0 6px">转文字：${esc(m.text)}</p>` : ''}`;
+  if (m.kind === 'image') return `<div class="bub media ${side}" ${nw} style="width:62%"><div class="tile big" style="border-radius:18px">${tileArt(m.tone || 'sand', 1)}</div></div>`;
+  if (m.kind === 'card') return `<div class="bub ${side}" ${nw} style="font-family:var(--sans);padding:10px 12px"><span style="display:flex;gap:12px;align-items:center"><span class="cover song">${I.disc}</span><span><p style="font-size:16px;line-height:1.55">${esc(m.ctype)}，${esc(m.text)}</p>${m.quote ? `<p class="t-tag">${side === 'me' ? '我' : 'TA'}说：${esc(m.quote)}</p>` : ''}</span></span></div>`;
+  return `<div class="bub ${side}" ${nw}>${esc(m.text)}</div>`;
+}
+PAGES.conv = r => {
+  const pid = r.p, pe = S.people[pid], c = S.convs[pid];
+  if (!pe) return Hd('') + Empty('', '找不到这个人。');
+  const who = `${Av(pid, 32, { click: true, allowBlockedMsg: true })}<span style="font-size:16px;letter-spacing:.06em">${esc(pe.name)}</span>`;
+  const head = Hd('', { who: `<span class="who">${who}</span>`, right: `<button class="ib" data-a="sheet" data-k="convMenu" data-p="${pid}" aria-label="对话设置">${I.more}</button>` });
+  let top = '';
+  if (c && c.firstChat && !blockedEither(pid) && !pe.gone) {
+    const o = c.origin && post(c.origin); const ov = o && (o.author === 'me' ? myPostVisibleTo(o, pid) : visibleToMe(o));
+    top = `<button class="topline" data-a="between" data-p="${pid}">${ov ? `你们因为「${esc(clip(firstLine(o.text), 10))}」相遇 →` : '你们之间 →'}</button>`;
+  }
+  let msgs = '';
+  if (c) {
+    if (c.cleared) msgs += `<p class="notice">更早的消息已按你的保留设置删除。</p>`;
+    let lt = null;
+    c.msgs.forEach(m => { if (m.t !== lt) { msgs += `<p class="tstamp">${m.t}</p>`; lt = m.t; } msgs += Bubble(m, pid); if (m.warn) msgs += `<p class="sysline">离开这里后平台无法继续保护你，涉及钱的事请谨慎。</p>`; });
+    if (pe.gone) msgs += `<p class="endline">对方已离开</p>`;
+    else if (c.status === 'ended') msgs += `<p class="endline">这段对话安静地结束了</p>`;
+  }
+  const ts = talkState(pid);
+  let foot = '';
+  const composer = (ph = '说点什么') => `<div class="cbar"><button class="plus" data-a="sheet" data-k="convPlus" data-p="${pid}" aria-label="发送图片或语音">${I.plus}</button><textarea id="c-in" class="cin" rows="1" data-p="${pid}" placeholder="${ph}">${esc(T.cdraft[pid] || '')}</textarea><button class="csend" data-a="conv-send" data-p="${pid}" aria-label="发送">${dropSvg(18, 20, true)}</button></div>`;
+  if (ts === 'blockedMe') foot = `<div class="cbar-msg">你已被对方拉黑，无法继续查看主页、留言、共鸣或发消息。</div>`;
+  else if (ts === 'frozen') foot = pe.gone ? '' : `<div class="cbar-msg">TA 暂时离开了，现在不能发消息。</div>`;
+  else if (ts === 'iBlocked') foot = `<div class="cbar-msg">你已拉黑 TA。</div>`;
+  else if (c && c.status === 'pending' && c.pending === 'me') foot = `<div class="cbar"><button class="plus" style="opacity:.35" data-a="conv-locked" aria-label="发送图片或语音">${I.plus}</button><button class="cin locked" style="text-align:left;color:var(--ink3)" data-a="conv-locked">说点什么</button><button class="csend" disabled aria-label="发送">${dropSvg(18, 20)}</button></div>`;
+  else if (c && c.status === 'ended') foot = ts === 'restart' ? `<p class="cbar-note">可以重新说一句。TA 回话以后，才能接着聊。</p>` + composer() : `<div class="cbar-msg">TA 现在不接收新的第一句。</div>`;
+  else if (!c && ts !== 'new') foot = `<div class="cbar-msg">TA 现在不接收新的第一句。</div>`;
+  else foot = composer();
+  return head + top + `<div class="scroll" data-sk="conv-${pid}"><div class="msgs">${msgs}</div></div>` + foot;
+};
+PAGES.between = r => {
+  const pid = r.p, c = S.convs[pid];
+  if (!c || !c.firstChat || blockedEither(pid) || (S.people[pid] || {}).gone) return Hd('你们之间') + Empty('', '这里还没有你们之间的痕迹。');
+  let h = '';
+  const o = c.origin && post(c.origin); const ov = o && (o.author === 'me' ? myPostVisibleTo(o, pid) : visibleToMe(o));
+  if (ov) h += `<p class="label" style="margin-top:6px">最初</p><div class="card m" style="padding:16px 18px"><p class="t-tag">你们因为这一句相遇</p><p class="t-body16" style="margin-top:6px">${esc(o.text)}</p></div>`;
+  const tr = S.res.filter(x => { const p = post(x.post); if (!p) return false; if (x.from === 'me' && p.author === pid) return visibleToMe(p); if (x.from === pid && p.author === 'me') return myPostVisibleTo(p, pid); return false; }).sort((a, b) => b.t - a.t).slice(0, 3);
+  if (tr.length) h += `<p class="label">后来</p>` + tr.map(x => `<div class="sunkbox t-body16" style="margin-top:8px;color:var(--ink2)">${x.from === 'me' ? '你共鸣了 TA 写的：' : 'TA 共鸣了你写的：'}${esc(clip(post(x.post).text, 26))}</div>`).join('');
+  const last = c.msgs[c.msgs.length - 1];
+  h += `<p class="label">最近</p><div class="mistbox t-body16">${last ? `${last.t}，${last.by === 'me' ? '你说' : 'TA 说'}：${esc(clip(last.kind === 'text' ? last.text : msgPreview(last).replace(/^你：/, ''), 22))}` : '聊过天'}</div>`;
+  if (c.status === 'ended') h += `<p class="t-tag" style="text-align:center;margin-top:22px">这段对话安静地结束了</p>`;
+  return Hd('你们之间') + `<div class="scroll" data-sk="between-${pid}"><div class="pad">${h}</div></div>`;
+};
+
+/* ---------- 我 ---------- */
+PAGES.me = () => {
+  const ms = months();
+  return `<div class="scroll" data-sk="me"><div class="pad roottopPad" style="position:relative"><button class="ib metune" data-a="go" data-r="settings" aria-label="设置">${I.tune}</button>
+    <div class="mehead">${Av('me', 56)}<p class="nm">${esc(S.me.name)}</p>${S.me.intro ? `<p class="it">${esc(S.me.intro)}</p>` : ''}${S.me.mood ? `<span class="md">${dropSvg(12, 13, true)}${esc(S.me.mood)}</span>` : ''}</div>
+    <button class="card m myhome" data-a="myhome"><span style="display:flex;flex-direction:column;gap:2px;text-align:left"><span style="font-size:16px">我的主页</span><span class="t-tag">别人来看你时看到的样子</span></span><span style="color:var(--ink3)">${I.chev}</span></button>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin:24px 0 8px"><span style="font-size:16px;letter-spacing:.06em">写过的</span><button class="lakelink" style="padding:0 2px 0 12px" data-a="go" data-r="cleanup">清理</button></div>
+    ${ms.length ? `<div class="months">${ms.map(m => `<button class="month" data-a="go" data-r="month" data-k="${m.k}"><span class="mt">${m.t}</span><span class="ms clamp2">${esc(m.summary)}</span></button>`).join('')}</div>` : `<div class="empty" style="padding:40px 0">这里还没有写过的内容。</div>`}
+  </div></div>`;
+};
+PAGES.month = r => {
+  const m = months().find(x => x.k === r.k);
+  if (!m) return Hd('写过的') + Empty('', '这段时间里已经没有写过的内容了。');
+  return Hd(m.t) + `<div class="scroll" data-sk="month-${m.k}"><div class="pad">
+    <button style="text-align:left;width:100%;padding:4px 0 8px" data-a="sheet" data-k="rename" data-mk="${m.k}"><span class="serif" style="font-size:18px;letter-spacing:.04em;line-height:1.7">${esc(m.summary)}</span></button>
+    ${m.posts.map(p => `<button class="card m mypost" data-a="openPost" data-post="${p.id}">${p.text ? `<p class="t-body16 clamp2">${esc(p.text)}</p>` : '<p class="t-sub">（附件）</p>'}<div class="badges">${p.sleep ? `<span class="badge">${p.sleep === 'old' ? '超过三个月，只自己可见' : '已隐藏'}</span>` : ''}<span class="badge">${visLabel(p.discoverable, p.onHome)}</span>${p.edited ? '<span class="badge">已编辑</span>' : ''}</div></button>`).join('')}
+  </div></div>`;
+};
+PAGES.myhome = () => {
+  const on = CATS.filter(([k]) => S.me.access[k]).map(([, l]) => l);
+  return Hd('我的主页', { right: `<button class="link" style="padding:0 4px;min-height:44px" data-a="go" data-r="edithome">编辑</button>` }) + `<div class="scroll" data-sk="myhome"><div class="pad">
+    ${HomeContent({ pid: 'me', talk: false, preview: true })}</div></div>`;
+};
+PAGES.edithome = () => {
+  const me = S.me;
+  const accRows = CATS.map(([k, l]) => `<div class="row"><span class="rt">${l}</span>${Tg(me.access[k], 'acc', `data-k="${k}"`, l)}</div>`).join('');
+  const allOff = !CATS.some(([k]) => me.access[k]);
+  const modRow = (k, l, v) => `<div class="row"><button class="rl" style="text-align:left;flex:1" data-a="sheet" data-k="field" data-f="${k}"><span class="rt">${l}</span><span class="t-tag">${v ? esc(clip(v, 18)) : '还没有填写'}</span></button>${v ? Tg(me.show[k], 'show', `data-k="${k}"`, '在主页显示' + l) : ''}</div>`;
+  return Hd('编辑主页') + `<div class="scroll" data-sk="edithome"><div class="pad">
+    <p class="label" style="margin-top:8px">谁能进入我的主页</p>${accRows}
+    ${allOff ? '<p class="note" style="margin-top:10px">四项都关闭，除你以外的人都不能进入你的主页。</p>' : ''}
+    <p class="label">进入以后能看到</p>
+    <button class="row" data-a="sheet" data-k="field" data-f="name"><span class="rt">头像和昵称</span><span class="rv">${esc(me.name)}${I.chev}</span></button>
+    ${modRow('intro', '自我介绍', me.intro)}${modRow('mood', '最近的心情', me.mood)}${modRow('like', '喜欢的歌影书', me.like ? me.like.type + '，' + me.like.title : '')}
+    <p class="note" style="margin-top:12px">放上主页的动态，由每条动态自己的“放上主页”决定。</p>
+  </div></div>`;
+};
+PAGES.settings = () => {
+  const s = S.set;
+  const tgRow = (k, l) => `<div class="row"><span class="rt">${l}</span>${Tg(s[k], 'set-t', `data-k="${k}"`, l)}</div>`;
+  const chipRow = (k, l, opts, note = '') => `<div class="row block"><span class="rt">${l}</span>${Chips(opts, s[k], 'set-c', k)}${note ? `<p class="note" style="margin-top:8px">${note}</p>` : ''}</div>`;
+  return Hd('设置') + `<div class="scroll" data-sk="settings"><div class="pad" style="padding-top:0">
+    <p class="label">写</p>${tgRow('newDisc', '新写的默认可被遇见')}${tgRow('newHome', '新写的默认放上主页')}${tgRow('afterWrite', '写完后看“也有人这样过”')}
+    <p class="label" data-grp="meet">遇见</p>${tgRow('daily', '每日遇见')}
+    ${chipRow('dailyCount', '每天遇见几个', [[3, '三个'], [5, '五个'], [10, '十个']])}
+    ${tgRow('sigText', '说的话像')}${tgRow('sigExp', '经历的事一样')}
+    ${chipRow('age', '年龄段', [['不限', '不限'], ['相近', '和我相近'], ['小', '比我小'], ['大', '比我大']])}
+    ${chipRow('gender', '性别', [['不限', '不限'], ['女', '女'], ['男', '男']])}
+    <p class="label">靠近我的方式</p>
+    ${chipRow('newWho', '新动态默认谁能留言', [['all', '所有人'], ['resonated', '有共鸣的人'], ['off', '关闭']])}
+    ${chipRow('whoFirst', '谁能发第一句', [['all', '所有人'], ['resonated', '和我共鸣过的人'], ['none', '谁都不行']])}
+    <p class="label">提醒</p>${tgRow('pushMsg', '新消息')}${tgRow('pushRes', '共鸣')}${tgRow('pushCmt', '留言')}
+    <p class="label">保留与安全</p>
+    ${chipRow('retention', '聊天记录保留', [['forever', '一直'], ['year', '一年'], ['q', '三个月']], '只影响你这边，对方的聊天记录不会被删除。')}
+    ${tgRow('sleepOld', '超过三个月的动态只自己可见')}
+    <button class="row" data-a="go" data-r="blacklist"><span class="rt">黑名单</span><span class="rv">${I.chev}</span></button>
+    <button class="row" data-a="go" data-r="account"><span class="rt">导出与注销</span><span class="rv">${I.chev}</span></button>
+  </div></div>`;
+};
+PAGES.blacklist = () => {
+  const L = S.blocks.filter(id => S.people[id]);
+  return Hd('黑名单') + `<div class="scroll" data-sk="blacklist"><div class="pad">${L.length ? L.map(pid => `<div class="crow">${Av(pid, 40)}<span style="flex:1;font-size:16px">${esc(nameOf(pid))}</span><button class="chip" data-a="unblock" data-p="${pid}">解除</button></div>`).join('') : Empty('', '黑名单里还没有人。')}</div></div>`;
+};
+PAGES.cleanup = () => Hd('清理写过的') + `<div class="scroll" data-sk="cleanup"><div class="pad" style="display:flex;flex-direction:column;gap:10px">
+  <button class="card m" style="padding:16px 18px;text-align:left" data-a="sheet" data-k="cleanup" data-kind="hide"><p style="font-size:16px">隐藏一段时间的动态</p><p class="t-tag">别人看不到；单条打开开关就能放出来</p></button>
+  <button class="card m" style="padding:16px 18px;text-align:left" data-a="sheet" data-k="cleanup" data-kind="clear"><p style="font-size:16px">清空共鸣和留言</p><p class="t-tag">动态保留</p></button>
+  <button class="card m" style="padding:16px 18px;text-align:left" data-a="sheet" data-k="cleanup" data-kind="del"><p style="font-size:16px">删除一段时间的动态</p><p class="t-tag">删除后不能恢复</p></button>
+</div></div>`;
+PAGES.account = () => Hd('导出与注销') + `<div class="scroll" data-sk="account"><div class="pad">
+  <div class="card" style="padding:20px"><p style="font-size:16px">导出写过的内容</p><p class="t-tag" style="margin:4px 0 14px">免费</p><button class="btn pri wide" data-a="export">导出</button></div>
+  <div style="margin-top:16px;padding:20px;border-radius:26px;border:1px solid var(--line)"><p style="font-size:16px">注销账号</p><p class="t-sub" style="margin:6px 0 14px">冻结七天，期间登录可恢复；之后全部删除，包括发给别人的消息。</p><button class="btn danger wide" data-a="freeze">确认进入冻结期</button></div>
+</div></div>`;
+PAGES.frozen = () => `<div class="scroll" data-sk="frozen"><div class="empty tall" style="min-height:100%;padding-top:calc(var(--st) + 120px)">${dropSvg(26, 29, true)}<p class="ttl">账号已经暂时冻结</p><p class="t-sub">七天内登录即可恢复。<br>期满后，你的动态、主页、共鸣、留言会被删除，<br>聊天里你发出的消息也会删除。</p><button class="btn sec" style="margin-top:10px" data-a="unfreeze">登录并恢复</button></div></div>`;
+PAGES.visit = r => {
+  const pid = r.p; const can = visitorCanEnterMine(pid); const rl = relToMe(pid);
+  const tags = CATS.filter(([k]) => rl[k]).map(([, l]) => l);
+  return Hd('访客看到的主页') + `<div class="visitbar">测试：以 ${esc(nameOf(pid))} 的身份看你的主页${tags.length ? `<br>TA 属于：${tags.join('、')}` : '<br>TA 不属于任何一类'}</div><div class="scroll" data-sk="visit-${pid}"><div class="pad">${can ? HomeContent({ pid: 'me', talk: visitorTalk(pid), preview: true }) : Empty('', 'TA 现在不能进入你的主页。', '', true)}</div></div>`;
+};
+
+/* ============ 导航 ============ */
+const ROOT = { write: { r: 'write' }, meet: { r: 'meet' }, chat: { r: 'chats' }, me: { r: 'me' } };
+const stack = () => S.ui.stacks[S.ui.tab];
+const topR = () => { const s = stack(); return s[s.length - 1]; };
+function go(route) { stack().push(route); T.anim = 'push'; T.replyTo = null; try { history.pushState({ z: Date.now() }, ''); } catch (e) { } render(); }
+function back() {
+  const s = stack();
+  if (s.length > 1) { const r = s.pop(); delete T.scroll[skOf(r)]; T.anim = 'pop'; T.replyTo = null; render(); return true; }
+  if (S.ui.tab === 'write' && T.doneId) { T.doneId = null; render(); return true; }
+  return false;
+}
+const skOf = r => r.r + (r.p || r.post || r.k || '');
+function setTab(t, routes) {
+  const prev = S.ui.tab;
+  if (routes) { S.ui.stacks[t] = [ROOT[t], ...routes]; }
+  else if (prev === t) { if (stack().length > 1) S.ui.stacks[t] = [ROOT[t]]; if (t === 'write') T.doneId = null; }
+  S.ui.tab = t; T.anim = 'fade'; T.visOpen = false; T.replyTo = null;
+  if (t === 'write' && prev !== 'write' && hasDraft() && !routes) setTimeout(() => toast('草稿已安静地保存'), 260);
+  render();
+}
+
+/* ============ 渲染 ============ */
+function prelude() {
+  const r = topR();
+  if (r.r === 'meet' && S.ui.seg === 'mine') { const st = dailyState(); if (st.k === 'card') S.people[st.pid].met = true; }
+  if (r.r === 'after' && post(r.post)) { const st = afterState(post(r.post)); if (st.k === 'card') S.people[st.pid].met = true; }
+  if (r.r === 'conv' && S.convs[r.p]) S.convs[r.p].unread = false;
+}
+function render() {
+  const host = $('#host');
+  const sc = host.querySelector('.scroll[data-sk]'); if (sc) T.scroll[sc.dataset.sk] = sc.scrollTop;
+  const ae = document.activeElement; let fid = null, ss = 0, se = 0;
+  if (ae && ae.id && host.contains(ae)) { fid = ae.id; try { ss = ae.selectionStart; se = ae.selectionEnd; } catch (e) { } }
+  document.documentElement.dataset.theme = S.theme;
+  const meta = document.querySelector('meta[name=theme-color]'); if (meta) meta.content = S.theme === 'dark' ? '#131716' : '#F4F5F1';
+  let r = S.frozen ? { r: 'frozen' } : topR();
+  if (!S.frozen) prelude();
+  const fn = PAGES[r.r] || (() => Hd('') + Empty('', '页面不存在'));
+  const html = fn(r);
+  const nav = !S.frozen && NAV_ROUTES.has(r.r) && !(r.r === 'write' && T.wFocus && !T.doneId);
+  host.innerHTML = `<div class="screen ${T.anim || ''}">${html}${nav ? Nav() : ''}</div>`;
+  T.anim = '';
+  const sc2 = host.querySelector('.scroll[data-sk]');
+  if (sc2) { if (T.scrollBottom || (r.r === 'conv' && T.scroll[sc2.dataset.sk] == null)) { sc2.scrollTop = sc2.scrollHeight; T.scrollBottom = false; } else sc2.scrollTop = T.scroll[sc2.dataset.sk] || 0; }
+  if (T.anchor) { const g = host.querySelector('[data-grp="' + T.anchor + '"]'); if (g && sc2) sc2.scrollTop = Math.max(0, g.getBoundingClientRect().top - sc2.getBoundingClientRect().top + sc2.scrollTop - 12); T.anchor = null; }
+  if (fid) {
+    const restoreFocus = () => { const el = document.getElementById(fid); if (!el) return; el.focus({ preventScroll: true }); try { el.setSelectionRange(ss, se); } catch (e) { } };
+    restoreFocus();
+    if (!document.activeElement || document.activeElement.id !== fid) requestAnimationFrame(restoreFocus);
+  }
+  host.querySelectorAll('[data-turnon]').forEach(el => requestAnimationFrame(() => requestAnimationFrame(() => el.classList.add('on'))));
+  T.justRes = null; T.newMsg = null;
+  host.querySelectorAll('textarea').forEach(autosize);
+  bindSwipe();
+  renderOv();
+  renderSide();
+  save();
+}
+function autosize(el) { if (el.id === 'w-text') { el.style.height = 'auto'; el.style.height = Math.max(el.scrollHeight, 0) + 'px'; } else { el.style.height = 'auto'; el.style.height = Math.min(el.scrollHeight, 120) + 'px'; } }
+
+/* ============ 轻提示 ============ */
+let _tt = 0;
+function toast(t, ms = 2300) { const el = $('#toast'); el.textContent = t; el.classList.add('show'); clearTimeout(_tt); _tt = setTimeout(() => el.classList.remove('show'), ms); }
+function floatHint(t) {
+  const bar = $('#host .cbar'); if (!bar) return toast(t, 2000);
+  const old = bar.querySelector('.floathint'); if (old) old.remove();
+  const d = document.createElement('div'); d.className = 'floathint'; d.textContent = t; bar.appendChild(d);
+  setTimeout(() => d.remove(), 2000);
+}
+
+/* ============ 弹层 ============ */
+function openSheet(s) { T.sheet = s; T.sheetFresh = true; T.form = {}; renderOv(); }
+function closeSheet() { T.sheet = null; renderOv(); }
+function confirmBox(o) { T.confirm = o; T.sheet = null; T.sheetFresh = true; renderOv(); }
+const CARD_LIB = { '歌': [['歌', '雨停之后'], ['歌', '晚安小调'], ['歌', '回家的路'], ['歌', '一首走夜路的歌']], '电影/剧': [['电影', '长夜漫游'], ['剧', '长夜将尽'], ['电影', '海边的夏天'], ['剧', '慢慢长大']], '书': [['书', '夏天的旧书'], ['书', '安静的力量'], ['书', '一个人的好天气']], '视频': [['视频', '海边日落十分钟'], ['视频', '一个人做饭']] };
+function sheetHtml(s) {
+  const item = (label, act, data = '', cls = '') => `<button class="sitem ${cls}" data-a="${act}" ${data}>${label}</button>`;
+  switch (s.k) {
+    case 'card': {
+      const tab = s.tab || '歌'; const q = (T.form.q || '').trim();
+      const list = CARD_LIB[tab].filter(([, t]) => !q || t.includes(q));
+      return `<div class="sttl" style="display:flex;gap:4px">${Object.keys(CARD_LIB).map(k => `<button class="chip ${k === tab ? 'on' : ''}" data-a="card-tab" data-v="${k}">${k}</button>`).join('')}</div>
+        <input class="field" id="f-q" data-f="q" placeholder="搜索作品" value="${esc(T.form.q || '')}" style="margin-top:12px">
+        <div style="margin-top:6px">${list.map(([ty, t]) => `<button class="sitem" data-a="card-pick" data-ty="${ty}" data-t="${t}"><span style="display:flex;align-items:center;gap:12px"><span class="cover ${coverCls(ty)}">${I.disc}</span><span><p style="font-size:16px">${t}</p><p class="t-tag">${ty}</p></span></span>${s.pick && s.pick.t === t ? `<span style="color:var(--lake)">已选</span>` : ''}</button>`).join('') || '<p class="t-sub" style="padding:16px 0">没有找到这部作品。</p>'}</div>
+        ${s.pick ? `<textarea class="field serif" id="f-quote" data-f="quote" rows="2" placeholder="打动我的那一段（可不写）" style="margin-top:12px">${esc(T.form.quote || '')}</textarea><button class="btn pri wide" style="margin-top:12px" data-a="card-done">放进去</button>` : ''}`;
+    }
+    case 'postMenu': {
+      const p = post(s.post); if (!p) return '';
+      return `${item('编辑内容', 'post-edit', `data-post="${p.id}"`)}
+        <div class="row" style="min-height:54px"><span class="rt">可被遇见</span>${Tg(p.discoverable, 'post-flag', `data-post="${p.id}" data-f="discoverable"`, '可被遇见')}</div>
+        <div class="row" style="min-height:54px"><span class="rt">放上主页</span>${Tg(p.onHome, 'post-flag', `data-post="${p.id}" data-f="onHome"`, '放上主页')}</div>
+        <div class="row block"><span class="rt">谁能留言</span>${Chips([['all', '所有人'], ['resonated', '有共鸣的人'], ['off', '关闭']], p.whoComment, 'post-c', 'whoComment')}</div>
+        <div class="row block"><span class="rt">留言可见</span>${Chips([['private', '仅彼此'], ['public', '公开']], p.commentVis, 'post-c', 'commentVis')}${p.commentVis === 'public' ? '<p class="note" style="margin-top:8px">改成公开之前的留言，仍只有你们两人看得到。</p>' : ''}</div>
+        ${item('清空这条的共鸣和留言', 'post-clear', `data-post="${p.id}"`)}
+        ${item('<span>删除动态<br><span class="t-tag">删除后不能恢复</span></span>', 'post-del', `data-post="${p.id}"`, 'danger')}`;
+    }
+    case 'edit': { const p = post(s.post); return `<p class="sttl">编辑内容</p><textarea class="field serif" id="f-edit" data-f="edit" rows="6" maxlength="5000" style="margin-top:8px">${esc(T.form.edit != null ? T.form.edit : p.text)}</textarea><button class="btn pri wide" style="margin-top:14px" data-a="post-edit-save" data-post="${p.id}">保存</button>`; }
+    case 'cmtMenu': return item('删除这条留言', 'cmt-del', `data-th="${s.th}" data-c="${s.c}"`, 'danger');
+    case 'convMenu': {
+      const c = S.convs[s.p];
+      return `${c && (c.status === 'chatting' || c.status === 'pending') && !blockedEither(s.p) ? item('结束对话', 'conv-end', `data-p="${s.p}"`) : ''}${S.blocks.includes(s.p) ? '' : item('拉黑这个人', 'block', `data-p="${s.p}"`)}${item('举报', 'report', `data-p="${s.p}"`)}`;
+    }
+    case 'convPlus': return `${item('图片', 'conv-media', `data-p="${s.p}" data-kind="image"`)}${item('语音', 'conv-media', `data-p="${s.p}" data-kind="voice"`)}`;
+    case 'profMenu': return `${item('举报', 'report', `data-p="${s.p}"`)}${item('拉黑这个人', 'block', `data-p="${s.p}"`, 'danger')}`;
+    case 'report': {
+      if (s.step === 1) return `<p class="sttl">举报 ${esc(nameOf(s.p))}</p>${['广告、引流或诈骗', '骚扰或不友善', '不适合的内容', '其他'].map(t => item(t, 'report-r', `data-v="${t}"`)).join('')}`;
+      if (s.step === 2) return `<p class="sttl">${esc(s.reason)}</p><textarea class="field" id="f-rep" data-f="rep" rows="3" placeholder="补充说明（可不写）" style="margin-top:8px">${esc(T.form.rep || '')}</textarea><button class="btn pri wide" style="margin-top:14px" data-a="report-send">提交举报</button>`;
+      return `<div style="text-align:center;padding:18px 0 6px"><p style="font-size:16px">已收到</p><p class="t-sub" style="margin-top:6px">对方不会知道是谁举报的。举报不等于拉黑。</p><button class="btn sec" style="margin-top:16px" data-a="close">好</button></div>`;
+    }
+    case 'rename': {
+      const m = months().find(x => x.k === s.mk); if (!m) return '';
+      const v = T.form.rn != null ? T.form.rn : (S.monthNote[s.mk] || '');
+      return `<p class="sttl">给这段时间一句话</p><input class="field serif" id="f-rn" data-f="rn" maxlength="30" placeholder="${esc(clip(m.first, 20))}" value="${esc(v)}" style="margin-top:8px"><p class="note" style="margin-top:6px">不写的话，显示这段时间写下的第一句。</p><div style="display:flex;gap:10px;margin-top:14px"><button class="btn sec" style="flex:1" data-a="rn-use" data-mk="${s.mk}">用这句</button><button class="btn pri" style="flex:1" data-a="rn-save" data-mk="${s.mk}">保存</button></div>`;
+    }
+    case 'cleanup': {
+      const ttl = { hide: '隐藏一段时间的动态', clear: '清空共鸣和留言', del: '删除一段时间的动态' }[s.kind];
+      const cons = { hide: '这段时间的动态别人都看不到；原来的开关值保留，单条打开“可被遇见”或“放上主页”就能放出来。', clear: '这段时间里你动态上的所有共鸣和留言会被删除，动态本身保留。不能恢复。', del: '这段时间的动态，连同上面的共鸣和留言，会被删除。不能恢复。' }[s.kind];
+      const rg = s.range || 'month';
+      return `<p class="sttl">${ttl}</p>${Chips([['month', '最近一个月'], ['mid', '一到三个月前'], ['old', '三个月以前'], ['all', '全部']], rg, 'clean-range', 'range')}<p class="t-sub" style="margin-top:14px">${cons}</p><button class="btn ${s.kind === 'hide' ? 'pri' : 'danger'} wide" style="margin-top:16px" data-a="clean-go">${s.kind === 'hide' ? '隐藏' : s.kind === 'clear' ? '清空' : '删除'}</button>`;
+    }
+    case 'field': {
+      const f = s.f, me = S.me;
+      if (f === 'name') return `<p class="sttl">头像和昵称</p><div style="display:flex;gap:8px;margin:10px 0">${['sand', 'mist', 'apricot', 'sunk'].map(b => `<button class="av ${b}" style="width:44px;height:44px;font-size:18px;${me.bg === b ? 'box-shadow:0 0 0 2px var(--lake)' : ''}" data-a="f-bg" data-v="${b}" aria-label="头像底色">${esc(me.av)}</button>`).join('')}</div><input class="field" id="f-name" data-f="name" maxlength="12" value="${esc(T.form.name != null ? T.form.name : me.name)}"><button class="btn pri wide" style="margin-top:14px" data-a="f-save" data-f="name">保存</button>`;
+      if (f === 'intro') return `<p class="sttl">自我介绍</p><textarea class="field" id="f-intro" data-f="intro" rows="3" maxlength="60" style="margin-top:8px">${esc(T.form.intro != null ? T.form.intro : me.intro)}</textarea><button class="btn pri wide" style="margin-top:14px" data-a="f-save" data-f="intro">保存</button>`;
+      if (f === 'mood') return `<p class="sttl">最近的心情</p>${Chips(MOODS.map(m => [m, m]), T.form.mood != null ? T.form.mood : me.mood, 'f-mood', 'mood')}<div style="display:flex;gap:10px;margin-top:16px"><button class="btn sec" style="flex:1" data-a="f-clear" data-f="mood">不写心情</button><button class="btn pri" style="flex:1" data-a="f-save" data-f="mood">保存</button></div>`;
+      if (f === 'like') { const lk = T.form.like || me.like || { type: '歌', title: '' }; return `<p class="sttl">喜欢的歌影书</p>${Chips([['歌', '歌'], ['电影', '电影'], ['剧', '剧'], ['书', '书']], lk.type, 'f-liketype', 'type')}<input class="field" id="f-liket" data-f="liket" maxlength="20" placeholder="作品名" value="${esc(T.form.liket != null ? T.form.liket : lk.title)}" style="margin-top:12px"><button class="btn pri wide" style="margin-top:14px" data-a="f-save" data-f="like">保存</button>`; }
+      return '';
+    }
+    case 'care': return `<p class="sttl">可以立即联系的帮助</p><p class="t-sub" style="margin-top:6px">心理援助热线（号码以上线前核实的配置为准）</p><div class="sunkbox" style="margin-top:12px;font-size:16px">全国心理援助热线<br><span class="t-tag">上线前核实</span></div><button class="btn sec wide" style="margin-top:16px" data-a="close">好</button>`;
+  }
+  return '';
+}
+function renderOv() {
+  const ov = $('#ov'); let h = '';
+  if (T.sheet) { const st = T.sheetFresh ? '' : 'style="animation:none"'; h = `<div class="scrim" data-a="close" ${st}></div><div class="sheet" role="dialog" ${st}><div class="grab" data-grab><i></i></div><div class="sbody">${sheetHtml(T.sheet)}</div></div>`; }
+  else if (T.confirm) { const c = T.confirm; const st = T.sheetFresh ? '' : 'style="animation:none"'; h = `<div class="scrim" data-a="close" ${st}></div><div class="confirm" role="alertdialog" ${st}><h3>${c.title}</h3>${c.body ? `<p>${c.body}</p>` : ''}<div class="cbtns"><button class="btn sec" data-a="close">${c.cancel || '再想想'}</button><button class="btn ${c.danger ? 'danger' : 'pri'}" data-a="confirm-ok">${c.ok}</button></div></div>`; }
+  const ae = document.activeElement; const fid = ae && ov.contains(ae) ? ae.id : null; let ss = 0; try { ss = ae.selectionStart; } catch (e) { }
+  ov.innerHTML = h; T.sheetFresh = false;
+  if (fid) { const el = document.getElementById(fid); if (el) { el.focus({ preventScroll: true }); try { el.setSelectionRange(ss, ss); } catch (e) { } } }
+  const g = ov.querySelector('[data-grab]'); if (g) bindGrab(g, ov.querySelector('.sheet'));
+  renderTool();
+}
+function bindGrab(g, sheet) {
+  let y0 = null, dy = 0;
+  g.addEventListener('pointerdown', e => { y0 = e.clientY; dy = 0; g.setPointerCapture(e.pointerId); sheet.style.transition = 'none'; });
+  g.addEventListener('pointermove', e => { if (y0 == null) return; dy = Math.max(0, e.clientY - y0); sheet.style.transform = `translateY(${dy}px)`; });
+  const up = () => { if (y0 == null) return; y0 = null; sheet.style.transition = 'transform .25s'; if (dy > 70) { sheet.style.transform = 'translateY(100%)'; setTimeout(closeSheet, 200); } else sheet.style.transform = ''; };
+  g.addEventListener('pointerup', up); g.addEventListener('pointercancel', up);
+}
+
+/* ============ 左滑划过 ============ */
+function bindSwipe() {
+  const el = $('#host [data-swipe]'); if (!el) return;
+  let x0 = null, y0 = 0, dx = 0, drag = false;
+  el.addEventListener('pointerdown', e => { if (e.button) return; x0 = e.clientX; y0 = e.clientY; dx = 0; drag = false; });
+  el.addEventListener('pointermove', e => {
+    if (x0 == null) return; const ddx = e.clientX - x0, ddy = e.clientY - y0;
+    if (!drag && Math.abs(ddx) > 10 && Math.abs(ddx) > Math.abs(ddy) * 1.2) { drag = true; try { el.setPointerCapture(e.pointerId); } catch (_) { } el.classList.remove('rise', 'back'); }
+    if (drag) { dx = Math.min(40, ddx); el.style.transform = `translateX(${dx}px) rotate(${dx / 40}deg)`; }
+  });
+  const end = () => {
+    if (x0 == null) return; x0 = null;
+    if (!drag) return; T.suppressClick = true; setTimeout(() => T.suppressClick = false, 60);
+    if (dx < -90) { el.classList.add('leave'); setTimeout(() => doSwipe(el.dataset.ctx, el.dataset.p), 300); }
+    else { el.classList.add('back'); el.style.transform = ''; }
+  };
+  el.addEventListener('pointerup', end); el.addEventListener('pointercancel', end);
+}
+function doSwipe(ctx, pid) {
+  if (ctx === 'daily') { if (!S.daily.done.includes(pid)) S.daily.done.push(pid); }
+  else if (ctx.startsWith('after:')) { const p = post(ctx.slice(6)); if (p && p.after && !p.after.done.includes(pid)) p.after.done.push(pid); }
+  render();
+}
+
+/* ============ 动作 ============ */
+const A = {
+  noop() { }, close() { T.sheet = null; T.confirm = null; renderOv(); },
+  tab(d) { setTab(d.t); }, back() { if (!back()) { } },
+  'set-meet'() { T.anchor = 'meet'; go({ r: 'settings' }); },
+  go(d) { const r = { r: d.r }; if (d.k) r.k = d.k; go(r); },
+  seg(d) { S.ui.seg = d.v; T.lastCardKey = null; render(); },
+  myhome() { go({ r: 'myhome' }); },
+  profile(d) { if (d.p === 'me') return go({ r: 'myhome' }); go({ r: 'profile', p: d.p }); },
+  openPost(d) { const r = { r: 'post', post: d.post }; if (d.thread) r.thread = d.thread; go(r); },
+  between(d) { go({ r: 'between', p: d.p }); },
+  conv(d) { T.scroll['conv' + d.p] = null; delete T.scroll['conv-' + d.p]; go({ r: 'conv', p: d.p }); },
+  // 写
+  'w-img'() { const d = S.draft; T.visOpen = false; if (draftMain(d) && draftMain(d) !== 'img') return; if (d.imgs.length >= 9) return; d.imgs.push(['mist', 'sand', 'apricot'][d.imgs.length % 3]); saveDraftNow(); render(); },
+  'w-vid'() { const d = S.draft; T.visOpen = false; if (draftMain(d)) return; d.video = { dur: '0:24' }; saveDraftNow(); render(); },
+  'w-voice'() { const d = S.draft; T.visOpen = false; if (draftMain(d)) return; d.voice = { dur: '0:18', text: '今天走了很远的路，想找个人说说话，就说给这里吧。' }; saveDraftNow(); render(); },
+  'w-card'() { T.visOpen = false; openSheet({ k: 'card', tab: '歌' }); },
+  'w-rm'(d) { const x = S.draft; if (d.k === 'img') x.imgs.splice(+d.i, 1); else x[d.k] = null; saveDraftNow(); render(); },
+  'w-vis'() { T.visOpen = !T.visOpen; render(); },
+  'w-disc'() { const d = S.draft; d.disc = !(d.disc == null ? S.set.newDisc : d.disc); saveDraftNow(); render(); },
+  'w-home'() { const d = S.draft; d.home = !(d.home == null ? S.set.newHome : d.home); saveDraftNow(); render(); },
+  'w-send'() { publish(); },
+  'w-focus'(d, el, e) { const t = $('#w-text'); if (!t) return; T.wFocus = true; const w = t.closest('.write-wrap'); if (w) w.classList.add('typing', 'focused'); if (document.activeElement !== t) t.focus({ preventScroll: true }); const n = t.value.length; try { t.setSelectionRange(n, n); } catch (_) { } },
+  'w-cancel'() {
+    const t = $('#w-text');
+    if (t) S.draft.text = t.value;
+    saveDraftNow(); saveNow();
+    T.wFocus = false; T.visOpen = false; T.keyboardOpen = false;
+    if (t) t.blur();
+    if (document.activeElement && document.activeElement !== document.body && document.activeElement.blur) document.activeElement.blur();
+    render();
+    if (hasDraft()) toast('已保存为草稿');
+  },
+  'done-blank'() { T.doneId = null; render(); },
+  'open-after'(d) { const p = post(d.post); if (!p.after) p.after = genAfter(); go({ r: 'after', post: d.post }); },
+  'care-close'(d) { post(d.post).careShown = true; render(); },
+  'care-help'() { openSheet({ k: 'care' }); },
+  'card-tab'(d) { T.sheet.tab = d.v; T.sheet.pick = null; T.form.q = ''; renderOv(); },
+  'card-pick'(d) { T.sheet.pick = { type: d.ty, t: d.t }; renderOv(); },
+  'card-done'() { const pk = T.sheet.pick; S.draft.card = { type: pk.type, title: pk.t, quote: (T.form.quote || '').trim() }; saveDraftNow(); closeSheet(); render(); },
+  // 遇见
+  swipe(d) { const el = $('#host [data-swipe]'); if (el) { el.classList.add('leave'); setTimeout(() => doSwipe(d.ctx, d.p), 300); } else doSwipe(d.ctx, d.p); },
+  res(d) {
+    const p = post(d.post); if (!p || p.author === 'me') return;
+    if (!visibleToMe(p)) return toast('这条内容刚刚不可见了，没有发送出去。');
+    const i = S.res.findIndex(r => r.from === 'me' && r.post === d.post);
+    if (i >= 0) S.res.splice(i, 1); else { S.res.push({ from: 'me', post: d.post, ver: p.ver, t: ++S.seq }); T.justRes = d.post; }
+    render();
+  },
+  talk(d) { talk(d.p, d.origin); },
+  // 留言
+  reply(d) { T.replyTo = d.th; T.mdraft = ''; render(); setTimeout(() => { const el = $('#m-in'); if (el) el.focus(); }, 30); },
+  'reply-cancel'() { T.replyTo = null; render(); },
+  'cmt-send'(d) { cmtSend(d.post); },
+  'cmt-del'(d) {
+    confirmBox({ title: '删除这条留言？', body: '删除后不能恢复。', ok: '删除', danger: true, fn() {
+      const t = S.threads.find(x => x.id === d.th); if (t) { t.comments = t.comments.filter(c => c.id !== d.c); if (!t.comments.length) { S.threads = S.threads.filter(x => x !== t); if (T.replyTo === t.id) T.replyTo = null; } }
+      toast('已删除');
+    } });
+  },
+  // 聊天
+  'conv-send'(d) { convSend(d.p, 'text'); },
+  'conv-media'(d) { closeSheet(); convSend(d.p, d.kind); },
+  'conv-locked'() { floatHint('TA 回话后就能接着说'); },
+  'conv-end'(d) { confirmBox({ title: '结束这段对话？', body: '只停止聊天消息，共鸣和留言不受影响。', ok: '结束', fn() { const c = S.convs[d.p]; c.status = 'ended'; c.pending = null; c.ended = ++S.seq; } }); },
+  block(d) {
+    const nm = nameOf(d.p);
+    confirmBox({ title: `拉黑 ${esc(nm)}？`, body: '你们将互相看不到，也不能再说话、留言或共鸣。之后可以在“设置 → 黑名单”里解除。', ok: '拉黑', danger: true, fn() {
+      if (!S.blocks.includes(d.p)) S.blocks.push(d.p);
+      const s = stack(); while (s.length > 1 && ['conv', 'profile', 'between', 'post'].includes(s[s.length - 1].r)) s.pop();
+      T.anim = 'pop'; toast('已拉黑');
+    } });
+  },
+  report(d) { openSheet({ k: 'report', p: d.p, step: 1 }); },
+  'report-r'(d) { T.sheet.step = 2; T.sheet.reason = d.v; renderOv(); },
+  'report-send'() { T.sheet.step = 3; renderOv(); },
+  sheet(d) { const s = { k: d.k }; Object.assign(s, { p: d.p, post: d.post, th: d.th, c: d.c, mk: d.mk, f: d.f, kind: d.kind }); openSheet(s); },
+  'confirm-ok'() { const c = T.confirm; T.confirm = null; if (c && c.fn) c.fn(); render(); },
+  // 单条动态
+  'post-edit'(d) { openSheet({ k: 'edit', post: d.post }); },
+  'post-edit-save'(d) { const p = post(d.post); const v = (T.form.edit != null ? T.form.edit : p.text).trim(); if (!v && !p.att && !p.card) return toast('写点什么再保存'); if (v !== p.text) { p.text = v; p.ver++; p.edited = true; p.risk = riskOf(v); } closeSheet(); render(); toast('已保存'); },
+  'post-flag'(d) { const p = post(d.post); p[d.f] = !p[d.f]; if (p[d.f] && p.sleep) { p.sleep = null; p.noAuto = true; toast('已经放出来了'); } renderOv(); render(); },
+  'post-c'(d) {
+    const p = post(T.sheet.post); const v = d.v;
+    if (d.k === 'commentVis' && v === 'private' && p.commentVis === 'public') { S.threads.filter(t => t.post === p.id).forEach(t => t.comments.forEach(c => c.pub = false)); }
+    p[d.k] = v; renderOv(); render();
+  },
+  'post-clear'(d) { confirmBox({ title: '清空这条的共鸣和留言？', body: '这条动态上的所有共鸣和留言都会被删除，不能恢复。', ok: '清空', danger: true, fn() { S.res = S.res.filter(r => r.post !== d.post); S.threads = S.threads.filter(t => t.post !== d.post); toast('已清空'); } }); },
+  'post-del'(d) { confirmBox({ title: '删除这条动态？', body: '动态和上面的共鸣、留言都会被删除，不能恢复。', ok: '删除', danger: true, fn() { delPost(d.post); const s = stack(); while (s.length > 1 && s[s.length - 1].r === 'post') s.pop(); T.anim = 'pop'; toast('已删除'); } }); },
+  // 月份
+  'rn-use'(d) { const m = months().find(x => x.k === d.mk); T.form.rn = m.first; renderOv(); },
+  'rn-save'(d) { const v = (T.form.rn != null ? T.form.rn : (S.monthNote[d.mk] || '')).trim(); if (v) S.monthNote[d.mk] = v; else delete S.monthNote[d.mk]; closeSheet(); render(); },
+  // 清理
+  'clean-range'(d) { T.sheet.range = d.v; renderOv(); },
+  'clean-go'() {
+    const s = T.sheet; const rg = s.range || 'month';
+    const inR = p => rg === 'all' || (rg === 'month' && p.age <= 30) || (rg === 'mid' && p.age > 30 && p.age <= 90) || (rg === 'old' && p.age > 90);
+    const L = myPosts().filter(inR);
+    if (!L.length) { closeSheet(); return toast('这段时间里没有写过的内容。'); }
+    const kind = s.kind;
+    const word = { hide: '隐藏', clear: '清空', del: '删除' }[kind];
+    confirmBox({ title: `确定${word}？`, body: kind === 'hide' ? '之后可以逐条放出来。' : '不能恢复。', ok: word, danger: kind !== 'hide', fn() {
+      if (kind === 'hide') L.forEach(p => { if (!p.sleep) p.sleep = 'batch'; });
+      if (kind === 'clear') { const ids = L.map(p => p.id); S.res = S.res.filter(r => !ids.includes(r.post)); S.threads = S.threads.filter(t => !ids.includes(t.post)); }
+      if (kind === 'del') L.forEach(p => delPost(p.id));
+      toast('已' + word);
+    } });
+  },
+  // 设置
+  'set-t'(d) {
+    const k = d.k; S.set[k] = !S.set[k];
+    if (k === 'sleepOld') { if (S.set.sleepOld) myPosts().forEach(p => { if (p.age > 90 && !p.sleep && !p.noAuto) p.sleep = 'old'; }); else myPosts().forEach(p => { if (p.sleep === 'old') p.sleep = null; }); }
+    render();
+  },
+  'set-c'(d) {
+    const k = d.k; let v = d.v; if (k === 'dailyCount') v = +v;
+    if (S.set[k] === v) return;
+    if (k === 'retention') {
+      const days = { forever: 1e9, year: 365, q: 90 }[v], cur = { forever: 1e9, year: 365, q: 90 }[S.set.retention];
+      if (days < cur) {
+        return confirmBox({ title: '缩短聊天记录保留？', body: `超过${v === 'q' ? '三个月' : '一年'}的消息会从你这边永久删除。对方的聊天记录不会被删除。`, ok: '确定', danger: true, fn() { S.set.retention = v; pruneChats(); } });
+      }
+      S.set.retention = v; pruneChats(); return render();
+    }
+    S.set[k] = v;
+    if (k === 'dailyCount' && S.daily.gen && S.daily.count !== v) toast('今天的遇见已经生成，新数量从下一次开始。', 3000);
+    render();
+  },
+  acc(d) { S.me.access[d.k] = !S.me.access[d.k]; render(); },
+  show(d) { S.me.show[d.k] = !S.me.show[d.k]; render(); },
+  'f-bg'(d) { S.me.bg = d.v; renderOv(); render(); },
+  'f-mood'(d) { T.form.mood = d.v; renderOv(); },
+  'f-liketype'(d) { T.form.like = Object.assign({}, T.form.like || S.me.like || { title: '' }, { type: d.v }); renderOv(); },
+  'f-clear'(d) { S.me[d.f] = ''; closeSheet(); render(); },
+  'f-save'(d) {
+    const f = d.f, F = T.form;
+    if (f === 'name') { const v = (F.name != null ? F.name : S.me.name).trim(); if (!v) return toast('昵称不能是空的'); S.me.name = v; S.me.av = v[v.length - 1]; }
+    if (f === 'intro') S.me.intro = (F.intro != null ? F.intro : S.me.intro).trim();
+    if (f === 'mood') S.me.mood = F.mood != null ? F.mood : S.me.mood;
+    if (f === 'like') { const t = (F.liket != null ? F.liket : (S.me.like || {}).title || '').trim(); const ty = (F.like || S.me.like || { type: '歌' }).type; S.me.like = t ? { type: ty, title: t } : null; }
+    closeSheet(); render();
+  },
+  unblock(d) { confirmBox({ title: `解除对 ${esc(nameOf(d.p))} 的拉黑？`, body: '解除后不会自动恢复联系。', ok: '解除', fn() { S.blocks = S.blocks.filter(x => x !== d.p); toast('已解除'); } }); },
+  export() { toast('导出已开始准备，完成后会出现在这里。'); },
+  freeze() { confirmBox({ title: '进入冻结期？', body: '七天内登录即可恢复。期满后，动态、主页、共鸣、留言和你发出的消息会被删除。', ok: '确认冻结', danger: true, fn() { S.frozen = true; T.anim = 'fade'; } }); },
+  unfreeze() { S.frozen = false; S.ui.tab = 'me'; S.ui.stacks.me = [ROOT.me]; T.anim = 'fade'; render(); toast('账号已恢复'); },
+};
+function riskOf(t) { return /不想活|活着没意思|想消失|撑不下去|结束自己|不想醒来/.test(t) ? 2 : 0; }
+function publish() {
+  const d = S.draft; if (!hasDraft()) return;
+  const id = 'u' + (++S.seq);
+  const disc = d.disc == null ? S.set.newDisc : d.disc, home = d.home == null ? S.set.newHome : d.home;
+  let att = null;
+  if (d.imgs.length) att = { kind: 'images', tones: d.imgs.slice() }; else if (d.video) att = { kind: 'video', dur: d.video.dur }; else if (d.voice) att = { kind: 'voice', dur: d.voice.dur, text: d.voice.text };
+  const p = PO('me', d.text.trim(), { id, ym: '2026-10', age: 0, part: '', discoverable: disc, onHome: home, whoComment: S.set.newWho, commentVis: 'private', att, card: d.card, risk: riskOf(d.text) });
+  S.posts[id] = p; p.after = genAfter();
+  S.draft = emptyDraft(); clearTimeout(_saveT); try { localStorage.removeItem(DRAFT_KEY); } catch (e) { }
+  T.doneId = id; T.wFocus = false; T.visOpen = false; S.opens++;
+  const el = $('#w-text'); if (el) el.blur();
+  saveNow(); render();
+}
+function talk(pid, origin) {
+  const ts = talkState(pid);
+  if (ts === 'blockedMe') return toast('你已被对方拉黑，无法继续发消息。');
+  if (ts === 'none' || ts === 'endedLocked') { if (S.convs[pid]) return go({ r: 'conv', p: pid }); return toast('TA 现在不接收新的第一句。'); }
+  if (!S.convs[pid] && origin) T.origin[pid] = origin;
+  go({ r: 'conv', p: pid });
+}
+function cmtSend(postId) {
+  const p = post(postId); const text = (T.mdraft || '').trim(); if (!text || !p) return;
+  if (p.author === 'me') {
+    const th = S.threads.find(t => t.id === T.replyTo); if (!th) return;
+    if (blockedEither(th.commenter)) return toast('你们之间有拉黑，没有发送出去。');
+    if (p.whoComment === 'off') return toast('这条动态的留言已关闭，没有发送出去。');
+    if (!myPostVisibleTo(p, th.commenter)) return toast('这条现在对 TA 不可见，没有发送出去。');
+    th.comments.push(C('me', text, { pub: p.commentVis === 'public', ver: p.ver, t: '刚刚' }));
+  } else {
+    const cc = canComment(p); if (!cc.ok) return toast(cc.why.includes('没有发送') ? cc.why : cc.why + '没有发送出去。');
+    let th = S.threads.find(t => t.post === postId && t.commenter === 'me');
+    if (!th) { th = { id: 't' + (++S.seq), post: postId, commenter: 'me', comments: [] }; S.threads.push(th); }
+    th.comments.push(C('me', text, { pub: p.commentVis === 'public', ver: p.ver, t: '刚刚' }));
+  }
+  T.mdraft = ''; T.scrollBottom = true; render(); toast('留言已发出');
+}
+function convSend(pid, kind) {
+  const text = (T.cdraft[pid] || '').trim(); if (kind === 'text' && !text) return;
+  const ts = talkState(pid);
+  if (ts === 'blockedMe') return toast('你已被对方拉黑，没有发送出去。');
+  if (ts === 'frozen' || ts === 'iBlocked') return toast('现在不能发消息，没有发送出去。');
+  let c = S.convs[pid];
+  if (!c) {
+    if (!canFirst(pid)) return toast('TA 现在不接收新的第一句，没有发送出去。');
+    c = S.convs[pid] = { status: 'pending', pending: 'me', origin: T.origin[pid] || null, firstChat: null, ended: null, seq: 0, unread: false, warned: false, cleared: false, msgs: [] };
+  } else if (c.status === 'pending') {
+    if (c.pending === 'me') return floatHint('TA 回话后就能接着说');
+    c.status = 'chatting'; c.pending = null; if (!c.firstChat) c.firstChat = ++S.seq;
+  } else if (c.status === 'ended') {
+    if (!(c.firstChat && canFirst(pid))) return toast('现在不能重新开始这段对话，没有发送出去。');
+    c.status = 'pending'; c.pending = 'me';
+  }
+  const m = kind === 'image' ? M('me', '', '刚刚', { kind: 'image', tone: 'mist' }) : kind === 'voice' ? M('me', '刚刚路过那家店，想到你说的话。', '刚刚', { kind: 'voice', dur: '0:07' }) : M('me', text, '刚刚');
+  m.id = 'x' + (++S.seq);
+  if (kind === 'text' && !c.warned && /(微信|vx|wx|wechat|weixin|qq|1[3-9]\d{9}|https?:\/\/|www\.|二维码)/i.test(text)) { m.warn = true; c.warned = true; }
+  c.msgs.push(m); c.seq = ++S.seq; T.cdraft[pid] = ''; T.newMsg = m.id; T.scrollBottom = true;
+  render();
+  scheduleReply(pid);
+}
+function scheduleReply(pid) {
+  if (!S.test.auto) return;
+  const c = S.convs[pid]; const wasPending = c.status === 'pending' && c.pending === 'me';
+  setTimeout(() => {
+    const c2 = S.convs[pid]; if (!c2 || blockedEither(pid) || S.frozen) return;
+    if (wasPending && !(c2.status === 'pending' && c2.pending === 'me')) return;
+    if (!wasPending && c2.status !== 'chatting') return;
+    theyReply(pid);
+  }, wasPending ? 4500 : 2400);
+}
+function theyReply(pid) {
+  const c = S.convs[pid]; if (!c || blockedEither(pid)) return false;
+  if (c.status === 'ended') return false;
+  if (c.status === 'pending') { if (c.pending !== 'me') return false; c.status = 'chatting'; c.pending = null; if (!c.firstChat) c.firstChat = ++S.seq; }
+  const m = M(pid, REPLIES[S.seq % REPLIES.length], '刚刚'); m.id = 'x' + (++S.seq);
+  c.msgs.push(m); c.seq = ++S.seq;
+  const r = topR(); const here = r.r === 'conv' && r.p === pid && !S.frozen;
+  c.unread = !here; if (here) { T.newMsg = m.id; T.scrollBottom = true; }
+  render(); return true;
+}
+function pruneChats() {
+  const days = { forever: 1e9, year: 365, q: 90 }[S.set.retention];
+  Object.values(S.convs).forEach(c => { const n = c.msgs.length; c.msgs = c.msgs.filter(m => m.age <= days); if (c.msgs.length < n) c.cleared = true; });
+}
+
+/* ============ 测试状态工具（非正式功能，仅供验收） ============ */
+const SEED_MY = ['m1', 'm2', 'm3', 'm4', 'm5', 'm6', 'm7'];
+function restoreMyPosts() {
+  const sp = seedPosts();
+  SEED_MY.forEach(id => { if (!S.posts[id]) S.posts[id] = sp[id]; });
+  myPosts().forEach(p => { if (p.sleep === 'batch') p.sleep = null; });
+}
+function ensureMyContent() {
+  if (!myPosts().some(p => p.discoverable && !p.sleep)) restoreMyPosts();
+  if (!myPosts().some(p => p.discoverable && !p.sleep)) { const p = myPosts()[0]; if (p) { p.discoverable = true; p.sleep = null; } }
+}
+function freePerson(pid) { const pe = S.people[pid]; if (!pe) return; pe.blockedMe = false; pe.frozen = false; pe.gone = false; if (pid === 'yizhie' && !S.posts.e1) S.posts.e1 = seedPosts().e1; S.blocks = S.blocks.filter(x => x !== pid); }
+function meetReady() {
+  ensureMyContent(); S.day = { k: todayKey(), seen: [] }; S.set.daily = true; S.set.sigText = true; S.set.sigExp = true;
+  DAILY_POOL.concat(AFTER_POOL).forEach(pid => { freePerson(pid); const c = S.convs[pid]; if (c && (c.status === 'pending' || c.status === 'chatting')) delete S.convs[pid]; });
+}
+function latestMyPost() {
+  ensureMyContent();
+  return myPosts().find(p => p.text && !p.sleep) || myPosts()[0];
+}
+function restoreSeedThreads(ids) {
+  const st = seedThreads();
+  ids.forEach(id => { const s = st.find(t => t.id === id); if (!s) return; S.threads = S.threads.filter(t => t.id !== id && !(t.post === s.post && t.commenter === s.commenter)); S.threads.push(s); freePerson(s.commenter); });
+}
+function myS1Thread(pub) {
+  S.threads = S.threads.filter(t => !(t.post === 's1' && t.commenter === 'me'));
+  S.threads.push({ id: 't6', post: 's1', commenter: 'me', comments: [C('me', '我搬家的第一晚也是这样，连冰箱的声音都觉得陌生。', { pub, t: '周五' }), C('shanlan', '后来你习惯了吗？', { pub, t: '周五' })] });
+}
+function goneAway(pid) {
+  const pe = S.people[pid]; pe.frozen = true; pe.gone = true;
+  Object.values(S.posts).filter(p => p.author === pid).forEach(p => delPost(p.id));
+  S.res = S.res.filter(r => r.from !== pid); S.threads = S.threads.filter(t => t.commenter !== pid);
+  const c = S.convs[pid]; if (c) c.msgs = c.msgs.filter(m => m.by !== pid);
+}
+function restoreConv(pid) { const c = seedConvs()[pid]; freePerson(pid); S.convs[pid] = c; return c; }
+function jump(tab, routes, extra) { T.tool = false; T.sheet = null; T.confirm = null; if (extra) extra(); setTab(tab, routes); }
+
+const SCEN = [
+  ['内容', [
+    ['never', '从未写过内容', () => { myPosts().forEach(p => delPost(p.id)); S.draft = emptyDraft(); S.daily.gen = false; T.doneId = null; return ['me', []]; }],
+    ['restore', '恢复写过的内容', () => { restoreMyPosts(); S.daily.gen = false; return ['me', []]; }],
+  ]],
+  ['每日遇见', [
+    ['d0', '每日遇见 0 人', () => { meetReady(); S.daily = { gen: true, list: [], done: [], count: S.set.dailyCount }; S.ui.seg = 'mine'; return ['meet', []]; }],
+    ['d1', '每日遇见有内容', () => { meetReady(); S.daily.gen = false; ensureDaily(); S.ui.seg = 'mine'; return ['meet', []]; }],
+    ['day2', '模拟进入第二天', () => { S.day = null; S.ui.seg = 'mine'; return ['meet', []]; }],
+    ['d2', '每日遇见看完', () => { meetReady(); S.daily.gen = false; ensureDaily(); S.daily.done = S.daily.list.slice(); S.ui.seg = 'mine'; return ['meet', []]; }],
+  ]],
+  ['写后遇见', [
+    ['a0', '写后遇见 0 人', () => { meetReady(); S.set.afterWrite = true; const p = latestMyPost(); p.after = { list: [], done: [] }; return ['write', [{ r: 'after', post: p.id }]]; }],
+    ['a1', '写后遇见看一半', () => { meetReady(); S.set.afterWrite = true; const p = latestMyPost(); const L = AFTER_POOL.filter(candidateOK).slice(0, 4); p.after = { list: L, done: L.slice(0, 2) }; return ['write', [{ r: 'after', post: p.id }]]; }],
+    ['a2', '写后遇见看完', () => { meetReady(); S.set.afterWrite = true; const p = latestMyPost(); const L = AFTER_POOL.filter(candidateOK).slice(0, 3); p.after = { list: L, done: L.slice() }; return ['write', [{ r: 'after', post: p.id }]]; }],
+  ]],
+  ['遇见我的人', [
+    ['r1', '有共鸣', () => { restoreMyPosts(); seedResonances().filter(r => r.from !== 'me').forEach(r => { freePerson(r.from); if (!S.res.some(x => x.from === r.from && x.post === r.post)) S.res.push(r); }); S.ui.seg = 'me'; return ['meet', []]; }],
+    ['r0', '共鸣为空', () => { S.res = S.res.filter(r => !(r.from !== 'me' && post(r.post) && post(r.post).author === 'me')); S.ui.seg = 'me'; return ['meet', []]; }],
+    ['c1', '有留言', () => { restoreMyPosts(); restoreSeedThreads(['t1', 't2']); S.ui.seg = 'me'; return ['meet', []]; }],
+    ['c0', '留言为空', () => { S.threads = S.threads.filter(t => !(post(t.post) && post(t.post).author === 'me')); S.ui.seg = 'me'; return ['meet', []]; }],
+  ]],
+  ['留言区（山岚的动态）', [
+    ['cp', '私密留言', () => { freePerson('shanlan'); restoreSeedThreads(['t3', 't4', 't5']); const p = post('s1'); p.commentVis = 'private'; p.whoComment = 'all'; myS1Thread(false); S.threads.filter(t => t.post === 's1').forEach(t => t.comments.forEach(c => c.pub = false)); return ['meet', [{ r: 'post', post: 's1' }]]; }],
+    ['cu', '公开留言', () => { freePerson('shanlan'); restoreSeedThreads(['t3', 't4', 't5']); const p = post('s1'); p.commentVis = 'public'; p.whoComment = 'all'; myS1Thread(true); return ['meet', [{ r: 'post', post: 's1' }]]; }],
+  ]],
+  ['聊天', [
+    ['k1', '第一句待回复', () => { restoreConv('shannabian'); return ['chat', [{ r: 'conv', p: 'shannabian' }]]; }],
+    ['k2', '聊天中', () => { restoreConv('wanfeng'); return ['chat', [{ r: 'conv', p: 'wanfeng' }]]; }],
+    ['k3', '已结束聊天', () => { restoreConv('yizhie'); S.people.yizhie.whoFirst = 'all'; return ['chat', [{ r: 'conv', p: 'yizhie' }]]; }],
+    ['k4', '聊天记录已过期', () => { restoreConv('qiuchi'); S.set.retention = 'q'; pruneChats(); return ['chat', [{ r: 'conv', p: 'qiuchi' }]]; }],
+    ['k0', '聊天为空', () => { S.convs = {}; return ['chat', []]; }],
+  ]],
+  ['拉黑与离开', [
+    ['b1', '被拉黑（山岚拉黑了我）', () => { freePerson('shanlan'); S.people.shanlan.blockedMe = true; return ['meet', [{ r: 'profile', p: 'shanlan' }]]; }],
+    ['b2', '解除“被拉黑”', () => { freePerson('shanlan'); return ['meet', [{ r: 'profile', p: 'shanlan' }]]; }],
+    ['f1', '对方冻结期（一只鹅）', () => { restoreConv('yizhie'); S.people.yizhie.frozen = true; return ['chat', [{ r: 'conv', p: 'yizhie' }]]; }],
+    ['f2', '对方注销期满（一只鹅）', () => { restoreConv('yizhie'); goneAway('yizhie'); return ['chat', [{ r: 'conv', p: 'yizhie' }]]; }],
+    ['b0', '黑名单为空', () => { S.blocks = []; return ['me', [{ r: 'settings' }, { r: 'blacklist' }]]; }],
+    ['b3', '黑名单有人', () => { if (!S.blocks.includes('wuli')) S.blocks.push('wuli'); return ['me', [{ r: 'settings' }, { r: 'blacklist' }]]; }],
+  ]],
+];
+const ACC_PRESETS = [
+  ['all', '主页四类权限全开', { met: true, resonated: true, commented: true, chatted: true }],
+  ['met', '只开“我遇见的人”', { met: true, resonated: false, commented: false, chatted: false }],
+  ['resonated', '只开“共鸣过我的人”', { met: false, resonated: true, commented: false, chatted: false }],
+  ['commented', '只开“给我留言的人”', { met: false, resonated: false, commented: true, chatted: false }],
+  ['chatted', '只开“和我聊过的人”', { met: false, resonated: false, commented: false, chatted: true }],
+  ['none', '主页四类全部关闭', { met: false, resonated: false, commented: false, chatted: false }],
+];
+const sameAcc = (a, b) => CATS.every(([k]) => !!a[k] === !!b[k]);
+function accPresetOn(acc) { const x = ACC_PRESETS.find(p => sameAcc(p[2], acc)); return x ? x[0] : null; }
+function othersAccPreset() { const L = Object.values(S.people); const f = accPresetOn(L[0].access); return L.every(p => accPresetOn(p.access) === f) ? f : null; }
+const REL_ME = { met: '遇见过', resonated: '有过共鸣', commented: '有过留言', chatted: '聊过' };
+const REL_THEM = REL_ME;
+const relTags = (r, L) => CATS.filter(([k]) => r[k]).map(([k]) => L[k]);
+// 访客模拟列表：和我有任一关系的人
+function relPeople() { return Object.values(S.people).filter(p => { const r = relToMe(p.id); return CATS.some(([k]) => r[k]); }); }
+
+function renderTool() {
+  let el = $('#tool');
+  if (!T.tool) { if (el) el.remove(); return; }
+  if (!el) { el = document.createElement('div'); el.id = 'tool'; el.className = 'tt'; el.setAttribute('role', 'dialog'); $('#phone').appendChild(el); el.addEventListener('scroll', () => { }, true); }
+  const keep = el.querySelector('.ttb'); const st = keep ? keep.scrollTop : 0;
+  const tgt = T.toolTarget;
+  const curPreset = tgt === 'me' ? accPresetOn(S.me.access) : othersAccPreset();
+  const chip = (act, k, label, on = false, extra = '') => `<button class="tchip ${on ? 'on' : ''}" data-a="${act}" data-k="${k}" ${extra}>${label}</button>`;
+  let h = `<div class="tthd"><b>测试状态</b><button class="ib" data-a="tool-close" aria-label="关闭测试状态">${I.xl}</button></div><div class="ttb">
+  <p class="t-tag" style="line-height:1.7">这是验收用的隐藏工具，不是正式功能。切换会真正改写 App 的数据状态${T.toolJump ? '，并跳到能看到效果的页面' : ''}。</p>
+  <div class="row" style="min-height:48px"><span class="rt" style="font-size:14px">切换后跳到相关页面</span>${Tg(T.toolJump, 'tool-jump', '', '切换后跳到相关页面')}</div>
+  <p class="tg-h">主题</p><div class="tchips">${chip('tool-theme', 'light', '浅色', S.theme === 'light')}${chip('tool-theme', 'dark', '深色', S.theme === 'dark')}</div>`;
+  SCEN.forEach(([g, L]) => { h += `<p class="tg-h">${g}</p><div class="tchips">${L.map(([k, l]) => chip('tool-s', k, l)).join('')}</div>`; });
+  h += `<p class="tg-h">主页权限（谁能进入主页）</p>
+  <div class="tchips" style="margin-bottom:8px">${chip('tool-tgt', 'others', '作用于：其他人的主页', tgt === 'others')}${chip('tool-tgt', 'me', '作用于：我的主页', tgt === 'me')}</div>
+  <div class="tchips">${ACC_PRESETS.map(([k, l]) => chip('tool-acc', k, l, curPreset === k)).join('')}</div>`;
+  if (tgt === 'others') {
+    h += `<p class="tg-h">我现在能进入谁的主页</p>` + Object.values(S.people).filter(p => { const r = relToThem(p.id); return CATS.some(([k]) => r[k]); }).map(p => {
+      const r = relToThem(p.id), ok = canEnterHome(p.id), tags = relTags(r, REL_THEM);
+      const why = p.blockedMe ? '对方拉黑了我' : S.blocks.includes(p.id) ? '我拉黑了 TA' : '';
+      return `<button class="vrow" data-a="tool-visit" data-k="${p.id}" data-mode="profile">${Av(p.id, 32)}<span class="vm">${esc(p.name)}<small>${tags.join('、')}${why ? '　' + why : ''}</small></span><span class="${ok ? 'ok' : 'no'}">${ok ? '能进入' : '不能进入'}</span></button>`;
+    }).join('');
+  } else {
+    h += `<p class="tg-h">以对方身份看我的主页</p>` + relPeople().map(p => {
+      const r = relToMe(p.id), ok = visitorCanEnterMine(p.id), tags = relTags(r, REL_ME);
+      return `<button class="vrow" data-a="tool-visit" data-k="${p.id}" data-mode="visit">${Av(p.id, 32)}<span class="vm">${esc(p.name)}<small>${tags.join('、')}</small></span><span class="${ok ? 'ok' : 'no'}">${ok ? '能进入' : '不能进入'}</span></button>`;
+    }).join('');
+  }
+  const cur = topR();
+  const replyable = Object.entries(S.convs).filter(([pid, c]) => !blockedEither(pid) && (c.status === 'chatting' || (c.status === 'pending' && c.pending === 'me')));
+  h += `<p class="tg-h">模拟对方</p>
+  <div class="row" style="min-height:48px"><span class="rt" style="font-size:14px">对方自动回话<br><span class="t-tag">第一句约 4 秒后回，聊天中约 2 秒后回</span></span>${Tg(S.test.auto, 'tool-auto', '', '对方自动回话')}</div>
+  <div class="tchips" style="margin-top:8px">${replyable.length ? replyable.map(([pid, c]) => chip('tool-reply', pid, `让${esc(nameOf(pid))}回一句${c.status === 'pending' ? '（回第一句）' : ''}`, cur.r === 'conv' && cur.p === pid)).join('') : '<span class="t-tag">现在没有等对方回话的对话。</span>'}</div>
+  <p class="tg-h">无障碍</p>
+  <div class="row" style="min-height:48px"><span class="rt" style="font-size:14px">遇见卡显示“划过”按钮</span>${Tg(S.test.a11y, 'tool-a11y', '', '显示划过按钮')}</div>
+  <p class="tg-h">数据</p><div class="tchips">${chip('tool-reset', 'x', '全部重置为初始状态')}</div>
+  </div>`;
+  el.innerHTML = h;
+  const nb = el.querySelector('.ttb'); if (nb) nb.scrollTop = st;
+}
+function renderSide() {
+  const sd = $('#side'); if (!sd) return;
+  const r = topR();
+  const names = { write: '写', after: '写后遇见', meet: '遇见', quiet: '安静的共鸣', commenters: '给我留言的人', profile: '人物主页', post: '动态与留言', chats: '聊天', conv: '对话', between: '你们之间', me: '我', month: '写过的', myhome: '我的主页', edithome: '编辑主页', settings: '设置', blacklist: '黑名单', cleanup: '清理', account: '导出与注销', visit: '访客视角' };
+  sd.innerHTML = `<div style="display:flex;align-items:center;gap:8px">${dropSvg(16, 18, true)}<h2>知音 · 交互母版</h2></div>
+  <p style="margin:0">v3.2 功能逻辑 · 晨雾一滴</p>
+  <div class="seg2" role="group" aria-label="主题"><button class="${S.theme === 'light' ? 'on' : ''}" data-a="tool-theme" data-k="light">浅色</button><button class="${S.theme === 'dark' ? 'on' : ''}" data-a="tool-theme" data-k="dark">深色</button></div>
+  <p style="margin:6px 0 0">当前：${S.frozen ? '冻结期' : (names[r.r] || r.r)}</p>
+  <p style="margin:0;color:var(--ink3);font-size:15px">数据自动保存在本机浏览器。</p>`;
+}
+Object.assign(A, {
+  'tool-open'() { T.tool = true; renderTool(); },
+  'tool-close'() { T.tool = false; renderTool(); },
+  'tool-jump'() { T.toolJump = !T.toolJump; renderTool(); },
+  'tool-theme'(d) { S.theme = d.k; render(); },
+  'tool-auto'() { S.test.auto = !S.test.auto; render(); },
+  'tool-a11y'() { S.test.a11y = !S.test.a11y; render(); },
+  'tool-tgt'(d) { T.toolTarget = d.k; renderTool(); },
+  'tool-s'(d) {
+    if (S.frozen) S.frozen = false;
+    let hit = null; SCEN.forEach(([, L]) => L.forEach(x => { if (x[0] === d.k) hit = x; }));
+    if (!hit) return;
+    const res = hit[2](); T.lastCardKey = null;
+    if (T.toolJump && res) jump(res[0], res[1]); else render();
+    toast('已切换：' + hit[1], 1600);
+  },
+  'tool-acc'(d) {
+    const pr = ACC_PRESETS.find(x => x[0] === d.k); if (!pr) return;
+    if (T.toolTarget === 'me') { S.me.access = Object.assign({}, pr[2]); if (T.toolJump) jump('me', [{ r: 'myhome' }, { r: 'edithome' }]); else render(); }
+    else { Object.values(S.people).forEach(p => p.access = Object.assign({}, pr[2])); render(); }
+    toast('已切换：' + pr[1] + (T.toolTarget === 'me' ? '（我的主页）' : '（其他人的主页）'), 1800);
+  },
+  'tool-visit'(d) {
+    if (d.mode === 'visit') jump('me', [{ r: 'visit', p: d.k }]);
+    else jump('meet', [{ r: 'profile', p: d.k }]);
+  },
+  'tool-reply'(d) { if (!theyReply(d.k)) toast('现在没法替对方回话'); else { const r = topR(); if (!(r.r === 'conv' && r.p === d.k)) toast(nameOf(d.k) + ' 回了一句'); } renderTool(); },
+  'tool-reset'() { confirmBox({ title: '全部重置？', body: '所有改动会回到初始演示数据。主题保留。', ok: '重置', danger: true, fn() { const th = S.theme; S = fresh(); S.theme = th; T.doneId = null; T.cdraft = {}; T.mdraft = ''; T.lastCardKey = null; T.tool = false; T.anim = 'fade'; } }); },
+  'preview-talk'() { toast('这是对方看到的样子，“说话”在对方那边可用。', 2000); },
+});
+
+/* ============ 事件 ============ */
+function bindEvents() {
+  document.addEventListener('click', e => {
+    if (T.suppressClick) { e.preventDefault(); e.stopPropagation(); return; }
+    const b = e.target.closest('[data-a]'); if (!b) return;
+    if (b.disabled) return;
+    const fn = A[b.dataset.a]; if (!fn) { console.warn('no action', b.dataset.a); return; }
+    if (!(b.dataset.a === 'w-focus' && e.target && e.target.id === 'w-text')) e.preventDefault();
+    fn(Object.assign({}, b.dataset), b, e);
+  });
+  // 发送/工具按钮按下时不让输入框失焦。pointerdown 覆盖安卓触摸，mousedown 作为桌面兜底。
+  const keepInputFocus = e => { if (e.target.closest('.csend,[data-nofocus]')) e.preventDefault(); };
+  document.addEventListener('pointerdown', keepInputFocus, { passive: false });
+  document.addEventListener('mousedown', keepInputFocus);
+  document.addEventListener('input', e => {
+    const t = e.target;
+    if (t.id === 'w-text') { S.draft.text = t.value; autosize(t); saveDraftNow(); save(); if (t.selectionEnd === t.value.length) { const sc = t.closest('.scroll'); if (sc) sc.scrollTop = sc.scrollHeight; } const sb = $('#w-send'); if (sb) sb.disabled = !hasDraft(); return; }
+    if (t.id === 'c-in') { T.cdraft[t.dataset.p] = t.value; autosize(t); return; }
+    if (t.id === 'm-in') { T.mdraft = t.value; autosize(t); return; }
+    if (t.dataset && t.dataset.f) { T.form[t.dataset.f] = t.value; if (t.dataset.f === 'q') { renderOv(); } return; }
+  });
+  document.addEventListener('keydown', e => {
+    const t = e.target;
+    if (e.key === 'Enter' && !e.shiftKey && !e.isComposing && (t.id === 'c-in' || t.id === 'm-in')) {
+      e.preventDefault();
+      if (t.id === 'c-in') convSend(t.dataset.p, 'text'); else { const r = topR(); if (r.r === 'post') cmtSend(r.post); }
+      return;
+    }
+    if (e.key === 'Escape') { if (T.tool) { T.tool = false; renderTool(); } else if (T.sheet || T.confirm) A.close(); return; }
+  });
+  document.addEventListener('focusin', e => {
+    if (e.target.id !== 'w-text') return;
+    T.wFocus = true;
+    const w = e.target.closest('.write-wrap');
+    if (w) w.classList.add('typing', 'focused');
+  });
+  document.addEventListener('focusout', e => { if (e.target.id === 'w-text') setTimeout(() => {
+    if (document.activeElement && document.activeElement.id === 'w-text') return;
+    if (T.wFocus) { T.wFocus = false; if (topR().r === 'write' && !T.sheet) render(); }
+  }, 120); });
+  window.addEventListener('popstate', () => { if (T.tool) { T.tool = false; renderTool(); return; } if (T.sheet || T.confirm) { A.close(); return; } back(); });
+  const vv = () => {
+    const h = window.visualViewport ? window.visualViewport.height : window.innerHeight;
+    document.documentElement.style.setProperty('--vvh', h + 'px');
+    T.vvMax = Math.max(T.vvMax || 0, h);
+    const open = (T.vvMax - h) > 120;
+    const wasOpen = !!T.keyboardOpen;
+    T.keyboardOpen = open;
+    // 安卓用键盘收起键时 focusout 有时不会可靠触发；视口恢复后兜底恢复写页导航。
+    if (wasOpen && !open && T.wFocus && topR().r === 'write') {
+      T.wFocus = false;
+      const t = $('#w-text'); if (t) t.blur();
+      if (!T.sheet) render();
+    }
