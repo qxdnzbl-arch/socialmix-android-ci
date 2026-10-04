@@ -1,0 +1,212 @@
+name: Build NZBL Private VPN APK
+
+on:
+  push:
+    branches:
+      - nzbl-private-vpn-apk-20261004
+    paths:
+      - ".github/workflows/nzbl-private-vpn-apk.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-smoke-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout trigger repo
+        uses: actions/checkout@v4
+
+      - name: Checkout v2rayNG stable source
+        run: |
+          git clone --branch 2.2.6 --depth 1 --recurse-submodules --shallow-submodules https://github.com/2dust/v2rayNG.git v2rayng-src
+
+      - name: Apply private VPN app patch
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          root = Path("v2rayng-src")
+          app_gradle = root / "V2rayNG/app/build.gradle.kts"
+          s = app_gradle.read_text()
+          s = s.replace('applicationId = "com.v2ray.ang"', 'applicationId = "com.nzbl.privatevpn"')
+          s = s.replace('"v2rayNG_${variant.versionName}-fdroid_${abi}.apk"', '"PrivateVPN_${variant.versionName}-fdroid_${abi}.apk"')
+          s = s.replace('"v2rayNG_${variant.versionName}_${abi}.apk"', '"PrivateVPN_${variant.versionName}_${abi}.apk"')
+          app_gradle.write_text(s)
+
+          for rel in [
+              "V2rayNG/app/src/main/res/values/strings.xml",
+              "V2rayNG/app/src/fdroid/res/values/strings.xml",
+              "V2rayNG/app/src/dev/res/values/strings.xml",
+              "V2rayNG/app/src/pre_release/res/values/strings.xml",
+          ]:
+              p = root / rel
+              t = p.read_text()
+              t = t.replace("v2rayNG (F-Droid)", "私人VPN")
+              t = t.replace("v2rayNG (DEV)", "私人VPN")
+              t = t.replace("v2rayNG (PR)", "私人VPN")
+              t = t.replace(">v2rayNG<", ">私人VPN<")
+              p.write_text(t)
+
+          icon = root / "V2rayNG/app/src/main/res/drawable/ic_private_vpn.xml"
+          icon.parent.mkdir(parents=True, exist_ok=True)
+          icon.write_text("""<?xml version="1.0" encoding="utf-8"?>
+          <vector xmlns:android="http://schemas.android.com/apk/res/android"
+              android:width="108dp"
+              android:height="108dp"
+              android:viewportWidth="108"
+              android:viewportHeight="108">
+              <path
+                  android:fillColor="#FFFFFF"
+                  android:pathData="M54,8 L91,22 L86,60 C82,79 69,92 54,100 C39,92 26,79 22,60 L17,22 Z"/>
+              <path
+                  android:fillColor="#111111"
+                  android:pathData="M54,27 C44,27 36,35 36,45 C36,52 40,58 46,61 L46,77 L62,77 L62,61 C68,58 72,52 72,45 C72,35 64,27 54,27 Z M54,37 C59,37 62,40 62,45 C62,50 59,53 54,53 C49,53 46,50 46,45 C46,40 49,37 54,37 Z"/>
+          </vector>
+          """)
+
+          manifest = root / "V2rayNG/app/src/main/AndroidManifest.xml"
+          m = manifest.read_text()
+          m = m.replace('android:icon="@mipmap/ic_launcher"', 'android:icon="@drawable/ic_private_vpn"')
+          manifest.write_text(m)
+
+          asset = root / "V2rayNG/app/src/main/assets/nzbl_node.txt"
+          asset.write_text("vless://00000000-0000-4000-8000-000000000000@example.com:443?encryption=none&security=tls&sni=example.com&type=ws&host=example.com&path=%2Fplaceholder#NZBL-SG\n")
+
+          app = root / "V2rayNG/app/src/main/java/com/v2ray/ang/AngApplication.kt"
+          a = app.read_text()
+          a = a.replace(
+              "import com.v2ray.ang.AppConfig.ANG_PACKAGE\nimport com.v2ray.ang.handler.SettingsManager",
+              "import com.v2ray.ang.AppConfig.ANG_PACKAGE\nimport com.v2ray.ang.AppConfig.DEFAULT_SUBSCRIPTION_ID\nimport com.v2ray.ang.handler.AngConfigManager\nimport com.v2ray.ang.handler.MmkvManager\nimport com.v2ray.ang.handler.SettingsManager"
+          )
+          anchor = """        SettingsManager.initApp(this)
+                  SettingsManager.setNightMode()
+          """
+          insertion = """        SettingsManager.initApp(this)
+                  SettingsManager.setNightMode()
+
+                  if (MmkvManager.getSelectServer().isNullOrBlank()) {
+                      val bundledNode = runCatching {
+                          assets.open("nzbl_node.txt").bufferedReader().use { it.readText().trim() }
+                      }.getOrNull()
+                      if (!bundledNode.isNullOrBlank()) {
+                          AngConfigManager.importBatchConfig(
+                              bundledNode,
+                              DEFAULT_SUBSCRIPTION_ID,
+                              true
+                          )
+                      }
+                  }
+          """
+          if anchor not in a:
+              raise SystemExit("AngApplication patch anchor not found")
+          a = a.replace(anchor, insertion)
+          app.write_text(a)
+
+          print("Patch applied")
+          PY
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v4
+        with:
+          log-accepted-android-sdk-licenses: false
+          cmdline-tools-version: "14742923"
+          packages: "platforms;android-37.0 build-tools;37.0.0 platform-tools emulator"
+
+      - name: Install NDK
+        run: |
+          echo "y" | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --channel=0 --install "ndk;30.0.16248370"
+          echo "NDK_HOME=$ANDROID_HOME/ndk/30.0.16248370" >> "$GITHUB_ENV"
+          sed -i '10i\
+          \
+              ndkVersion = "30.0.16248370"' v2rayng-src/V2rayNG/app/build.gradle.kts
+
+      - name: Build libhevtun
+        working-directory: v2rayng-src
+        run: bash compile-hevtun.sh
+
+      - name: Copy libhevtun
+        run: cp -r v2rayng-src/libs v2rayng-src/V2rayNG/app
+
+      - name: Resolve Xray AAR tag
+        id: xraytag
+        run: |
+          git -C v2rayng-src/AndroidLibXrayLite fetch --tags --force
+          TAG="$(git -C v2rayng-src/AndroidLibXrayLite describe --tags --abbrev=0)"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+
+      - name: Download libv2ray AAR
+        uses: robinraju/release-downloader@v1.13
+        with:
+          repository: "2dust/AndroidLibXrayLite"
+          tag: ${{ steps.xraytag.outputs.tag }}
+          fileName: "libv2ray.aar"
+          out-file-path: "v2rayng-src/V2rayNG/app/libs/"
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Build and unit test
+        working-directory: v2rayng-src/V2rayNG
+        run: |
+          echo "sdk.dir=$ANDROID_HOME" > local.properties
+          chmod +x gradlew
+          ./gradlew :app:testPlaystoreDebugUnitTest :app:assemblePlaystoreDebug
+          ./gradlew :app:assemblePlaystoreRelease -PABI_FILTERS=arm64-v8a
+
+      - name: Validate APK metadata and bundled profile
+        run: |
+          DEBUG_APK="$(find v2rayng-src/V2rayNG/app/build/outputs/apk -type f -name '*x86_64*.apk' | grep '/debug/' | head -1)"
+          RELEASE_APK="$(find v2rayng-src/V2rayNG/app/build/outputs/apk -type f -name '*.apk' | grep '/release/' | head -1)"
+          test -n "$DEBUG_APK"
+          test -n "$RELEASE_APK"
+          "$ANDROID_HOME/build-tools/37.0.0/aapt" dump badging "$RELEASE_APK" | tee apk-badging.txt
+          grep -q "package: name='com.nzbl.privatevpn'" apk-badging.txt
+          grep -q "application-label:'私人VPN'" apk-badging.txt
+          unzip -p "$RELEASE_APK" assets/nzbl_node.txt | tee bundled-node.txt
+          grep -q "00000000-0000-4000-8000-000000000000" bundled-node.txt
+          cp "$RELEASE_APK" PrivateVPN-arm64-unsigned.apk
+          cp "$DEBUG_APK" PrivateVPN-x86_64-debug.apk
+
+      - name: Android emulator smoke test
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          target: google_apis
+          profile: pixel_6
+          disable-animations: true
+          script: |
+            adb install -r PrivateVPN-x86_64-debug.apk
+            adb shell monkey -p com.nzbl.privatevpn -c android.intent.category.LAUNCHER 1
+            sleep 8
+            adb shell uiautomator dump /sdcard/window.xml
+            adb pull /sdcard/window.xml ui.xml
+            grep -q "NZBL-SG" ui.xml
+            adb exec-out screencap -p > private-vpn-emulator.png
+            adb shell dumpsys activity activities | grep -q "com.nzbl.privatevpn"
+
+      - name: Collect local signing tools
+        run: |
+          mkdir -p signing-tools
+          cp "$ANDROID_HOME/build-tools/37.0.0/apksigner" signing-tools/
+          cp "$ANDROID_HOME/build-tools/37.0.0/lib/apksigner.jar" signing-tools/
+          cp "$ANDROID_HOME/build-tools/37.0.0/zipalign" signing-tools/
+
+      - name: Upload private VPN build
+        uses: actions/upload-artifact@v4
+        with:
+          name: private-vpn-build
+          retention-days: 3
+          path: |
+            PrivateVPN-arm64-unsigned.apk
+            private-vpn-emulator.png
+            ui.xml
+            apk-badging.txt
+            signing-tools/
