@@ -174,6 +174,23 @@ jobs:
           cp "$RELEASE_APK" PrivateVPN-arm64-unsigned.apk
           cp "$DEBUG_APK" PrivateVPN-x86_64-debug.apk
 
+      - name: Collect local signing tools
+        run: |
+          mkdir -p signing-tools
+          cp "$ANDROID_HOME/build-tools/37.0.0/apksigner" signing-tools/
+          cp "$ANDROID_HOME/build-tools/37.0.0/lib/apksigner.jar" signing-tools/
+          cp "$ANDROID_HOME/build-tools/37.0.0/zipalign" signing-tools/
+
+      - name: Upload private VPN build
+        uses: actions/upload-artifact@v4
+        with:
+          name: private-vpn-build
+          retention-days: 3
+          path: |
+            PrivateVPN-arm64-unsigned.apk
+            apk-badging.txt
+            signing-tools/
+
       - name: Android emulator smoke test
         uses: reactivecircus/android-emulator-runner@v2
         with:
@@ -191,22 +208,3 @@ jobs:
             grep -q "NZBL-SG" ui.xml
             adb exec-out screencap -p > private-vpn-emulator.png
             adb shell dumpsys activity activities | grep -q "com.nzbl.privatevpn"
-
-      - name: Collect local signing tools
-        run: |
-          mkdir -p signing-tools
-          cp "$ANDROID_HOME/build-tools/37.0.0/apksigner" signing-tools/
-          cp "$ANDROID_HOME/build-tools/37.0.0/lib/apksigner.jar" signing-tools/
-          cp "$ANDROID_HOME/build-tools/37.0.0/zipalign" signing-tools/
-
-      - name: Upload private VPN build
-        uses: actions/upload-artifact@v4
-        with:
-          name: private-vpn-build
-          retention-days: 3
-          path: |
-            PrivateVPN-arm64-unsigned.apk
-            private-vpn-emulator.png
-            ui.xml
-            apk-badging.txt
-            signing-tools/
