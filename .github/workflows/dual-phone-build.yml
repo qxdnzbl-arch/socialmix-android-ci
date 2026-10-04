@@ -49,33 +49,26 @@ jobs:
             adb shell svc wifi disable || true
             adb logcat -c
             adb shell am start -n com.qxdnzbl.shuangjichuan.offline/com.qxdnzbl.shuangjichuan.MainActivity --ez ciAuto true
-            for i in $(seq 1 15); do
-              adb logcat -d -s DualPhoneUi:I '*:S' > deliverable/offline.log || true
-              grep -q 'screen=chat' deliverable/offline.log && break
-              sleep 1
-            done
+            sh -c 'for i in $(seq 1 15); do adb logcat -d -s DualPhoneUi:I "*:S" > deliverable/offline.log 2>/dev/null || true; grep -q "screen=chat" deliverable/offline.log && exit 0; sleep 1; done; exit 1'
             grep -q 'screen=chat' deliverable/offline.log
+            adb shell input tap 520 2240
+            sleep 2
+            adb logcat -d -s DualPhoneLayout:I '*:S' > deliverable/keyboard-layout.log
+            python3 -c "import re; s=open('deliverable/keyboard-layout.log',errors='ignore').read(); m=re.findall(r'visible=(\d+) bottom=(\d+)',s); assert m,s; v,b=map(int,m[-1]); assert v<2100,(v,b); assert b<=v+12,(v,b)"
+            adb shell input keyevent 4
             adb exec-out screencap -p > deliverable/01-offline.png
 
             adb forward tcp:47000 tcp:39732
             python3 dualphone/ci/send_incoming.py 47000
-            for i in $(seq 1 10); do
-              adb logcat -d -s DualPhoneUi:I '*:S' > deliverable/incoming.log || true
-              grep -q 'messages=1' deliverable/incoming.log && break
-              sleep 1
-            done
+            sh -c 'for i in $(seq 1 10); do adb logcat -d -s DualPhoneUi:I "*:S" > deliverable/incoming.log 2>/dev/null || true; grep -q "messages=1" deliverable/incoming.log && exit 0; sleep 1; done; exit 1'
             grep -q 'messages=1' deliverable/incoming.log
 
-            python3 -m http.server 8765 --directory dualphone/ci/ota-test >/tmp/ota.log 2>&1 &
+            nohup python3 -m http.server 8765 --directory dualphone/ci/ota-test >/tmp/ota-http.log 2>&1 </dev/null &
             adb reverse tcp:8765 tcp:8765
             adb logcat -c
             adb shell am force-stop com.qxdnzbl.shuangjichuan.offline
             adb shell am start -n com.qxdnzbl.shuangjichuan.offline/com.qxdnzbl.shuangjichuan.MainActivity --ez ciAuto true --es ciManifest http://127.0.0.1:8765/manifest.json
-            for i in $(seq 1 15); do
-              adb logcat -d -s DualPhoneOta:I DualPhoneUi:I '*:S' > deliverable/ota.log || true
-              grep -q 'OTA_APPLIED 99' deliverable/ota.log && grep -q 'OTA_TEST_APPLIED' deliverable/ota.log && break
-              sleep 1
-            done
+            sh -c 'for i in $(seq 1 15); do adb logcat -d -s DualPhoneOta:I DualPhoneUi:I "*:S" > deliverable/ota.log 2>/dev/null || true; grep -q "OTA_APPLIED 99" deliverable/ota.log && grep -q "OTA_TEST_APPLIED" deliverable/ota.log && exit 0; sleep 1; done; exit 1'
             grep -q 'OTA_APPLIED 99' deliverable/ota.log
             grep -q 'OTA_TEST_APPLIED' deliverable/ota.log
 
@@ -83,11 +76,7 @@ jobs:
             adb shell svc wifi disable || true
             adb logcat -c
             adb shell am start -n com.qxdnzbl.shuangjichuan.offline/com.qxdnzbl.shuangjichuan.MainActivity --ez ciAuto true
-            for i in $(seq 1 10); do
-              adb logcat -d -s DualPhoneUi:I '*:S' > deliverable/persist.log || true
-              grep -q 'OTA_TEST_APPLIED' deliverable/persist.log && break
-              sleep 1
-            done
+            sh -c 'for i in $(seq 1 10); do adb logcat -d -s DualPhoneUi:I "*:S" > deliverable/persist.log 2>/dev/null || true; grep -q "OTA_TEST_APPLIED" deliverable/persist.log && exit 0; sleep 1; done; exit 1'
             grep -q 'OTA_TEST_APPLIED' deliverable/persist.log
             adb exec-out screencap -p > deliverable/02-updated-without-reinstall.png
 
