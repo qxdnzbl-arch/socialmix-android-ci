@@ -29,39 +29,4 @@ jobs:
           profile: pixel_6
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none
-          script: |
-            set -eux
-            echo no | avdmanager create avd -n peer2 -k "system-images;android-35;google_apis;x86_64" --device "pixel_6" --force
-            "$ANDROID_HOME/emulator/emulator" -avd peer2 -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none -port 5556 >/tmp/peer2.log 2>&1 &
-            for i in $(seq 1 60); do
-              BOOT=$(adb -s emulator-5556 shell getprop sys.boot_completed 2>/dev/null | tr -d '\r' || true)
-              [ "$BOOT" = "1" ] && break
-              sleep 2
-            done
-            [ "$(adb -s emulator-5556 shell getprop sys.boot_completed | tr -d '\r')" = "1" ]
-
-            for DEV in emulator-5554 emulator-5556; do
-              adb -s "$DEV" install -r dualphone/app/build/outputs/apk/debug/app-debug.apk
-              adb -s "$DEV" shell pm clear com.qxdnzbl.shuangjichuan.offline
-              adb -s "$DEV" shell pm grant com.qxdnzbl.shuangjichuan.offline android.permission.BLUETOOTH_ADVERTISE || true
-              adb -s "$DEV" shell pm grant com.qxdnzbl.shuangjichuan.offline android.permission.BLUETOOTH_CONNECT || true
-              adb -s "$DEV" shell pm grant com.qxdnzbl.shuangjichuan.offline android.permission.BLUETOOTH_SCAN || true
-              adb -s "$DEV" shell pm grant com.qxdnzbl.shuangjichuan.offline android.permission.NEARBY_WIFI_DEVICES || true
-              adb -s "$DEV" shell svc data disable || true
-              adb -s "$DEV" shell svc wifi disable || true
-              adb -s "$DEV" shell cmd bluetooth_manager enable || true
-              adb -s "$DEV" logcat -c
-            done
-
-            adb -s emulator-5556 shell am start -n com.qxdnzbl.shuangjichuan.offline/com.qxdnzbl.shuangjichuan.MainActivity
-            sleep 3
-            adb -s emulator-5554 shell am start -n com.qxdnzbl.shuangjichuan.offline/com.qxdnzbl.shuangjichuan.MainActivity --ez ciSend true --ez ciSendFile true
-
-            for i in $(seq 1 90); do
-              adb -s emulator-5556 logcat -d -s DualPhoneUi:I "*:S" >/tmp/receiver.log 2>/dev/null || true
-              grep -q "messages=2" /tmp/receiver.log && break
-              sleep 1
-            done
-            cat /tmp/receiver.log
-            grep -q "messages=2" /tmp/receiver.log
-            adb -s emulator-5556 exec-out screencap -p > nearby-receiver.png
+          script: bash dualphone/ci/nearby_two_device.sh
