@@ -1,24 +1,25 @@
 plugins { id 'com.android.application' }
 android {
-    namespace 'com.qxdnzbl.shuangjichuan'
-    compileSdk 35
-    defaultConfig {
-        applicationId 'com.qxdnzbl.shuangjichuan.offline'
-        minSdk 26
-        targetSdk 35
-        versionCode 400
-        versionName '4.0'
+  namespace 'com.qxdnzbl.shuangjichuan'
+  compileSdk 35
+  defaultConfig {
+    applicationId 'com.qxdnzbl.shuangjichuan.offline'
+    minSdk 26
+    targetSdk 35
+    versionCode 500
+    versionName '5.0'
+  }
+  signingConfigs {
+    release {
+      storeFile file('shuangjichuan-release.jks')
+      storePassword 'SJC2026offline'
+      keyAlias 'shuangjichuan'
+      keyPassword 'SJC2026offline'
     }
-    signingConfigs {
-        release {
-            storeFile file('shuangjichuan-release.jks')
-            storePassword 'SJC2026offline'
-            keyAlias 'shuangjichuan'
-            keyPassword 'SJC2026offline'
-        }
-    }
-    buildTypes {
-        debug { debuggable true }
-        release { minifyEnabled false; signingConfig signingConfigs.release }
-    }
+  }
+  buildTypes {
+    debug { debuggable true }
+    release { minifyEnabled false; signingConfig signingConfigs.release }
+  }
 }
+dependencies { implementation 'com.google.android.gms:play-services-nearby:19.5.0' }
