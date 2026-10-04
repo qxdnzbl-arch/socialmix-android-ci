@@ -9,6 +9,8 @@ import static org.junit.Assert.assertTrue;
 import androidx.test.core.app.ActivityScenario;
 import androidx.test.ext.junit.runners.AndroidJUnit4;
 import androidx.test.platform.app.InstrumentationRegistry;
+import android.os.ParcelFileDescriptor;
+import java.io.FileInputStream;
 
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -47,6 +49,15 @@ public class DualPhoneNativeTest {
         throw new AssertionError("Timed out waiting for text " + text, last);
     }
 
+    private void shell(String command) throws Exception {
+        ParcelFileDescriptor pfd = InstrumentationRegistry.getInstrumentation().getUiAutomation().executeShellCommand(command);
+        try (FileInputStream in = new FileInputStream(pfd.getFileDescriptor())) {
+            byte[] b = new byte[1024];
+            while (in.read(b) != -1) {}
+        }
+        pfd.close();
+    }
+
     @Test public void register_send_text_send_file_and_keyboard() throws Exception {
         InstrumentationRegistry.getInstrumentation().getTargetContext()
                 .getSharedPreferences("dual_phone_transfer", 0).edit().clear().commit();
@@ -65,10 +76,12 @@ public class DualPhoneNativeTest {
 
             scenario.onActivity(a -> a.sendQaFileForTest("qa-file.txt", "dual-phone-file".getBytes(StandardCharsets.UTF_8)));
             waitForText("📎  qa-file.txt", 30000);
+            shell("screencap -p /sdcard/native-02-chat.png");
 
             scenario.onActivity(MainActivity::showKeyboardForTest);
             Thread.sleep(1000);
             scenario.onActivity(a -> assertTrue("Composer is clipped by keyboard", a.isComposerAboveVisibleFrameForTest()));
+            shell("screencap -p /sdcard/native-03-keyboard.png");
         }
     }
 }

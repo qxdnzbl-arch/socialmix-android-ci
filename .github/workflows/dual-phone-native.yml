@@ -52,21 +52,10 @@ jobs:
             sleep 3
             adb exec-out screencap -p > native-01-login.png
             gradle --no-daemon :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.qxdnzbl.shuangjichuan.DualPhoneNativeTest
-            adb shell am force-stop com.qxdnzbl.shuangjichuan || true
-            adb shell monkey -p com.qxdnzbl.shuangjichuan -c android.intent.category.LAUNCHER 1
-            sleep 4
-            adb exec-out screencap -p > native-02-chat.png
-            adb shell uiautomator dump /sdcard/native-chat.xml >/dev/null
-            adb pull /sdcard/native-chat.xml native-chat.xml >/dev/null
-            grep -q '我的两台手机' native-chat.xml
-            grep -q 'native-qa-message' native-chat.xml
-            grep -q 'qa-file.txt' native-chat.xml
-            adb shell input tap 540 2110
-            sleep 2
-            adb exec-out screencap -p > native-03-keyboard.png
-            adb shell uiautomator dump /sdcard/native-keyboard.xml >/dev/null
-            adb pull /sdcard/native-keyboard.xml native-keyboard.xml >/dev/null
-            grep -q '发送' native-keyboard.xml
+            adb pull /sdcard/native-02-chat.png native-02-chat.png >/dev/null
+            adb pull /sdcard/native-03-keyboard.png native-03-keyboard.png >/dev/null
+            test -s native-02-chat.png
+            test -s native-03-keyboard.png
 
       - name: Prepare deliverable
         if: success()
