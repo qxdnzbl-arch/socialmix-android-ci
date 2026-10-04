@@ -1,0 +1,76 @@
+name: VPN Endpoint E2E Test
+
+on:
+  push:
+    branches:
+      - nzbl-private-vpn-apk-20261004
+    paths:
+      - ".github/workflows/vpn-endpoint-e2e.yml"
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Install Xray
+        run: |
+          curl -fL --retry 3 -o /tmp/xray.zip https://github.com/XTLS/Xray-core/releases/download/v26.9.30/Xray-linux-64.zip
+          unzip -q /tmp/xray.zip -d /tmp/xray
+          chmod +x /tmp/xray/xray
+
+      - name: Wait for service
+        run: |
+          for i in $(seq 1 30); do
+            if curl -fsS --max-time 5 https://kehua-original-verifier.onrender.com/ >/dev/null; then
+              exit 0
+            fi
+            sleep 5
+          done
+          exit 1
+
+      - name: Run real VLESS WS TLS client
+        run: |
+          cat >/tmp/xray/config.json <<'EOF'
+          {
+            "log": {"loglevel": "warning"},
+            "inbounds": [{
+              "listen": "127.0.0.1",
+              "port": 10808,
+              "protocol": "socks",
+              "settings": {"udp": true}
+            }],
+            "outbounds": [{
+              "protocol": "vless",
+              "settings": {
+                "vnext": [{
+                  "address": "kehua-original-verifier.onrender.com",
+                  "port": 443,
+                  "users": [{
+                    "id": "11111111-1111-4111-8111-111111111111",
+                    "encryption": "none"
+                  }]
+                }]
+              },
+              "streamSettings": {
+                "network": "ws",
+                "security": "tls",
+                "tlsSettings": {
+                  "serverName": "kehua-original-verifier.onrender.com"
+                },
+                "wsSettings": {
+                  "path": "/ws-ee876e404c2e8bb99b9b4a63",
+                  "headers": {
+                    "Host": "kehua-original-verifier.onrender.com"
+                  }
+                }
+              }
+            }]
+          }
+          EOF
+          /tmp/xray/xray run -config /tmp/xray/config.json >/tmp/xray.log 2>&1 &
+          XPID=$!
+          trap 'kill $XPID 2>/dev/null || true' EXIT
+          sleep 2
+          curl -fsS --max-time 20 --socks5-hostname 127.0.0.1:10808 https://www.cloudflare.com/cdn-cgi/trace | tee /tmp/trace.txt
+          grep -q '^ip=' /tmp/trace.txt
