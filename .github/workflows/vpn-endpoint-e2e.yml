@@ -22,7 +22,7 @@ jobs:
       - name: Wait for service
         run: |
           for i in $(seq 1 30); do
-            if curl -fsS --max-time 5 https://kehua-original-verifier.onrender.com/ >/dev/null; then
+            if curl -sS --max-time 5 -o /dev/null https://kehua-original-verifier.onrender.com/; then
               exit 0
             fi
             sleep 5
