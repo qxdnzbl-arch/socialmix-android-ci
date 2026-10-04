@@ -27,16 +27,15 @@ jobs:
 
       - name: Apply NZBL multi-node patch
         run: |
-          python3 private-vpn/patch_v2.py v2rayng-src
+          python3 private-vpn/patch_v3.py v2rayng-src
           cp v2rayng-src/V2rayNG/app/src/main/assets/nzbl_nodes.txt /tmp/nzbl-placeholders.txt
-          grep -q "autoSelectFinishedAction" v2rayng-src/V2rayNG/app/src/main/java/com/v2ray/ang/viewmodel/MainViewModel.kt
-          grep -q "testAllRealPing(autoSelect = true)" v2rayng-src/V2rayNG/app/src/main/java/com/v2ray/ang/ui/MainActivity.kt
+          grep -q "nzbl_bundle_version" v2rayng-src/V2rayNG/app/src/main/java/com/v2ray/ang/AngApplication.kt
 
       - name: Put temporary verified nodes in debug build
         run: |
           cat > v2rayng-src/V2rayNG/app/src/main/assets/nzbl_nodes.txt <<'EOF'
-          vless://22222222-2222-4222-8222-222222222222@kehua-original-verifier.onrender.com:443?encryption=none&security=tls&sni=kehua-original-verifier.onrender.com&type=ws&host=kehua-original-verifier.onrender.com&path=%2Fws-ee876e404c2e8bb99b9b4a63#NZBL-AUTO-Render-SG
-          vless://33333333-3333-4333-8333-333333333333@kehua-native-prod-api-production.up.railway.app:443?encryption=none&security=tls&sni=kehua-native-prod-api-production.up.railway.app&type=ws&host=kehua-native-prod-api-production.up.railway.app&path=%2Fws-railway-6f8a1c#NZBL-AUTO-Railway-SG
+          vless://33333333-3333-4333-8333-333333333333@kehua-native-prod-api-production.up.railway.app:443?encryption=none&security=tls&sni=kehua-native-prod-api-production.up.railway.app&type=ws&host=kehua-native-prod-api-production.up.railway.app&path=%2Fws-railway-6f8a1c#NZBL-FAST-Railway-SG
+          vless://22222222-2222-4222-8222-222222222222@kehua-original-verifier.onrender.com:443?encryption=none&security=tls&sni=kehua-original-verifier.onrender.com&type=ws&host=kehua-original-verifier.onrender.com&path=%2Fws-ee876e404c2e8bb99b9b4a63#NZBL-BACKUP-Render-SG
           EOF
 
       - name: Setup Android SDK
@@ -114,8 +113,8 @@ jobs:
             sleep 7
             adb shell uiautomator dump /sdcard/window.xml
             adb pull /sdcard/window.xml ui.xml
-            grep -q "NZBL-AUTO-Render-SG" ui.xml
-            grep -q "NZBL-AUTO-Railway-SG" ui.xml
+            grep -q "NZBL-FAST-Railway-SG" ui.xml
+            grep -q "NZBL-BACKUP-Render-SG" ui.xml
             adb shell dumpsys activity activities | grep -q "com.nzbl.privatevpn"
 
       - name: Restore private placeholders and build ARM64 release
