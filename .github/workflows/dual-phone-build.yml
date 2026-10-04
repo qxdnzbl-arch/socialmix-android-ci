@@ -90,10 +90,7 @@ jobs:
 
             # Confirm native listener is up and accept a packet from a mock second phone.
             sleep 2
-            PORT=$(adb logcat -d -s DualPhone:I '*:S' | sed -n 's/.*SERVER port=\([0-9]*\).*/\1/p' | tail -1)
-            test -n "$PORT"
-            adb forward tcp:47000 tcp:$PORT
-
+            adb forward tcp:47000 tcp:39732
             python3 dualphone/ci/send_incoming.py 47000
 
             sleep 2
