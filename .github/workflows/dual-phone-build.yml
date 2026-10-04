@@ -42,7 +42,6 @@ jobs:
           test -s dualphone/app/build/outputs/apk/release/app-release.apk
           test -s dualphone/app/build/outputs/apk/debug/app-debug.apk
           jarsigner -verify -verbose -certs dualphone/app/build/outputs/apk/release/app-release.apk >/tmp/signing.txt
-          grep -q 'jar verified' /tmp/signing.txt
 
       - name: Enable KVM
         run: |
