@@ -152,6 +152,9 @@ jobs:
           distribution: temurin
           java-version: "21"
 
+      - name: Cache Gradle
+        uses: gradle/actions/setup-gradle@v4
+
       - name: Build APK
         working-directory: v2rayng-src/V2rayNG
         run: |
@@ -188,6 +191,26 @@ jobs:
           retention-days: 3
           path: |
             PrivateVPN-arm64-unsigned.apk
+            PrivateVPN-x86_64-debug.apk
             apk-badging.txt
             signing-tools/
+
+      - name: Android emulator smoke test
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 29
+          arch: x86_64
+          target: default
+          profile: pixel_2
+          emulator-boot-timeout: 300
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none
+          disable-animations: true
+          script: |
+            adb install -r PrivateVPN-x86_64-debug.apk
+            adb shell monkey -p com.nzbl.privatevpn -c android.intent.category.LAUNCHER 1
+            sleep 6
+            adb shell uiautomator dump /sdcard/window.xml
+            adb pull /sdcard/window.xml ui.xml
+            grep -q "NZBL-SG" ui.xml
+            adb shell dumpsys activity activities | grep -q "com.nzbl.privatevpn"
 
