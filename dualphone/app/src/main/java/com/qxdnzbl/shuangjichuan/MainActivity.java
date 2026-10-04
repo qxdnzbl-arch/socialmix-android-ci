@@ -230,6 +230,10 @@ public class MainActivity extends Activity {
         return b.toString();
     }
 
+    private boolean isDebuggable() {
+        return (getApplicationInfo().flags & android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0;
+    }
+
     private static String sha256(String s) {
         try { return hex(sha256Bytes(s.getBytes(StandardCharsets.UTF_8))); }
         catch (Exception e) { throw new RuntimeException(e); }
