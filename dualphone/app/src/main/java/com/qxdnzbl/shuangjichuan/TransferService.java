@@ -169,6 +169,7 @@ public class TransferService extends Service {
 
   private final EndpointDiscoveryCallback discovery=new EndpointDiscoveryCallback(){
     @Override public void onEndpointFound(String endpointId,DiscoveredEndpointInfo info){
+      Log.i("DualNearby","found "+endpointId);
       if(requested.add(endpointId)){
         nearby.requestConnection(deviceId,endpointId,lifecycle)
           .addOnFailureListener(e->requested.remove(endpointId));
@@ -188,6 +189,7 @@ public class TransferService extends Service {
 
     @Override public void onConnectionResult(String endpointId,ConnectionResolution resolution){
       if(resolution.getStatus().isSuccess()){
+        Log.i("DualNearby","connected "+endpointId);
         endpoints.add(endpointId);
         io.execute(TransferService.this::flushPending);
       }else{
