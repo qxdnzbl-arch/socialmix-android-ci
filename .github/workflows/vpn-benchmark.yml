@@ -1,0 +1,124 @@
+name: VPN Candidate Benchmark
+
+on:
+  push:
+    branches:
+      - nzbl-private-vpn-apk-20261004
+    paths:
+      - ".github/workflows/vpn-benchmark.yml"
+  workflow_dispatch:
+
+jobs:
+  benchmark:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: Install Xray
+        run: |
+          curl -fL --retry 3 -o /tmp/xray.zip https://github.com/XTLS/Xray-core/releases/download/v26.9.30/Xray-linux-64.zip
+          unzip -q /tmp/xray.zip -d /tmp/xray
+          chmod +x /tmp/xray/xray
+
+      - name: Write candidate configs
+        run: |
+          mkdir -p /tmp/vpnbench
+
+          cat >/tmp/vpnbench/render.json <<'EOF'
+          {
+            "log":{"loglevel":"warning"},
+            "inbounds":[{"listen":"127.0.0.1","port":10808,"protocol":"socks","settings":{"udp":true}}],
+            "outbounds":[{
+              "protocol":"vless",
+              "settings":{"vnext":[{"address":"kehua-original-verifier.onrender.com","port":443,"users":[{"id":"22222222-2222-4222-8222-222222222222","encryption":"none"}]}]},
+              "streamSettings":{
+                "network":"ws","security":"tls",
+                "tlsSettings":{"serverName":"kehua-original-verifier.onrender.com"},
+                "wsSettings":{"path":"/ws-ee876e404c2e8bb99b9b4a63","headers":{"Host":"kehua-original-verifier.onrender.com"}}
+              }
+            }]
+          }
+          EOF
+
+          cat >/tmp/vpnbench/railway.json <<'EOF'
+          {
+            "log":{"loglevel":"warning"},
+            "inbounds":[{"listen":"127.0.0.1","port":10809,"protocol":"socks","settings":{"udp":true}}],
+            "outbounds":[{
+              "protocol":"vless",
+              "settings":{"vnext":[{"address":"gondola.proxy.rlwy.net","port":47854,"users":[{"id":"68bfb6c3-5959-4690-aa57-2d0147385de0","encryption":"none","flow":"xtls-rprx-vision"}]}]},
+              "streamSettings":{
+                "network":"tcp","security":"reality",
+                "realitySettings":{
+                  "serverName":"www.samsung.com",
+                  "fingerprint":"chrome",
+                  "publicKey":"K5YXStG-jOMsQte0OWRdeN6dG3f9afYXec_bldO8NGk",
+                  "shortId":"6ebe6f",
+                  "spiderX":"/"
+                }
+              }
+            }]
+          }
+          EOF
+
+      - name: Wait for endpoints
+        run: |
+          for i in $(seq 1 24); do
+            if curl -sS --max-time 5 -o /dev/null https://kehua-original-verifier.onrender.com/; then break; fi
+            sleep 5
+          done
+          timeout 5 bash -c '</dev/tcp/gondola.proxy.rlwy.net/47854'
+
+      - name: Benchmark Render WS TLS
+        run: |
+          /tmp/xray/xray run -config /tmp/vpnbench/render.json >/tmp/render-xray.log 2>&1 &
+          XPID=$!
+          trap 'kill $XPID 2>/dev/null || true' EXIT
+          sleep 2
+          : >/tmp/render-metrics.txt
+          for i in 1 2 3; do
+            curl -fsS --max-time 35 --socks5-hostname 127.0.0.1:10808               -o /dev/null               -w '%{time_connect} %{time_starttransfer} %{speed_download}\n'               'https://speed.cloudflare.com/__down?bytes=5000000' | tee -a /tmp/render-metrics.txt
+          done
+          kill $XPID || true
+
+      - name: Benchmark Railway REALITY
+        run: |
+          /tmp/xray/xray run -config /tmp/vpnbench/railway.json >/tmp/railway-xray.log 2>&1 &
+          XPID=$!
+          trap 'kill $XPID 2>/dev/null || true' EXIT
+          sleep 2
+          : >/tmp/railway-metrics.txt
+          for i in 1 2 3; do
+            curl -fsS --max-time 35 --socks5-hostname 127.0.0.1:10809               -o /dev/null               -w '%{time_connect} %{time_starttransfer} %{speed_download}\n'               'https://speed.cloudflare.com/__down?bytes=5000000' | tee -a /tmp/railway-metrics.txt
+          done
+          kill $XPID || true
+
+      - name: Compare
+        run: |
+          python3 - <<'PY'
+          import statistics, json
+          def read(path):
+              rows=[]
+              with open(path) as f:
+                  for line in f:
+                      a,b,c=map(float,line.split())
+                      rows.append((a,b,c))
+              return {
+                  "connect_ms": round(statistics.median(x[0] for x in rows)*1000,1),
+                  "ttfb_ms": round(statistics.median(x[1] for x in rows)*1000,1),
+                  "mbps": round(statistics.median(x[2] for x in rows)*8/1_000_000,2),
+              }
+          out={"render":read("/tmp/render-metrics.txt"),"railway":read("/tmp/railway-metrics.txt")}
+          out["winner"]=max(out,key=lambda k: out[k].get("mbps",-1) if isinstance(out[k],dict) else -1)
+          print("BENCHMARK_RESULT="+json.dumps(out))
+          with open("benchmark-result.json","w") as f: json.dump(out,f,indent=2)
+          PY
+
+      - name: Upload benchmark
+        uses: actions/upload-artifact@v4
+        with:
+          name: vpn-benchmark
+          retention-days: 2
+          path: |
+            benchmark-result.json
+            /tmp/render-metrics.txt
+            /tmp/railway-metrics.txt
