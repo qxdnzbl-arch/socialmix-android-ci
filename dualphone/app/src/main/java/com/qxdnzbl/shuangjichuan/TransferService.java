@@ -16,7 +16,7 @@ public class TransferService extends Service {
     public static final String ACTION_STATE = "com.qxdnzbl.shuangjichuan.STATE";
     public static final String ACTION_CHANGED = "com.qxdnzbl.shuangjichuan.CHANGED";
     private static final int NOTIFY_ID = 31021;
-    private static final int DISCOVERY_PORT = 39731;
+    private static final int DISCOVERY_PORT = 39731;\n    private static final int TRANSFER_PORT = 39732;
     private static final int MAGIC = 0x534A4331;
     private static final String GROUP = "239.255.42.99";
 
@@ -108,9 +108,9 @@ public class TransferService extends Service {
     private void startTcpServer() {
         io.execute(() -> {
             try {
-                server = new ServerSocket(0);
+                server = new ServerSocket(TRANSFER_PORT);
                 server.setReuseAddress(true);
-                serverPort = server.getLocalPort();
+                serverPort = TRANSFER_PORT;
                 Log.i("DualPhone", "SERVER port=" + serverPort + " prefix=" + prefix);
                 while (running) {
                     Socket s = server.accept();
