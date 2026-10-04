@@ -1,361 +1,651 @@
 package com.qxdnzbl.shuangjichuan;
 
+import android.Manifest;
 import android.app.*;
 import android.content.*;
-import android.net.wifi.*;
+import android.content.pm.PackageManager;
+import android.net.Uri;
 import android.os.*;
+import android.util.Base64;
 import android.util.Log;
+
+import com.google.android.gms.nearby.Nearby;
+import com.google.android.gms.nearby.connection.*;
+
+import org.json.JSONObject;
 
 import java.io.*;
 import java.net.*;
 import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.util.*;
 import java.util.concurrent.*;
 
 public class TransferService extends Service {
-    public static final String ACTION_STATE = "com.qxdnzbl.shuangjichuan.STATE";
-    public static final String ACTION_CHANGED = "com.qxdnzbl.shuangjichuan.CHANGED";
-    private static final int NOTIFY_ID = 31021;
-    private static final int DISCOVERY_PORT = 39731;
-    private static final int TRANSFER_PORT = 39732;
-    private static final int MAGIC = 0x534A4331;
-    private static final String GROUP = "239.255.42.99";
+  public static final String ACTION_CHANGED="com.qxdnzbl.shuangjichuan.CHANGED";
+  private static final int NOTIFY_ID=31021;
+  private static final String SERVICE_ID="com.qxdnzbl.shuangjichuan.v5";
+  private static final String SECRET="6686986c94d4a4d34fd705665b962491078a94688d3f730b568d36a2c526c470";
+  private static final String[] RELAYS={
+    "https://oppo-iphone-transfer-qr.onrender.com",
+    "https://oppo-iphone-transfer.onrender.com"
+  };
 
-    private final ExecutorService io = Executors.newCachedThreadPool();
-    private final ScheduledExecutorService timer = Executors.newScheduledThreadPool(2);
-    private volatile boolean running = true;
-    private volatile Peer peer;
-    private volatile long peerSeenAt = 0;
-    private ServerSocket server;
-    private MulticastSocket discovery;
-    private WifiManager.MulticastLock multicastLock;
-    private TransferDb db;
-    private String token, deviceId, prefix;
-    private int serverPort;
+  private final ExecutorService io=Executors.newCachedThreadPool();
+  private final ScheduledExecutorService timer=Executors.newScheduledThreadPool(1);
+  private final Set<String> endpoints=new CopyOnWriteArraySet<>();
+  private final Set<String> requested=new CopyOnWriteArraySet<>();
+  private final Map<Long,String> outgoing=new ConcurrentHashMap<>();
+  private final Map<Long,Payload> incomingFiles=new ConcurrentHashMap<>();
+  private final Map<Long,FileMeta> incomingMeta=new ConcurrentHashMap<>();
+  private final Set<Long> completedIncoming=ConcurrentHashMap.newKeySet();
 
-    static class Peer {
-        final InetAddress host;
-        final int port;
-        Peer(InetAddress host, int port) {
-            this.host = host;
-            this.port = port;
-        }
+  private volatile boolean running=true;
+  private volatile boolean nearbyStarted=false;
+  private TransferDb db;
+  private ConnectionsClient nearby;
+  private String deviceId;
+  private String room;
+
+  static class FileMeta {
+    final String id,name;
+    final long created,size;
+    FileMeta(String id,String name,long created,long size){
+      this.id=id;this.name=name;this.created=created;this.size=size;
+    }
+  }
+
+  @Override public void onCreate(){
+    super.onCreate();
+    db=new TransferDb(this);
+
+    SharedPreferences p=getSharedPreferences("dual",MODE_PRIVATE);
+    deviceId=p.getString("device","");
+    if(deviceId.isEmpty()){
+      deviceId=UUID.randomUUID().toString();
+      p.edit().putString("device",deviceId).apply();
     }
 
-    @Override public void onCreate() {
-        super.onCreate();
-        db = new TransferDb(this);
+    room=sha256(SECRET).substring(0,32);
+    createChannel();
+    startForeground(NOTIFY_ID,notification("自动同步中"));
 
-        SharedPreferences p = getSharedPreferences("dual", MODE_PRIVATE);
-        token = p.getString("token", "");
-        deviceId = p.getString("device", "");
+    nearby=Nearby.getConnectionsClient(this);
+    tryStartNearby();
 
-        createChannel();
-        startForeground(NOTIFY_ID, notification("正在寻找另一台手机"));
-
-        if (token.isEmpty() || deviceId.isEmpty()) {
-            stopSelf();
-            return;
-        }
-
-        prefix = token.substring(0, Math.min(12, token.length()));
-        startTcpServer();
-        startDiscovery();
-
-        timer.scheduleWithFixedDelay(this::announce, 200, 900, TimeUnit.MILLISECONDS);
-        timer.scheduleWithFixedDelay(this::maintenance, 300, 700, TimeUnit.MILLISECONDS);
+    for(String relay:RELAYS){
+      io.execute(()->relayReceiveLoop(relay));
     }
 
-    public static void start(Context c) {
-        Intent i = new Intent(c, TransferService.class);
-        if (Build.VERSION.SDK_INT >= 26) c.startForegroundService(i);
-        else c.startService(i);
+    timer.scheduleWithFixedDelay(this::flushPending,250,500,TimeUnit.MILLISECONDS);
+  }
+
+  public static void start(Context c){
+    Intent i=new Intent(c,TransferService.class);
+    try{
+      if(Build.VERSION.SDK_INT>=26) c.startForegroundService(i);
+      else c.startService(i);
+    }catch(Exception ignored){}
+  }
+
+  public static void wake(Context c){
+    start(c);
+  }
+
+  private void createChannel(){
+    if(Build.VERSION.SDK_INT>=26){
+      NotificationChannel ch=new NotificationChannel(
+        "transfer","双机传后台同步",NotificationManager.IMPORTANCE_LOW);
+      ch.setDescription("自动接收另一台手机的消息和文件");
+      getSystemService(NotificationManager.class).createNotificationChannel(ch);
+    }
+  }
+
+  private Notification notification(String text){
+    Notification.Builder b=Build.VERSION.SDK_INT>=26
+      ? new Notification.Builder(this,"transfer")
+      : new Notification.Builder(this);
+    return b.setContentTitle("双机传")
+      .setContentText(text)
+      .setSmallIcon(android.R.drawable.stat_sys_upload_done)
+      .setOngoing(true)
+      .build();
+  }
+
+  private void changed(){
+    sendBroadcast(new Intent(ACTION_CHANGED).setPackage(getPackageName()));
+  }
+
+  private boolean hasNearbyPermissions(){
+    if(Build.VERSION.SDK_INT>=32){
+      return checkSelfPermission(Manifest.permission.BLUETOOTH_ADVERTISE)==PackageManager.PERMISSION_GRANTED
+        && checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT)==PackageManager.PERMISSION_GRANTED
+        && checkSelfPermission(Manifest.permission.BLUETOOTH_SCAN)==PackageManager.PERMISSION_GRANTED
+        && checkSelfPermission(Manifest.permission.NEARBY_WIFI_DEVICES)==PackageManager.PERMISSION_GRANTED;
+    }
+    if(Build.VERSION.SDK_INT>=31){
+      return checkSelfPermission(Manifest.permission.BLUETOOTH_ADVERTISE)==PackageManager.PERMISSION_GRANTED
+        && checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT)==PackageManager.PERMISSION_GRANTED
+        && checkSelfPermission(Manifest.permission.BLUETOOTH_SCAN)==PackageManager.PERMISSION_GRANTED;
+    }
+    if(Build.VERSION.SDK_INT>=29){
+      return checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION)==PackageManager.PERMISSION_GRANTED;
+    }
+    return checkSelfPermission(Manifest.permission.ACCESS_COARSE_LOCATION)==PackageManager.PERMISSION_GRANTED;
+  }
+
+  private synchronized void tryStartNearby(){
+    if(nearbyStarted||!hasNearbyPermissions()) return;
+
+    nearbyStarted=true;
+    Strategy strategy=Strategy.P2P_POINT_TO_POINT;
+
+    nearby.startAdvertising(
+      deviceId,
+      SERVICE_ID,
+      lifecycle,
+      new AdvertisingOptions.Builder().setStrategy(strategy).build()
+    ).addOnFailureListener(e->{
+      nearbyStarted=false;
+      Log.w("DualNearby","advertise "+e);
+    });
+
+    nearby.startDiscovery(
+      SERVICE_ID,
+      discovery,
+      new DiscoveryOptions.Builder().setStrategy(strategy).build()
+    ).addOnFailureListener(e->{
+      nearbyStarted=false;
+      Log.w("DualNearby","discover "+e);
+    });
+  }
+
+  private final EndpointDiscoveryCallback discovery=new EndpointDiscoveryCallback(){
+    @Override public void onEndpointFound(String endpointId,DiscoveredEndpointInfo info){
+      if(requested.add(endpointId)){
+        nearby.requestConnection(deviceId,endpointId,lifecycle)
+          .addOnFailureListener(e->requested.remove(endpointId));
+      }
     }
 
-    public static void wake(Context c) {
-        start(c);
+    @Override public void onEndpointLost(String endpointId){
+      requested.remove(endpointId);
+    }
+  };
+
+  private final ConnectionLifecycleCallback lifecycle=new ConnectionLifecycleCallback(){
+    @Override public void onConnectionInitiated(String endpointId,ConnectionInfo info){
+      nearby.acceptConnection(endpointId,payloads)
+        .addOnFailureListener(e->requested.remove(endpointId));
     }
 
-    private void createChannel() {
-        if (Build.VERSION.SDK_INT >= 26) {
-            NotificationChannel ch = new NotificationChannel(
-                "transfer", "双机传后台接收", NotificationManager.IMPORTANCE_LOW);
-            ch.setDescription("保持两台手机在局域网内可互相发现");
-            getSystemService(NotificationManager.class).createNotificationChannel(ch);
-        }
+    @Override public void onConnectionResult(String endpointId,ConnectionResolution resolution){
+      if(resolution.getStatus().isSuccess()){
+        endpoints.add(endpointId);
+        io.execute(TransferService.this::flushPending);
+      }else{
+        requested.remove(endpointId);
+      }
     }
 
-    private Notification notification(String text) {
-        Notification.Builder b = Build.VERSION.SDK_INT >= 26
-            ? new Notification.Builder(this, "transfer")
-            : new Notification.Builder(this);
-        return b.setContentTitle("双机传")
-            .setContentText(text)
-            .setSmallIcon(android.R.drawable.stat_sys_upload_done)
-            .setOngoing(true)
-            .build();
+    @Override public void onDisconnected(String endpointId){
+      endpoints.remove(endpointId);
+      requested.remove(endpointId);
     }
+  };
 
-    private void setState(boolean connected) {
-        Intent i = new Intent(ACTION_STATE).setPackage(getPackageName());
-        i.putExtra("connected", connected);
-        sendBroadcast(i);
+  private final PayloadCallback payloads=new PayloadCallback(){
+    @Override public void onPayloadReceived(String endpointId,Payload payload){
+      try{
+        if(payload.getType()==Payload.Type.BYTES){
+          JSONObject j=new JSONObject(
+            new String(payload.asBytes(),StandardCharsets.UTF_8));
 
-        NotificationManager nm = (NotificationManager)getSystemService(NOTIFICATION_SERVICE);
-        nm.notify(NOTIFY_ID, notification(
-            connected ? "已连接另一台手机" : "等待另一台手机 · 同一 Wi‑Fi 或热点"));
-    }
+          if(!SECRET.equals(j.optString("auth"))) return;
 
-    private void changed() {
-        sendBroadcast(new Intent(ACTION_CHANGED).setPackage(getPackageName()));
-    }
-
-    private void startTcpServer() {
-        io.execute(() -> {
-            try {
-                server = new ServerSocket(TRANSFER_PORT);
-                server.setReuseAddress(true);
-                serverPort = TRANSFER_PORT;
-                Log.i("DualPhone", "SERVER port=" + serverPort + " prefix=" + prefix);
-                while (running) {
-                    Socket s = server.accept();
-                    io.execute(() -> receive(s));
-                }
-            } catch (Exception e) {
-                if (running) Log.e("DualPhone", "server", e);
-            }
-        });
-    }
-
-    private void startDiscovery() {
-        try {
-            WifiManager wm = (WifiManager)getApplicationContext().getSystemService(WIFI_SERVICE);
-            multicastLock = wm.createMulticastLock("shuangjichuan");
-            multicastLock.setReferenceCounted(false);
-            multicastLock.acquire();
-        } catch (Exception ignored) {}
-
-        io.execute(() -> {
-            try {
-                discovery = new MulticastSocket(null);
-                discovery.setReuseAddress(true);
-                discovery.bind(new InetSocketAddress(DISCOVERY_PORT));
-                discovery.setBroadcast(true);
-                try {
-                    discovery.joinGroup(InetAddress.getByName(GROUP));
-                } catch (Exception ignored) {}
-
-                byte[] buf = new byte[512];
-                while (running) {
-                    DatagramPacket p = new DatagramPacket(buf, buf.length);
-                    discovery.receive(p);
-                    String msg = new String(
-                        p.getData(), p.getOffset(), p.getLength(), StandardCharsets.UTF_8);
-                    String[] a = msg.split("\\|");
-                    if (a.length != 5 || !"SJC3".equals(a[0])) continue;
-                    if (!prefix.equals(a[1])) continue;
-                    if (deviceId.equals(a[2])) continue;
-
-                    int port;
-                    try {
-                        port = Integer.parseInt(a[3]);
-                    } catch (Exception e) {
-                        continue;
-                    }
-                    if (port <= 0 || port > 65535) continue;
-
-                    peer = new Peer(p.getAddress(), port);
-                    peerSeenAt = System.currentTimeMillis();
-                    setState(true);
-                    flushPending();
-                }
-            } catch (Exception e) {
-                if (running) Log.e("DualPhone", "discovery", e);
-            }
-        });
-    }
-
-    private void announce() {
-        if (!running || serverPort <= 0) return;
-        String msg = "SJC3|" + prefix + "|" + deviceId + "|" + serverPort + "|1";
-        byte[] bytes = msg.getBytes(StandardCharsets.UTF_8);
-
-        try (DatagramSocket s = new DatagramSocket()) {
-            s.setBroadcast(true);
-            s.send(new DatagramPacket(
-                bytes, bytes.length, InetAddress.getByName("255.255.255.255"), DISCOVERY_PORT));
-            try {
-                s.send(new DatagramPacket(
-                    bytes, bytes.length, InetAddress.getByName(GROUP), DISCOVERY_PORT));
-            } catch (Exception ignored) {}
-        } catch (Exception ignored) {}
-    }
-
-    private void maintenance() {
-        if (!running) return;
-        if (peer != null && System.currentTimeMillis() - peerSeenAt > 5000) {
-            peer = null;
-            setState(false);
-        }
-        if (peer != null) flushPending();
-    }
-
-    private synchronized void flushPending() {
-        Peer target = peer;
-        if (target == null) return;
-
-        for (TransferDb.Msg m : db.pending()) {
-            if (!running || peer == null) return;
-            if (send(target, m)) {
-                db.markSent(m.id);
-                changed();
-            } else {
-                peer = null;
-                setState(false);
-                return;
-            }
-        }
-    }
-
-    private boolean send(Peer p, TransferDb.Msg m) {
-        try (Socket s = new Socket()) {
-            s.connect(new InetSocketAddress(p.host, p.port), 2000);
-            s.setSoTimeout(5000);
-
-            DataOutputStream out =
-                new DataOutputStream(new BufferedOutputStream(s.getOutputStream()));
-            DataInputStream in =
-                new DataInputStream(new BufferedInputStream(s.getInputStream()));
-
-            out.writeInt(MAGIC);
-            writeString(out, token);
-            writeString(out, m.id);
-            writeString(out, deviceId);
-            out.writeLong(m.createdAt);
-
-            if ("text".equals(m.kind)) {
-                out.writeByte(1);
-                writeString(out, m.text == null ? "" : m.text);
-            } else {
-                File file = new File(m.filePath == null ? "" : m.filePath);
-                if (!file.isFile()) return false;
-
-                out.writeByte(2);
-                writeString(out, m.fileName == null ? "文件" : m.fileName);
-                out.writeLong(file.length());
-
-                try (FileInputStream fin = new FileInputStream(file)) {
-                    byte[] buf = new byte[64 * 1024];
-                    int n;
-                    while ((n = fin.read(buf)) > 0) out.write(buf, 0, n);
-                }
-            }
-
-            out.flush();
-            return in.readInt() == 1;
-        } catch (Exception e) {
-            Log.w("DualPhone", "send failed " + e);
-            return false;
-        }
-    }
-
-    private void receive(Socket s) {
-        try (Socket socket = s) {
-            socket.setSoTimeout(30000);
-
-            DataInputStream in =
-                new DataInputStream(new BufferedInputStream(socket.getInputStream()));
-            DataOutputStream out =
-                new DataOutputStream(new BufferedOutputStream(socket.getOutputStream()));
-
-            if (in.readInt() != MAGIC) return;
-
-            String incomingToken = readString(in, 512);
-            if (!token.equals(incomingToken)) return;
-
-            String id = readString(in, 1024);
-            readString(in, 1024); // sender device id
-            long createdAt = in.readLong();
-            int type = in.readUnsignedByte();
-
-            if (type == 1) {
-                String text = readString(in, 1024 * 1024);
-                db.addText(id, false, text, createdAt, "received");
-            } else if (type == 2) {
-                String name = safeName(readString(in, 4096));
-                long size = in.readLong();
-                if (size < 0 || size > 500L * 1024 * 1024) return;
-
-                File dir = new File(getFilesDir(), "incoming");
-                dir.mkdirs();
-                File file = new File(dir, id + "_" + name);
-
-                try (FileOutputStream fout = new FileOutputStream(file)) {
-                    byte[] buf = new byte[64 * 1024];
-                    long left = size;
-                    while (left > 0) {
-                        int n = in.read(buf, 0, (int)Math.min(buf.length, left));
-                        if (n < 0) throw new EOFException();
-                        fout.write(buf, 0, n);
-                        left -= n;
-                    }
-                }
-
-                db.addFile(id, false, name, file.getAbsolutePath(), size, createdAt, "received");
-            } else {
-                return;
-            }
-
-            out.writeInt(1);
-            out.flush();
-            peerSeenAt = System.currentTimeMillis();
+          String op=j.optString("op");
+          if("text".equals(op)){
+            db.addText(
+              j.getString("id"),
+              false,
+              j.optString("text"),
+              j.optLong("created",System.currentTimeMillis()),
+              "received"
+            );
             changed();
-        } catch (Exception e) {
-            Log.w("DualPhone", "receive failed " + e);
+          }else if("file_meta".equals(op)){
+            long pid=j.getLong("payloadId");
+            incomingMeta.put(
+              pid,
+              new FileMeta(
+                j.getString("id"),
+                safeName(j.optString("name","文件")),
+                j.optLong("created",System.currentTimeMillis()),
+                j.optLong("size",0)
+              )
+            );
+            tryFinalizeIncoming(pid);
+          }
+        }else if(payload.getType()==Payload.Type.FILE){
+          incomingFiles.put(payload.getId(),payload);
+          tryFinalizeIncoming(payload.getId());
         }
+      }catch(Exception e){
+        Log.w("DualNearby","payload "+e);
+      }
     }
 
-    private static void writeString(DataOutputStream out, String s) throws IOException {
-        byte[] b = s.getBytes(StandardCharsets.UTF_8);
-        out.writeInt(b.length);
-        out.write(b);
+    @Override public void onPayloadTransferUpdate(
+      String endpointId,
+      PayloadTransferUpdate update
+    ){
+      long id=update.getPayloadId();
+
+      if(update.getStatus()==PayloadTransferUpdate.Status.SUCCESS){
+        String msgId=outgoing.remove(id);
+        if(msgId!=null){
+          db.markSent(msgId);
+          changed();
+          return;
+        }
+
+        completedIncoming.add(id);
+        tryFinalizeIncoming(id);
+      }else if(
+        update.getStatus()==PayloadTransferUpdate.Status.FAILURE
+        || update.getStatus()==PayloadTransferUpdate.Status.CANCELED
+      ){
+        outgoing.remove(id);
+        Payload p=incomingFiles.remove(id);
+        incomingMeta.remove(id);
+        completedIncoming.remove(id);
+        if(p!=null) p.close();
+      }
+    }
+  };
+
+  private synchronized void tryFinalizeIncoming(long pid){
+    if(!completedIncoming.contains(pid)) return;
+
+    FileMeta meta=incomingMeta.get(pid);
+    Payload payload=incomingFiles.get(pid);
+    if(meta==null||payload==null) return;
+
+    try{
+      File dir=new File(getFilesDir(),"incoming");
+      dir.mkdirs();
+
+      File dst=new File(dir,meta.id+"_"+safeName(meta.name));
+      Uri uri=payload.asFile().asUri();
+
+      try(
+        InputStream in=getContentResolver().openInputStream(uri);
+        OutputStream out=new FileOutputStream(dst)
+      ){
+        copy(in,out);
+      }
+
+      try{
+        getContentResolver().delete(uri,null,null);
+      }catch(Exception ignored){}
+
+      db.addFile(
+        meta.id,
+        false,
+        meta.name,
+        dst.getAbsolutePath(),
+        dst.length(),
+        meta.created,
+        "received"
+      );
+      changed();
+    }catch(Exception e){
+      Log.w("DualNearby","save file "+e);
+    }finally{
+      incomingFiles.remove(pid);
+      incomingMeta.remove(pid);
+      completedIncoming.remove(pid);
+      payload.close();
+    }
+  }
+
+  private synchronized void flushPending(){
+    tryStartNearby();
+
+    List<TransferDb.Msg> pending=db.pending();
+    if(pending.isEmpty()) return;
+
+    if(!endpoints.isEmpty()){
+      String endpoint=endpoints.iterator().next();
+      for(TransferDb.Msg m:pending){
+        if(sendNearby(endpoint,m)) continue;
+        tryRelaySend(m);
+      }
+    }else{
+      for(TransferDb.Msg m:pending){
+        tryRelaySend(m);
+      }
+    }
+  }
+
+  private boolean sendNearby(String endpoint,TransferDb.Msg m){
+    try{
+      if("text".equals(m.kind)){
+        JSONObject j=new JSONObject()
+          .put("auth",SECRET)
+          .put("op","text")
+          .put("id",m.id)
+          .put("created",m.createdAt)
+          .put("text",m.text==null?"":m.text);
+
+        byte[] bytes=j.toString().getBytes(StandardCharsets.UTF_8);
+        if(bytes.length>30000) return false;
+
+        Payload p=Payload.fromBytes(bytes);
+        outgoing.put(p.getId(),m.id);
+
+        nearby.sendPayload(endpoint,p)
+          .addOnFailureListener(e->outgoing.remove(p.getId()));
+
+        return true;
+      }
+
+      File file=new File(m.filePath==null?"":m.filePath);
+      if(!file.isFile()) return false;
+
+      Payload fp=Payload.fromFile(file);
+      fp.setFileName(safeName(m.fileName));
+
+      JSONObject meta=new JSONObject()
+        .put("auth",SECRET)
+        .put("op","file_meta")
+        .put("id",m.id)
+        .put("created",m.createdAt)
+        .put("name",safeName(m.fileName))
+        .put("size",file.length())
+        .put("payloadId",fp.getId());
+
+      nearby.sendPayload(
+        endpoint,
+        Payload.fromBytes(meta.toString().getBytes(StandardCharsets.UTF_8))
+      );
+
+      outgoing.put(fp.getId(),m.id);
+      nearby.sendPayload(endpoint,fp)
+        .addOnFailureListener(e->outgoing.remove(fp.getId()));
+
+      return true;
+    }catch(Exception e){
+      return false;
+    }
+  }
+
+  private void relayReceiveLoop(String base){
+    while(running){
+      HttpURLConnection c=null;
+
+      try{
+        URL u=new URL(
+          base+"/api/dual/receive/"+room+"/"+url(deviceId));
+
+        c=(HttpURLConnection)u.openConnection();
+        c.setConnectTimeout(8000);
+        c.setReadTimeout(35000);
+        c.setRequestProperty("x-dual-token",SECRET);
+        c.setUseCaches(false);
+
+        int code=c.getResponseCode();
+        if(code==200){
+          String kind=c.getHeaderField("X-Dual-Kind");
+          String id=c.getHeaderField("X-Dual-Id");
+          long created=parseLong(
+            c.getHeaderField("X-Dual-Created"),
+            System.currentTimeMillis()
+          );
+
+          if("text".equals(kind)){
+            byte[] b=readLimited(c.getInputStream(),1024*1024);
+            db.addText(
+              id,
+              false,
+              new String(b,StandardCharsets.UTF_8),
+              created,
+              "received"
+            );
+            changed();
+          }else if("file".equals(kind)){
+            String name=decodeName(
+              c.getHeaderField("X-Dual-File-Name"));
+
+            File dir=new File(getFilesDir(),"incoming");
+            dir.mkdirs();
+
+            File dst=new File(dir,id+"_"+safeName(name));
+
+            try(
+              InputStream in=c.getInputStream();
+              OutputStream out=new FileOutputStream(dst)
+            ){
+              copyLimited(in,out,500L*1024*1024);
+            }
+
+            db.addFile(
+              id,
+              false,
+              name,
+              dst.getAbsolutePath(),
+              dst.length(),
+              created,
+              "received"
+            );
+            changed();
+          }
+        }
+      }catch(Exception ignored){
+      }finally{
+        if(c!=null) c.disconnect();
+      }
+
+      if(running){
+        try{
+          Thread.sleep(350);
+        }catch(InterruptedException ignored){}
+      }
+    }
+  }
+
+  private boolean tryRelaySend(TransferDb.Msg m){
+    for(String base:RELAYS){
+      HttpURLConnection c=null;
+
+      try{
+        URL u=new URL(
+          base+"/api/dual/send/"+room+"/"+url(deviceId));
+
+        c=(HttpURLConnection)u.openConnection();
+        c.setRequestMethod("POST");
+        c.setDoOutput(true);
+        c.setConnectTimeout(5000);
+        c.setReadTimeout(15000);
+        c.setUseCaches(false);
+
+        c.setRequestProperty("x-dual-token",SECRET);
+        c.setRequestProperty("x-dual-kind",m.kind);
+        c.setRequestProperty("x-dual-id",m.id);
+        c.setRequestProperty(
+          "x-dual-created",
+          String.valueOf(m.createdAt)
+        );
+
+        if("text".equals(m.kind)){
+          byte[] b=(m.text==null?"":m.text)
+            .getBytes(StandardCharsets.UTF_8);
+
+          c.setFixedLengthStreamingMode(b.length);
+
+          try(OutputStream out=c.getOutputStream()){
+            out.write(b);
+          }
+        }else{
+          File file=new File(m.filePath==null?"":m.filePath);
+          if(!file.isFile()) return false;
+
+          c.setRequestProperty(
+            "x-dual-file-name",
+            Base64.encodeToString(
+              safeName(m.fileName).getBytes(StandardCharsets.UTF_8),
+              Base64.NO_WRAP
+            )
+          );
+
+          c.setFixedLengthStreamingMode(file.length());
+
+          try(
+            InputStream in=new FileInputStream(file);
+            OutputStream out=c.getOutputStream()
+          ){
+            copy(in,out);
+          }
+        }
+
+        int code=c.getResponseCode();
+
+        if(code>=200&&code<300){
+          db.markSent(m.id);
+          changed();
+          return true;
+        }
+
+        if(code==409) continue;
+      }catch(Exception ignored){
+      }finally{
+        if(c!=null) c.disconnect();
+      }
     }
 
-    private static String readString(DataInputStream in, int max) throws IOException {
-        int n = in.readInt();
-        if (n < 0 || n > max) throw new IOException("bad length");
-        byte[] b = new byte[n];
-        in.readFully(b);
-        return new String(b, StandardCharsets.UTF_8);
-    }
+    return false;
+  }
 
-    private static String safeName(String s) {
-        String v = s.replace("/", "_").replace("\\", "_").trim();
-        return v.isEmpty() ? "文件" : v;
-    }
+  @Override public int onStartCommand(
+    Intent intent,
+    int flags,
+    int startId
+  ){
+    tryStartNearby();
+    io.execute(this::flushPending);
+    return START_STICKY;
+  }
 
-    @Override public int onStartCommand(Intent intent, int flags, int startId) {
-        return START_STICKY;
-    }
+  @Override public void onDestroy(){
+    running=false;
 
-    @Override public void onDestroy() {
-        running = false;
-        try {
-            if (server != null) server.close();
-        } catch (Exception ignored) {}
-        try {
-            if (discovery != null) discovery.close();
-        } catch (Exception ignored) {}
-        try {
-            if (multicastLock != null && multicastLock.isHeld()) multicastLock.release();
-        } catch (Exception ignored) {}
+    try{
+      nearby.stopAdvertising();
+      nearby.stopDiscovery();
+      nearby.stopAllEndpoints();
+    }catch(Exception ignored){}
 
-        timer.shutdownNow();
-        io.shutdownNow();
-        super.onDestroy();
-    }
+    timer.shutdownNow();
+    io.shutdownNow();
+    super.onDestroy();
+  }
 
-    @Override public IBinder onBind(Intent intent) {
-        return null;
+  @Override public IBinder onBind(Intent intent){
+    return null;
+  }
+
+  private static String safeName(String s){
+    String v=(s==null?"文件":s)
+      .replace("/","_")
+      .replace("\\","_")
+      .trim();
+
+    return v.isEmpty()?"文件":v;
+  }
+
+  private static String sha256(String s){
+    try{
+      byte[] d=MessageDigest
+        .getInstance("SHA-256")
+        .digest(s.getBytes(StandardCharsets.UTF_8));
+
+      StringBuilder b=new StringBuilder();
+
+      for(byte x:d){
+        b.append(String.format(
+          Locale.US,
+          "%02x",
+          x&255
+        ));
+      }
+
+      return b.toString();
+    }catch(Exception e){
+      throw new RuntimeException(e);
     }
+  }
+
+  private static String url(String s){
+    try{
+      return URLEncoder.encode(s,"UTF-8");
+    }catch(Exception e){
+      return s;
+    }
+  }
+
+  private static long parseLong(String s,long fallback){
+    try{
+      return Long.parseLong(s);
+    }catch(Exception e){
+      return fallback;
+    }
+  }
+
+  private static String decodeName(String b64){
+    try{
+      return new String(
+        Base64.decode(b64,Base64.DEFAULT),
+        StandardCharsets.UTF_8
+      );
+    }catch(Exception e){
+      return "文件";
+    }
+  }
+
+  private static void copy(
+    InputStream in,
+    OutputStream out
+  )throws IOException{
+    byte[] b=new byte[65536];
+    int n;
+
+    while((n=in.read(b))>0){
+      out.write(b,0,n);
+    }
+  }
+
+  private static byte[] readLimited(
+    InputStream in,
+    long max
+  )throws IOException{
+    ByteArrayOutputStream out=new ByteArrayOutputStream();
+    copyLimited(in,out,max);
+    return out.toByteArray();
+  }
+
+  private static void copyLimited(
+    InputStream in,
+    OutputStream out,
+    long max
+  )throws IOException{
+    byte[] b=new byte[65536];
+    long total=0;
+    int n;
+
+    while((n=in.read(b))>0){
+      total+=n;
+      if(total>max) throw new IOException("too large");
+      out.write(b,0,n);
+    }
+  }
 }
