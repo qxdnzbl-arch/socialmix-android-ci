@@ -74,8 +74,14 @@ public class TransferService extends Service {
     nearby=Nearby.getConnectionsClient(this);
     tryStartNearby();
 
-    for(String relay:RELAYS){
-      io.execute(()->relayReceiveLoop(relay));
+    boolean ciNearbyOnly=
+      (getApplicationInfo().flags & android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE)!=0
+      && p.getBoolean("ci_nearby_only",false);
+
+    if(!ciNearbyOnly){
+      for(String relay:RELAYS){
+        io.execute(()->relayReceiveLoop(relay));
+      }
     }
 
     timer.scheduleWithFixedDelay(this::flushPending,250,500,TimeUnit.MILLISECONDS);
@@ -320,15 +326,21 @@ public class TransferService extends Service {
     List<TransferDb.Msg> pending=db.pending();
     if(pending.isEmpty()) return;
 
+    boolean ciNearbyOnly=
+      (getApplicationInfo().flags & android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE)!=0
+      && getSharedPreferences("dual",MODE_PRIVATE).getBoolean("ci_nearby_only",false);
+
     if(!endpoints.isEmpty()){
       String endpoint=endpoints.iterator().next();
       for(TransferDb.Msg m:pending){
         if(sendNearby(endpoint,m)) continue;
-        tryRelaySend(m);
+        if(!ciNearbyOnly) tryRelaySend(m);
       }
     }else{
-      for(TransferDb.Msg m:pending){
-        tryRelaySend(m);
+      if(!ciNearbyOnly){
+        for(TransferDb.Msg m:pending){
+          tryRelaySend(m);
+        }
       }
     }
   }
