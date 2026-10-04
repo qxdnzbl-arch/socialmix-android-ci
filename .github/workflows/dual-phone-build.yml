@@ -76,23 +76,9 @@ jobs:
             ! grep -qi 'floot' deliverable/setup.xml
             adb exec-out screencap -p > deliverable/01-offline-setup.png
 
-            python3 - <<'PY'
-            import re, subprocess, xml.etree.ElementTree as ET
-            xml = open('deliverable/setup.xml',encoding='utf-8').read()
-            def center(resid):
-                root=ET.fromstring(xml)
-                for n in root.iter('node'):
-                    if n.attrib.get('resource-id','').endswith('/'+resid):
-                        x1,y1,x2,y2=map(int,re.findall(r'\d+',n.attrib['bounds']))
-                        return (x1+x2)//2,(y1+y2)//2
-                raise SystemExit('missing '+resid)
-            for rid,text in [('account','testlocal'),('password','pass1234')]:
-                x,y=center(rid)
-                subprocess.check_call(['adb','shell','input','tap',str(x),str(y)])
-                subprocess.check_call(['adb','shell','input','text',text])
-            x,y=center('enter')
-            subprocess.check_call(['adb','shell','input','tap',str(x),str(y)])
-            PY
+            python3 dualphone/ci/click_id.py deliverable/setup.xml account testlocal
+            python3 dualphone/ci/click_id.py deliverable/setup.xml password pass1234
+            python3 dualphone/ci/click_id.py deliverable/setup.xml enter
 
             sleep 4
             adb shell uiautomator dump /sdcard/chat.xml
@@ -108,21 +94,7 @@ jobs:
             test -n "$PORT"
             adb forward tcp:47000 tcp:$PORT
 
-            python3 - <<'PY'
-            import hashlib, socket, struct, time
-            token=hashlib.sha256(b'testlocal\npass1234').hexdigest()
-            def ws(sock,s):
-                b=s.encode(); sock.sendall(struct.pack('>I',len(b))+b)
-            s=socket.create_connection(('127.0.0.1',47000),timeout=5)
-            s.sendall(struct.pack('>I',0x534A4331))
-            ws(s,token); ws(s,'ci-incoming'); ws(s,'mock-peer')
-            s.sendall(struct.pack('>q',int(time.time()*1000)))
-            s.sendall(b'\x01')
-            ws(s,'离线测试消息')
-            ack=struct.unpack('>I',s.recv(4))[0]
-            assert ack==1, ack
-            s.close()
-            PY
+            python3 dualphone/ci/send_incoming.py 47000
 
             sleep 2
             adb shell uiautomator dump /sdcard/incoming.xml
@@ -131,16 +103,7 @@ jobs:
             adb exec-out screencap -p > deliverable/03-offline-incoming.png
 
             # Keyboard regression: composer and send button must remain visible.
-            python3 - <<'PY'
-            import re, subprocess, xml.etree.ElementTree as ET
-            xml=open('deliverable/incoming.xml',encoding='utf-8').read()
-            root=ET.fromstring(xml)
-            for n in root.iter('node'):
-                if n.attrib.get('resource-id','').endswith('/message'):
-                    x1,y1,x2,y2=map(int,re.findall(r'\d+',n.attrib['bounds']))
-                    subprocess.check_call(['adb','shell','input','tap',str((x1+x2)//2),str((y1+y2)//2)])
-                    break
-            PY
+            python3 dualphone/ci/click_id.py deliverable/incoming.xml message
             sleep 2
             adb shell uiautomator dump /sdcard/keyboard.xml
             adb pull /sdcard/keyboard.xml deliverable/keyboard.xml
