@@ -61,13 +61,13 @@ public class MainActivity extends Activity {
             prefs.edit().putString("device", device).apply();
         }
 
-        if (BuildConfig.DEBUG && getIntent().getBooleanExtra("ciAuto", false)) {
+        if (isDebuggable() && getIntent().getBooleanExtra("ciAuto", false)) {
             prefs.edit()
                 .putString("token", sha256("testlocal\npass1234"))
                 .putString("account", "testlocal")
                 .apply();
         }
-        if (BuildConfig.DEBUG) debugManifestOverride = getIntent().getStringExtra("ciManifest");
+        if (isDebuggable()) debugManifestOverride = getIntent().getStringExtra("ciManifest");
 
         web = new WebView(this);
         WebSettings s = web.getSettings();
@@ -139,7 +139,7 @@ public class MainActivity extends Activity {
         io.execute(() -> {
             try {
                 String[] manifests;
-                if (BuildConfig.DEBUG && debugManifestOverride != null && !debugManifestOverride.isEmpty()) {
+                if (isDebuggable() && debugManifestOverride != null && !debugManifestOverride.isEmpty()) {
                     manifests = new String[]{debugManifestOverride};
                 } else {
                     manifests = new String[]{
