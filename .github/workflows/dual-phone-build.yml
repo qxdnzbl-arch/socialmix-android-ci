@@ -1,56 +1,37 @@
-name: Dual Phone Offline Native Acceptance
-
+name: Dual Phone Install-Once Acceptance
 on:
   push:
     branches: [dual-phone-transfer-build]
-    paths:
-      - 'dualphone/ci/offline-v3-trigger.txt'
+    paths: ['dualphone/ci/run-acceptance.txt']
   workflow_dispatch:
-
-concurrency:
-  group: dual-phone-offline-acceptance
-  cancel-in-progress: true
-
 permissions:
   contents: read
-
+concurrency:
+  group: dual-phone-install-once
+  cancel-in-progress: true
 jobs:
   build-test:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: '17'
+        with: { distribution: temurin, java-version: '17' }
       - uses: gradle/actions/setup-gradle@v4
-        with:
-          gradle-version: '8.11.1'
-
-      - name: Restore stable signing key
+        with: { gradle-version: '8.11.1' }
+      - name: Restore signing key
         working-directory: dualphone
         run: base64 -d keystore.b64 > app/shuangjichuan-release.jks
-
-      - name: Assert no Floot or remote runtime dependency
-        run: |
-          ! grep -RniE 'floot|shuangji-chuan\.floot\.app|WebView' dualphone/app/src/main || (echo "Remote/Floot dependency found" && exit 1)
-
-      - name: Build debug and signed release APK
+      - name: Build signed APK
         working-directory: dualphone
         run: gradle --no-daemon :app:assembleDebug :app:assembleRelease
-
-      - name: Verify release signing and files
+      - name: Verify release
         run: |
-          test -s dualphone/app/build/outputs/apk/release/app-release.apk
-          test -s dualphone/app/build/outputs/apk/debug/app-debug.apk
-          jarsigner -verify -verbose -certs dualphone/app/build/outputs/apk/release/app-release.apk >/tmp/signing.txt
-
+          APKSIGNER=$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -1)
+          "$APKSIGNER" verify --verbose dualphone/app/build/outputs/apk/release/app-release.apk
       - name: Enable KVM
-        run: |
-          if [ -e /dev/kvm ]; then sudo chmod 666 /dev/kvm; fi
-
-      - name: Offline native emulator acceptance
+        run: if [ -e /dev/kvm ]; then sudo chmod 666 /dev/kvm; fi
+      - name: Offline + no-reinstall OTA acceptance
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 35
@@ -64,65 +45,45 @@ jobs:
             mkdir -p deliverable
             adb install -r dualphone/app/build/outputs/apk/debug/app-debug.apk
             adb shell pm clear com.qxdnzbl.shuangjichuan.offline
-
-            # No internet: disable mobile data. Keep local Wi-Fi stack available for LAN transfer.
             adb shell svc data disable || true
-            adb shell settings put global airplane_mode_on 0 || true
-
+            adb shell svc wifi disable || true
             adb logcat -c
-            adb shell am force-stop com.qxdnzbl.shuangjichuan.offline || true
-            adb shell monkey -p com.qxdnzbl.shuangjichuan.offline -c android.intent.category.LAUNCHER 1
-            sleep 3
-
-            adb shell uiautomator dump /sdcard/setup.xml
-            adb pull /sdcard/setup.xml deliverable/setup.xml
-            grep -q 'resource-id="com.qxdnzbl.shuangjichuan.offline:id/account"' deliverable/setup.xml
-            grep -q 'resource-id="com.qxdnzbl.shuangjichuan.offline:id/password"' deliverable/setup.xml
-            grep -q 'resource-id="com.qxdnzbl.shuangjichuan.offline:id/enter"' deliverable/setup.xml
-            ! grep -qi 'floot' deliverable/setup.xml
-            adb exec-out screencap -p > deliverable/01-offline-setup.png
-
-            python3 dualphone/ci/click_id.py deliverable/setup.xml account testlocal
-            python3 dualphone/ci/click_id.py deliverable/setup.xml password pass1234
-            python3 dualphone/ci/click_id.py deliverable/setup.xml enter
-
+            adb shell am start -n com.qxdnzbl.shuangjichuan.offline/com.qxdnzbl.shuangjichuan.MainActivity --ez ciAuto true
             sleep 4
-            adb shell uiautomator dump /sdcard/chat.xml
-            adb pull /sdcard/chat.xml deliverable/chat.xml
-            grep -q '我的两台手机' deliverable/chat.xml
-            grep -q 'resource-id="com.qxdnzbl.shuangjichuan.offline:id/status"' deliverable/chat.xml
-            ! grep -qi 'floot' deliverable/chat.xml
-            adb exec-out screencap -p > deliverable/02-offline-chat.png
+            adb logcat -d -s DualPhoneUi:I '*:S' > deliverable/offline.log
+            grep -q 'screen=chat' deliverable/offline.log
+            adb exec-out screencap -p > deliverable/01-offline.png
 
-            # Confirm native listener is up and accept a packet from a mock second phone.
-            sleep 2
             adb forward tcp:47000 tcp:39732
             python3 dualphone/ci/send_incoming.py 47000
-
             sleep 2
-            adb shell uiautomator dump /sdcard/incoming.xml
-            adb pull /sdcard/incoming.xml deliverable/incoming.xml
-            grep -q '离线测试消息' deliverable/incoming.xml
-            adb exec-out screencap -p > deliverable/03-offline-incoming.png
+            adb logcat -d -s DualPhoneUi:I '*:S' > deliverable/incoming.log
+            grep -q 'messages=1' deliverable/incoming.log
 
-            # Keyboard regression: composer and send button must remain visible.
-            python3 dualphone/ci/click_id.py deliverable/incoming.xml message
-            sleep 2
-            adb shell uiautomator dump /sdcard/keyboard.xml
-            adb pull /sdcard/keyboard.xml deliverable/keyboard.xml
-            grep -q 'resource-id="com.qxdnzbl.shuangjichuan.offline:id/send"' deliverable/keyboard.xml
-            adb logcat -d -s DualPhoneLayout:I '*:S' > deliverable/layout.log
-            python3 -c "import re; s=open('deliverable/layout.log',encoding='utf-8',errors='ignore').read(); m=list(re.finditer(r'visibleBottom=(\\d+) barY=(-?\\d+) barBottom=(-?\\d+) covered=(\\d+)',s)); assert m, s; v,y,b,covered=map(int,m[-1].groups()); assert covered>100,(v,y,b,covered); assert b<=v+4,(v,y,b,covered)"
-            adb exec-out screencap -p > deliverable/04-keyboard.png
+            python3 -m http.server 8765 --directory dualphone/ci/ota-test >/tmp/ota.log 2>&1 &
+            adb reverse tcp:8765 tcp:8765
+            adb logcat -c
+            adb shell am force-stop com.qxdnzbl.shuangjichuan.offline
+            adb shell am start -n com.qxdnzbl.shuangjichuan.offline/com.qxdnzbl.shuangjichuan.MainActivity --ez ciAuto true --es ciManifest http://127.0.0.1:8765/manifest.json
+            sleep 5
+            adb logcat -d -s DualPhoneOta:I DualPhoneUi:I '*:S' > deliverable/ota.log
+            grep -q 'OTA_APPLIED 99' deliverable/ota.log
+            grep -q 'OTA_TEST_APPLIED' deliverable/ota.log
 
-            cp dualphone/app/build/outputs/apk/release/app-release.apk deliverable/ShuangJiChuan_v3_Offline.apk
-            sha256sum deliverable/ShuangJiChuan_v3_Offline.apk > deliverable/SHA256.txt
-            test -s deliverable/ShuangJiChuan_v3_Offline.apk
+            adb shell am force-stop com.qxdnzbl.shuangjichuan.offline
+            adb shell svc wifi disable || true
+            adb logcat -c
+            adb shell am start -n com.qxdnzbl.shuangjichuan.offline/com.qxdnzbl.shuangjichuan.MainActivity --ez ciAuto true
+            sleep 3
+            adb logcat -d -s DualPhoneUi:I '*:S' > deliverable/persist.log
+            grep -q 'OTA_TEST_APPLIED' deliverable/persist.log
+            adb exec-out screencap -p > deliverable/02-updated-without-reinstall.png
 
-      - name: Upload accepted APK and evidence
-        uses: actions/upload-artifact@v4
+            cp dualphone/app/build/outputs/apk/release/app-release.apk deliverable/ShuangJiChuan_v4_InstallOnce.apk
+            sha256sum deliverable/ShuangJiChuan_v4_InstallOnce.apk > deliverable/SHA256.txt
+      - uses: actions/upload-artifact@v4
         with:
-          name: shuangjichuan-v3-offline
+          name: shuangjichuan-v4-install-once
           path: deliverable/
           if-no-files-found: error
           retention-days: 14

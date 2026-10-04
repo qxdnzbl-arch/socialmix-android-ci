@@ -8,26 +8,10 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE"/>
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
-
-    <application
-        android:theme="@style/AppTheme"
-        android:label="双机传"
-        android:allowBackup="true"
-        android:supportsRtl="true">
-        <activity
-            android:name=".MainActivity"
-            android:exported="true"
-            android:screenOrientation="portrait"
-            android:windowSoftInputMode="adjustResize">
-            <intent-filter>
-                <action android:name="android.intent.action.MAIN"/>
-                <category android:name="android.intent.category.LAUNCHER"/>
-            </intent-filter>
+    <application android:theme="@style/AppTheme" android:label="双机传" android:allowBackup="true" android:usesCleartextTraffic="true" android:supportsRtl="true">
+        <activity android:name=".MainActivity" android:exported="true" android:screenOrientation="portrait" android:windowSoftInputMode="adjustResize">
+            <intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent-filter>
         </activity>
-
-        <service
-            android:name=".TransferService"
-            android:exported="false"
-            android:foregroundServiceType="connectedDevice"/>
+        <service android:name=".TransferService" android:exported="false" android:foregroundServiceType="connectedDevice"/>
     </application>
 </manifest>

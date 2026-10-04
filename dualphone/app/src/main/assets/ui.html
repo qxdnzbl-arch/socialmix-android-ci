@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="zh-CN"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>双机传</title>
+<style>
+*{box-sizing:border-box}html,body{margin:0;width:100%;height:100%;font-family:system-ui,-apple-system,"Segoe UI",sans-serif;color:#1c242c;background:#f5f7f9}button,input,textarea{font:inherit}#app{height:100dvh;overflow:hidden}
+.setup{height:100%;overflow:auto;background:#fff;padding:56px 24px 32px}.logo{font-size:30px;color:#2670d8}.setup h1{font-size:36px;margin:16px 0 10px}.muted{color:#68737e;line-height:1.65}.field{width:100%;height:56px;border:0;border-radius:13px;background:#f4f6f8;padding:0 14px;margin-top:12px;outline:none}.primary{width:100%;height:54px;border:0;border-radius:14px;background:#4d8be0;color:#fff;margin-top:16px;font-weight:650}.note{font-size:13px;color:#7d8791;line-height:1.55;margin-top:16px}
+.chat{height:100%;display:flex;flex-direction:column}.head{background:#fff;padding:13px 18px 11px;border-bottom:1px solid #e0e5ea}.head strong{font-size:19px}.status{font-size:12px;margin-top:4px}.ok{color:#24895c}.wait{color:#ac701e}.messages{flex:1;overflow:auto;padding:14px 14px 18px}.empty{text-align:center;color:#707b86;line-height:1.55;padding:80px 26px}.row{display:flex;margin-bottom:9px}.row.mine{justify-content:flex-end}.bubble{max-width:82%;border-radius:16px;padding:9px 12px 8px;background:#fff}.mine .bubble{background:#4380d8;color:#fff}.file{font-weight:650}.meta{font-size:12px;color:#707b86;margin-top:4px}.mine .meta{color:#deebfc}.state{text-align:right;font-size:11px;color:#deebfc;margin-top:5px}.save{font-size:12px;color:#3774cd;margin-top:5px}.composer{background:#fff;padding:8px calc(8px + env(safe-area-inset-right)) calc(8px + env(safe-area-inset-bottom)) calc(8px + env(safe-area-inset-left));display:flex;gap:7px;align-items:flex-end}.attach{width:48px;height:48px;border:0;background:transparent;font-size:28px}.input{flex:1;min-height:48px;max-height:112px;border:0;border-radius:14px;background:#eef1f4;padding:12px;outline:none;resize:none}.send{width:68px;height:48px;border:0;border-radius:12px;background:#427ed6;color:#fff}
+</style></head>
+<body><div id="app"></div><script>
+const app=document.getElementById('app');let last='';
+function esc(s){return String(s??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]))}
+function size(n){n=Number(n)||0;if(n<1024)return n+' B';if(n<1048576)return(n/1024).toFixed(1)+' KB';return(n/1048576).toFixed(1)+' MB'}
+function get(){try{return JSON.parse(Android.getState())}catch(e){return{setupNeeded:true,messages:[]}}}
+function render(force=false){
+ const s=get(),js=JSON.stringify(s);if(!force&&js===last)return;last=js;
+ if(s.setupNeeded){
+  app.innerHTML='<div class="setup"><div class="logo">▯&nbsp; ▯</div><h1>双机传</h1><div class="muted">不用联网，不用 VPN。两台手机连同一个 Wi‑Fi，或者一台开热点另一台连上，就能直接传消息和文件。</div><input id="account" class="field" placeholder="两台手机填同一个账号"><input id="password" class="field" type="password" placeholder="两台手机填同一个密码"><button id="enter" class="primary">进入双机传</button><div class="note">账号和密码只保存在本机。以后不用重复登录。</div></div>';
+  document.getElementById('enter').onclick=()=>{Android.setCredentials(document.getElementById('account').value,document.getElementById('password').value);setTimeout(()=>render(true),100)};
+  Android.reportUi('screen=setup ui='+s.uiVersion);return;
+ }
+ const msgs=(s.messages||[]).map(m=>{const body=m.kind==='text'?'<div>'+esc(m.text)+'</div>':'<div class="file">📎 '+esc(m.fileName||'文件')+'</div><div class="meta">'+size(m.fileSize)+'</div>'+(m.mine?'':'<div class="save">点一下保存到下载</div>');return '<div class="row '+(m.mine?'mine':'')+'" data-id="'+esc(m.id)+'"><div class="bubble">'+body+(m.mine?'<div class="state">'+(m.status==='sent'?'已送达':'等待另一台手机')+'</div>':'')+'</div></div>'}).join('');
+ app.innerHTML='<div class="chat"><div class="head"><strong>我的两台手机</strong><div class="status '+(s.connected?'ok':'wait')+'">● '+(s.connected?'已连接 · 本地直传':'等待另一台手机 · 同一 Wi‑Fi 或热点')+'</div></div><div id="messages" class="messages">'+(msgs||'<div class="empty">直接发就行<br>两台手机会自动发现彼此。</div>')+'</div><div id="composer" class="composer"><button id="attach" class="attach">+</button><textarea id="message" class="input" rows="1" placeholder="输入消息"></textarea><button id="send" class="send">发送</button></div></div>';
+ const msg=document.getElementById('message');document.getElementById('send').onclick=send;document.getElementById('attach').onclick=()=>Android.pickFiles();msg.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();send()}});document.querySelectorAll('.row:not(.mine)').forEach(r=>r.onclick=()=>Android.saveFile(r.dataset.id));const box=document.getElementById('messages');box.scrollTop=box.scrollHeight;Android.reportUi('screen=chat messages='+(s.messages||[]).length+' ui='+s.uiVersion);reportGeometry()
+}
+function send(){const e=document.getElementById('message'),t=e.value.trim();if(!t)return;e.value='';Android.sendText(t);setTimeout(()=>render(true),50)}
+function reportGeometry(){const c=document.getElementById('composer');if(!c)return;const vv=window.visualViewport;Android.reportLayout(vv?vv.height:window.innerHeight,c.getBoundingClientRect().bottom)}
+window.nativeRefresh=()=>render(true);if(window.visualViewport){visualViewport.addEventListener('resize',()=>{document.getElementById('app').style.height=visualViewport.height+'px';setTimeout(reportGeometry,80)})}render(true);setInterval(()=>render(false),350);
+</script></body></html>

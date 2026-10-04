@@ -3,44 +3,50 @@ package com.qxdnzbl.shuangjichuan;
 import android.app.*;
 import android.content.*;
 import android.database.Cursor;
-import android.graphics.*;
-import android.graphics.drawable.GradientDrawable;
+import android.graphics.Color;
 import android.net.Uri;
 import android.os.*;
 import android.provider.MediaStore;
 import android.provider.OpenableColumns;
 import android.util.Log;
 import android.view.*;
-import android.view.inputmethod.EditorInfo;
-import android.widget.*;
+import android.webkit.*;
+import android.widget.Toast;
+import org.json.*;
 
 import java.io.*;
+import java.net.*;
+import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.util.*;
+import java.util.concurrent.*;
 
 public class MainActivity extends Activity {
     private static final int PICK = 7070;
+    private static final String UI_FILE = "ui-current.html";
+    private static final String PREF_UI_VERSION = "ui_version";
+    private static final int BUNDLED_UI_VERSION = 2;
 
+    private final ExecutorService io = Executors.newCachedThreadPool();
     private SharedPreferences prefs;
     private TransferDb db;
-    private LinearLayout messages;
-    private ScrollView scroll;
-    private TextView status;
-    private EditText input;
+    private WebView web;
+    private volatile boolean connected = false;
+    private String debugManifestOverride;
 
     private final BroadcastReceiver receiver = new BroadcastReceiver() {
         @Override public void onReceive(Context context, Intent intent) {
             if (TransferService.ACTION_STATE.equals(intent.getAction())) {
-                boolean connected = intent.getBooleanExtra("connected", false);
-                showState(connected);
+                connected = intent.getBooleanExtra("connected", false);
+                notifyWeb();
             } else if (TransferService.ACTION_CHANGED.equals(intent.getAction())) {
-                renderMessages();
+                notifyWeb();
             }
         }
     };
 
-    @Override public void onCreate(Bundle b) {
-        super.onCreate(b);
+    @Override public void onCreate(Bundle state) {
+        super.onCreate(state);
         getWindow().setStatusBarColor(Color.WHITE);
         getWindow().setNavigationBarColor(Color.WHITE);
         getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR);
@@ -55,8 +61,36 @@ public class MainActivity extends Activity {
             prefs.edit().putString("device", device).apply();
         }
 
-        if (prefs.getString("token", "").isEmpty()) showSetup();
-        else showChat();
+        if (BuildConfig.DEBUG && getIntent().getBooleanExtra("ciAuto", false)) {
+            prefs.edit()
+                .putString("token", sha256("testlocal\npass1234"))
+                .putString("account", "testlocal")
+                .apply();
+        }
+        if (BuildConfig.DEBUG) debugManifestOverride = getIntent().getStringExtra("ciManifest");
+
+        web = new WebView(this);
+        WebSettings s = web.getSettings();
+        s.setJavaScriptEnabled(true);
+        s.setDomStorageEnabled(true);
+        s.setAllowFileAccess(true);
+        s.setAllowContentAccess(true);
+        s.setCacheMode(WebSettings.LOAD_NO_CACHE);
+        web.setBackgroundColor(Color.WHITE);
+        web.addJavascriptInterface(new Bridge(), "Android");
+        web.setWebChromeClient(new WebChromeClient());
+        web.setWebViewClient(new WebViewClient() {
+            @Override public void onPageFinished(WebView view, String url) {
+                Log.i("DualPhoneUi", "LOCAL_UI_READY " + url);
+            }
+        });
+
+        setContentView(web);
+        ensureLocalUi();
+        loadLocalUi();
+
+        if (!prefs.getString("token", "").isEmpty()) TransferService.start(this);
+        checkForUiUpdate();
     }
 
     @Override protected void onStart() {
@@ -73,231 +107,206 @@ public class MainActivity extends Activity {
         super.onStop();
     }
 
-    int dp(int v) { return (int)(v * getResources().getDisplayMetrics().density + 0.5f); }
-
-    GradientDrawable box(int color, int radius) {
-        GradientDrawable g = new GradientDrawable();
-        g.setColor(color);
-        g.setCornerRadius(dp(radius));
-        return g;
+    @Override protected void onDestroy() {
+        io.shutdownNow();
+        if (web != null) web.destroy();
+        super.onDestroy();
     }
 
-    TextView tv(String text, int sp, int color) {
-        TextView v = new TextView(this);
-        v.setText(text);
-        v.setTextSize(sp);
-        v.setTextColor(color);
-        return v;
-    }
-
-    private void showSetup() {
-        ScrollView outer = new ScrollView(this);
-        outer.setBackgroundColor(Color.WHITE);
-
-        LinearLayout root = new LinearLayout(this);
-        root.setOrientation(LinearLayout.VERTICAL);
-        root.setPadding(dp(24), dp(62), dp(24), dp(32));
-        outer.addView(root);
-
-        TextView icon = tv("▯  ▯", 30, Color.rgb(38, 112, 216));
-        root.addView(icon);
-
-        TextView title = tv("双机传", 36, Color.rgb(28, 36, 44));
-        title.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
-        title.setPadding(0, dp(16), 0, 0);
-        root.addView(title);
-
-        TextView sub = tv("不用联网，不用 VPN。两台手机只要连同一个 Wi‑Fi，或者一台开热点另一台连上，就能直接传消息和文件。", 16, Color.rgb(99, 110, 121));
-        sub.setLineSpacing(0, 1.35f);
-        sub.setPadding(0, dp(12), 0, dp(28));
-        root.addView(sub);
-
-        EditText account = new EditText(this);
-        account.setId(R.id.account);
-        account.setHint("两台手机填同一个账号");
-        account.setSingleLine(true);
-        account.setTextSize(16);
-        account.setPadding(dp(14), 0, dp(14), 0);
-        account.setBackground(box(Color.rgb(244, 246, 248), 13));
-        root.addView(account, new LinearLayout.LayoutParams(-1, dp(56)));
-
-        EditText password = new EditText(this);
-        password.setId(R.id.password);
-        password.setHint("两台手机填同一个密码");
-        password.setSingleLine(true);
-        password.setInputType(129);
-        password.setTextSize(16);
-        password.setPadding(dp(14), 0, dp(14), 0);
-        password.setBackground(box(Color.rgb(244, 246, 248), 13));
-        LinearLayout.LayoutParams pp = new LinearLayout.LayoutParams(-1, dp(56));
-        pp.topMargin = dp(12);
-        root.addView(password, pp);
-
-        TextView err = tv("", 13, Color.rgb(190, 60, 60));
-        err.setPadding(0, dp(8), 0, 0);
-        root.addView(err);
-
-        Button enter = new Button(this);
-        enter.setId(R.id.enter);
-        enter.setText("进入双机传");
-        enter.setTextSize(16);
-        enter.setTextColor(Color.WHITE);
-        enter.setAllCaps(false);
-        enter.setBackground(box(Color.rgb(77, 139, 224), 14));
-        LinearLayout.LayoutParams ep = new LinearLayout.LayoutParams(-1, dp(54));
-        ep.topMargin = dp(16);
-        root.addView(enter, ep);
-
-        TextView note = tv("账号和密码不会上传到任何服务器，只在本机用来让两台手机认出彼此。以后不用再登录。", 13, Color.rgb(125, 135, 145));
-        note.setLineSpacing(0, 1.3f);
-        note.setPadding(0, dp(18), 0, 0);
-        root.addView(note);
-
-        enter.setOnClickListener(v -> {
-            String a = account.getText().toString().trim();
-            String p = password.getText().toString();
-            if (a.isEmpty() || p.length() < 4) {
-                err.setText("账号不能为空，密码至少 4 位");
-                return;
-            }
-            String token = sha256(a.toLowerCase(Locale.ROOT) + "\n" + p);
-            prefs.edit().putString("token", token).putString("account", a).apply();
-            showChat();
-        });
-
-        setContentView(outer);
-    }
-
-    private void showChat() {
-        LinearLayout root = new LinearLayout(this);
-        root.setOrientation(LinearLayout.VERTICAL);
-        root.setBackgroundColor(Color.rgb(245, 247, 249));
-
-        LinearLayout head = new LinearLayout(this);
-        head.setOrientation(LinearLayout.VERTICAL);
-        head.setPadding(dp(18), dp(13), dp(18), dp(11));
-        head.setBackgroundColor(Color.WHITE);
-
-        TextView title = tv("我的两台手机", 19, Color.rgb(28, 36, 44));
-        title.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
-        head.addView(title);
-
-        status = tv("● 正在寻找另一台手机", 12, Color.rgb(172, 112, 30));
-        status.setId(R.id.status);
-        status.setPadding(0, dp(4), 0, 0);
-        head.addView(status);
-        root.addView(head);
-
-        View line = new View(this);
-        line.setBackgroundColor(Color.rgb(224, 229, 234));
-        root.addView(line, new LinearLayout.LayoutParams(-1, dp(1)));
-
-        scroll = new ScrollView(this);
-        scroll.setFillViewport(true);
-        messages = new LinearLayout(this);
-        messages.setOrientation(LinearLayout.VERTICAL);
-        messages.setPadding(dp(14), dp(14), dp(14), dp(18));
-        scroll.addView(messages);
-        root.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1f));
-
-        LinearLayout bar = new LinearLayout(this);
-        bar.setGravity(Gravity.BOTTOM);
-        bar.setPadding(dp(8), dp(8), dp(8), dp(8));
-        bar.setBackgroundColor(Color.WHITE);
-
-        Button attach = new Button(this);
-        attach.setId(R.id.attach);
-        attach.setText("+");
-        attach.setTextSize(24);
-        attach.setAllCaps(false);
-        attach.setBackgroundColor(Color.TRANSPARENT);
-        bar.addView(attach, new LinearLayout.LayoutParams(dp(48), dp(48)));
-
-        input = new EditText(this);
-        input.setId(R.id.message);
-        input.setHint("输入消息");
-        input.setTextSize(15);
-        input.setMinLines(1);
-        input.setMaxLines(4);
-        input.setPadding(dp(12), dp(9), dp(12), dp(9));
-        input.setBackground(box(Color.rgb(238, 241, 244), 14));
-        input.setImeOptions(EditorInfo.IME_ACTION_SEND);
-
-        LinearLayout.LayoutParams ip = new LinearLayout.LayoutParams(0, -2, 1f);
-        ip.leftMargin = dp(4);
-        ip.rightMargin = dp(7);
-        bar.addView(input, ip);
-
-        Button send = new Button(this);
-        send.setId(R.id.send);
-        send.setText("发送");
-        send.setTextColor(Color.WHITE);
-        send.setAllCaps(false);
-        send.setBackground(box(Color.rgb(66, 126, 214), 12));
-        bar.addView(send, new LinearLayout.LayoutParams(dp(68), dp(48)));
-        root.addView(bar);
-
-        // Android 15+ may draw edge-to-edge and let the IME cover bottom controls even
-        // with adjustResize. Keep the composer physically above the visible window.
-        root.getViewTreeObserver().addOnGlobalLayoutListener(() -> {
-            Rect visible = new Rect();
-            root.getWindowVisibleDisplayFrame(visible);
-            int fullBottom = root.getRootView().getHeight();
-            int covered = Math.max(0, fullBottom - visible.bottom);
-            float shift = covered > dp(120) ? -covered : 0f;
-            if (bar.getTranslationY() != shift) bar.setTranslationY(shift);
-            if (covered > dp(120)) {
-                Log.i("DualPhoneLayout",
-                    "visibleBottom=" + visible.bottom +
-                    " barY=" + (int)bar.getY() +
-                    " barBottom=" + (int)(bar.getY() + bar.getHeight()) +
-                    " covered=" + covered);
-            }
-        });
-
-        attach.setOnClickListener(v -> pickFiles());
-        send.setOnClickListener(v -> sendText());
-        input.setOnEditorActionListener((v, actionId, event) -> {
-            if (actionId == EditorInfo.IME_ACTION_SEND) {
-                sendText();
-                return true;
-            }
-            return false;
-        });
-
-        setContentView(root);
-        renderMessages();
-        TransferService.start(this);
-    }
-
-    private void showState(boolean connected) {
-        if (status == null) return;
-        if (connected) {
-            status.setText("● 已连接 · 本地直传");
-            status.setTextColor(Color.rgb(36, 137, 92));
-        } else {
-            status.setText("● 等待另一台手机 · 连同一 Wi‑Fi 或热点");
-            status.setTextColor(Color.rgb(172, 112, 30));
+    private void ensureLocalUi() {
+        File dst = new File(getFilesDir(), UI_FILE);
+        if (dst.isFile()) return;
+        try (InputStream in = getAssets().open("ui.html");
+             OutputStream out = new FileOutputStream(dst)) {
+            copy(in, out);
+            prefs.edit().putInt(PREF_UI_VERSION, BUNDLED_UI_VERSION).apply();
+        } catch (Exception e) {
+            throw new RuntimeException("UI init failed", e);
         }
     }
 
-    private void sendText() {
-        String s = input.getText().toString().trim();
-        if (s.isEmpty()) return;
-
-        input.setText("");
-        String id = UUID.randomUUID().toString();
-        db.addText(id, true, s, System.currentTimeMillis(), "pending");
-        renderMessages();
-        TransferService.wake(this);
+    private void loadLocalUi() {
+        web.loadUrl(Uri.fromFile(new File(getFilesDir(), UI_FILE)).toString());
     }
 
-    private void pickFiles() {
-        Intent i = new Intent(Intent.ACTION_OPEN_DOCUMENT);
-        i.setType("*/*");
-        i.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true);
-        i.addCategory(Intent.CATEGORY_OPENABLE);
-        startActivityForResult(i, PICK);
+    private void notifyWeb() {
+        if (web == null) return;
+        runOnUiThread(() -> web.evaluateJavascript(
+            "window.nativeRefresh&&window.nativeRefresh()", null));
+    }
+
+    private void checkForUiUpdate() {
+        io.execute(() -> {
+            try {
+                String[] manifests;
+                if (BuildConfig.DEBUG && debugManifestOverride != null && !debugManifestOverride.isEmpty()) {
+                    manifests = new String[]{debugManifestOverride};
+                } else {
+                    manifests = new String[]{
+                        "https://cdn.jsdelivr.net/gh/qxdnzbl-arch/socialmix-android-ci@dual-phone-transfer-build/dualphone/ota/manifest.json",
+                        "https://fastly.jsdelivr.net/gh/qxdnzbl-arch/socialmix-android-ci@dual-phone-transfer-build/dualphone/ota/manifest.json",
+                        "https://raw.githubusercontent.com/qxdnzbl-arch/socialmix-android-ci/dual-phone-transfer-build/dualphone/ota/manifest.json"
+                    };
+                }
+
+                JSONObject mf = null;
+                for (String url : manifests) {
+                    try { mf = new JSONObject(fetchText(url)); break; }
+                    catch (Exception ignored) {}
+                }
+                if (mf == null) return;
+
+                int remoteVersion = mf.optInt("version", 0);
+                int currentVersion = prefs.getInt(PREF_UI_VERSION, BUNDLED_UI_VERSION);
+                if (remoteVersion <= currentVersion) return;
+
+                JSONArray urls = mf.optJSONArray("urls");
+                if (urls == null || urls.length() == 0) return;
+
+                byte[] html = null;
+                for (int i = 0; i < urls.length(); i++) {
+                    try {
+                        html = fetchBytes(urls.getString(i));
+                        String probe = new String(html, StandardCharsets.UTF_8);
+                        if (!probe.contains("<html") || !probe.contains("Android.")) {
+                            html = null;
+                            continue;
+                        }
+                        break;
+                    } catch (Exception ignored) {}
+                }
+                if (html == null) return;
+
+                String expected = mf.optString("sha256", "");
+                if (!expected.isEmpty() && !expected.equalsIgnoreCase(hex(sha256Bytes(html)))) return;
+
+                File dst = new File(getFilesDir(), UI_FILE);
+                File tmp = new File(getFilesDir(), UI_FILE + ".tmp");
+                try (FileOutputStream out = new FileOutputStream(tmp)) {
+                    out.write(html);
+                    out.getFD().sync();
+                }
+                if (dst.exists() && !dst.delete()) return;
+                if (!tmp.renameTo(dst)) return;
+
+                prefs.edit().putInt(PREF_UI_VERSION, remoteVersion).apply();
+                Log.i("DualPhoneOta", "OTA_APPLIED " + remoteVersion);
+                runOnUiThread(this::loadLocalUi);
+            } catch (Exception e) {
+                Log.i("DualPhoneOta", "OTA_SKIPPED");
+            }
+        });
+    }
+
+    private static byte[] fetchBytes(String url) throws Exception {
+        URLConnection c = new URL(url).openConnection();
+        c.setConnectTimeout(4500);
+        c.setReadTimeout(7000);
+        c.setUseCaches(false);
+        try (InputStream in = c.getInputStream();
+             ByteArrayOutputStream out = new ByteArrayOutputStream()) {
+            copy(in, out);
+            return out.toByteArray();
+        }
+    }
+
+    private static String fetchText(String url) throws Exception {
+        return new String(fetchBytes(url), StandardCharsets.UTF_8);
+    }
+
+    private static void copy(InputStream in, OutputStream out) throws IOException {
+        byte[] buf = new byte[65536];
+        int n;
+        while ((n = in.read(buf)) > 0) out.write(buf, 0, n);
+    }
+
+    private static byte[] sha256Bytes(byte[] data) throws Exception {
+        return MessageDigest.getInstance("SHA-256").digest(data);
+    }
+
+    private static String hex(byte[] data) {
+        StringBuilder b = new StringBuilder();
+        for (byte x : data) b.append(String.format(Locale.US, "%02x", x & 255));
+        return b.toString();
+    }
+
+    private static String sha256(String s) {
+        try { return hex(sha256Bytes(s.getBytes(StandardCharsets.UTF_8))); }
+        catch (Exception e) { throw new RuntimeException(e); }
+    }
+
+    private class Bridge {
+        @JavascriptInterface public String getState() {
+            JSONObject root = new JSONObject();
+            try {
+                root.put("setupNeeded", prefs.getString("token", "").isEmpty());
+                root.put("connected", connected);
+                root.put("account", prefs.getString("account", ""));
+                root.put("uiVersion", prefs.getInt(PREF_UI_VERSION, BUNDLED_UI_VERSION));
+                JSONArray arr = new JSONArray();
+                for (TransferDb.Msg m : db.all()) {
+                    JSONObject x = new JSONObject();
+                    x.put("id", m.id);
+                    x.put("mine", m.mine);
+                    x.put("kind", m.kind);
+                    x.put("text", m.text == null ? "" : m.text);
+                    x.put("fileName", m.fileName == null ? "" : m.fileName);
+                    x.put("fileSize", m.fileSize);
+                    x.put("status", m.status == null ? "" : m.status);
+                    x.put("createdAt", m.createdAt);
+                    arr.put(x);
+                }
+                root.put("messages", arr);
+            } catch (Exception ignored) {}
+            return root.toString();
+        }
+
+        @JavascriptInterface public void setCredentials(String account, String password) {
+            String a = account == null ? "" : account.trim();
+            String p = password == null ? "" : password;
+            if (a.isEmpty() || p.length() < 4) return;
+            prefs.edit()
+                .putString("token", sha256(a.toLowerCase(Locale.ROOT) + "\n" + p))
+                .putString("account", a)
+                .apply();
+            TransferService.start(MainActivity.this);
+            notifyWeb();
+        }
+
+        @JavascriptInterface public void sendText(String text) {
+            String s = text == null ? "" : text.trim();
+            if (s.isEmpty()) return;
+            db.addText(UUID.randomUUID().toString(), true, s,
+                System.currentTimeMillis(), "pending");
+            TransferService.wake(MainActivity.this);
+            notifyWeb();
+        }
+
+        @JavascriptInterface public void pickFiles() {
+            runOnUiThread(() -> {
+                Intent i = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+                i.setType("*/*");
+                i.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true);
+                i.addCategory(Intent.CATEGORY_OPENABLE);
+                startActivityForResult(i, PICK);
+            });
+        }
+
+        @JavascriptInterface public void saveFile(String id) {
+            io.execute(() -> {
+                TransferDb.Msg target = null;
+                for (TransferDb.Msg m : db.all()) if (m.id.equals(id)) { target = m; break; }
+                if (target != null && !target.mine && target.filePath != null) saveToDownloads(target);
+            });
+        }
+
+        @JavascriptInterface public void reportUi(String marker) {
+            Log.i("DualPhoneUi", marker == null ? "" : marker);
+        }
+
+        @JavascriptInterface public void reportLayout(double visible, double bottom) {
+            Log.i("DualPhoneLayout", "visible=" + Math.round(visible) + " bottom=" + Math.round(bottom));
+        }
     }
 
     @Override protected void onActivityResult(int requestCode, int resultCode, Intent data) {
@@ -306,40 +315,32 @@ public class MainActivity extends Activity {
 
         ArrayList<Uri> uris = new ArrayList<>();
         if (data.getClipData() != null) {
-            for (int i = 0; i < data.getClipData().getItemCount(); i++) {
+            for (int i = 0; i < data.getClipData().getItemCount(); i++)
                 uris.add(data.getClipData().getItemAt(i).getUri());
-            }
-        } else if (data.getData() != null) {
-            uris.add(data.getData());
-        }
+        } else if (data.getData() != null) uris.add(data.getData());
 
-        new Thread(() -> {
+        io.execute(() -> {
             for (Uri uri : uris) {
                 try { queueFile(uri); }
                 catch (Exception e) {
-                    runOnUiThread(() -> Toast.makeText(this, "文件读取失败", Toast.LENGTH_SHORT).show());
+                    runOnUiThread(() -> Toast.makeText(MainActivity.this,
+                        "文件读取失败", Toast.LENGTH_SHORT).show());
                 }
             }
-            runOnUiThread(this::renderMessages);
-            TransferService.wake(this);
-        }).start();
+            TransferService.wake(MainActivity.this);
+            notifyWeb();
+        });
     }
 
     private void queueFile(Uri uri) throws Exception {
         String name = "文件";
-        long declared = -1;
-
-        try (Cursor c = getContentResolver().query(
-            uri, new String[]{OpenableColumns.DISPLAY_NAME, OpenableColumns.SIZE},
-            null, null, null)) {
+        try (Cursor c = getContentResolver().query(uri,
+            new String[]{OpenableColumns.DISPLAY_NAME}, null, null, null)) {
             if (c != null && c.moveToFirst()) {
                 int ni = c.getColumnIndex(OpenableColumns.DISPLAY_NAME);
-                int si = c.getColumnIndex(OpenableColumns.SIZE);
                 if (ni >= 0 && c.getString(ni) != null) name = c.getString(ni);
-                if (si >= 0 && !c.isNull(si)) declared = c.getLong(si);
             }
         }
-
         String id = UUID.randomUUID().toString();
         File dir = new File(getFilesDir(), "outgoing");
         dir.mkdirs();
@@ -348,7 +349,7 @@ public class MainActivity extends Activity {
         long size = 0;
         try (InputStream in = getContentResolver().openInputStream(uri);
              FileOutputStream fout = new FileOutputStream(out)) {
-            byte[] buf = new byte[64 * 1024];
+            byte[] buf = new byte[65536];
             int n;
             while ((n = in.read(buf)) > 0) {
                 fout.write(buf, 0, n);
@@ -356,147 +357,41 @@ public class MainActivity extends Activity {
                 if (size > 500L * 1024 * 1024) throw new IOException("too large");
             }
         }
-
-        if (declared > 500L * 1024 * 1024 || size > 500L * 1024 * 1024) {
-            out.delete();
-            throw new IOException("too large");
-        }
-
-        db.addFile(id, true, name, out.getAbsolutePath(), size, System.currentTimeMillis(), "pending");
-    }
-
-    private void renderMessages() {
-        if (messages == null) return;
-        messages.removeAllViews();
-
-        List<TransferDb.Msg> all = db.all();
-        if (all.isEmpty()) {
-            TextView e = tv("直接发就行\n两台手机连同一个 Wi‑Fi 或热点后，会自动发现彼此。", 14, Color.rgb(112, 123, 134));
-            e.setGravity(Gravity.CENTER);
-            e.setLineSpacing(0, 1.35f);
-            e.setPadding(dp(26), dp(80), dp(26), 0);
-            messages.addView(e);
-        }
-
-        for (TransferDb.Msg m : all) addBubble(m);
-        if (scroll != null) scroll.post(() -> scroll.fullScroll(View.FOCUS_DOWN));
-    }
-
-    private void addBubble(TransferDb.Msg m) {
-        LinearLayout row = new LinearLayout(this);
-        row.setGravity(m.mine ? Gravity.RIGHT : Gravity.LEFT);
-        LinearLayout.LayoutParams rp = new LinearLayout.LayoutParams(-1, -2);
-        rp.bottomMargin = dp(9);
-
-        LinearLayout bubble = new LinearLayout(this);
-        bubble.setOrientation(LinearLayout.VERTICAL);
-        bubble.setPadding(dp(12), dp(9), dp(12), dp(8));
-        bubble.setBackground(box(
-            m.mine ? Color.rgb(67, 128, 216) : Color.WHITE, 16));
-
-        int mainColor = m.mine ? Color.WHITE : Color.rgb(28, 36, 44);
-
-        if ("text".equals(m.kind)) {
-            TextView t = tv(m.text == null ? "" : m.text, 15, mainColor);
-            t.setMaxWidth(dp(310));
-            bubble.addView(t);
-        } else {
-            TextView n = tv("📎  " + (m.fileName == null ? "文件" : m.fileName), 14, mainColor);
-            n.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
-            n.setMaxWidth(dp(300));
-            bubble.addView(n);
-
-            TextView s = tv(formatSize(m.fileSize), 12,
-                m.mine ? Color.rgb(225, 237, 253) : Color.rgb(112, 123, 134));
-            s.setPadding(0, dp(4), 0, 0);
-            bubble.addView(s);
-
-            if (!m.mine) {
-                TextView save = tv("点一下保存到下载", 12, Color.rgb(55, 116, 205));
-                save.setPadding(0, dp(5), 0, 0);
-                bubble.addView(save);
-                bubble.setOnClickListener(v -> saveToDownloads(m));
-            }
-        }
-
-        if (m.mine) {
-            String state = "sent".equals(m.status) ? "已送达" : "等待另一台手机";
-            TextView st = tv(state, 11, Color.rgb(222, 235, 252));
-            st.setGravity(Gravity.RIGHT);
-            st.setPadding(0, dp(5), 0, 0);
-            bubble.addView(st);
-        }
-
-        row.addView(bubble);
-        messages.addView(row, rp);
+        db.addFile(id, true, name, out.getAbsolutePath(), size,
+            System.currentTimeMillis(), "pending");
     }
 
     private void saveToDownloads(TransferDb.Msg m) {
-        if (m.filePath == null) return;
-
-        new Thread(() -> {
-            try {
-                File src = new File(m.filePath);
-                if (!src.isFile()) throw new IOException();
-
-                String name = m.fileName == null ? "文件" : m.fileName;
-
-                if (Build.VERSION.SDK_INT >= 29) {
-                    ContentValues v = new ContentValues();
-                    v.put(MediaStore.Downloads.DISPLAY_NAME, name);
-                    v.put(MediaStore.Downloads.IS_PENDING, 1);
-
-                    Uri uri = getContentResolver().insert(
-                        MediaStore.Downloads.EXTERNAL_CONTENT_URI, v);
-                    if (uri == null) throw new IOException();
-
-                    try (InputStream in = new FileInputStream(src);
-                         OutputStream out = getContentResolver().openOutputStream(uri)) {
-                        byte[] buf = new byte[64 * 1024];
-                        int n;
-                        while ((n = in.read(buf)) > 0) out.write(buf, 0, n);
-                    }
-
-                    ContentValues done = new ContentValues();
-                    done.put(MediaStore.Downloads.IS_PENDING, 0);
-                    getContentResolver().update(uri, done, null, null);
-                } else {
-                    File dir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS);
-                    dir.mkdirs();
-                    File dst = new File(dir, name);
-                    copy(src, dst);
-                }
-
-                runOnUiThread(() -> Toast.makeText(this, "已保存到下载", Toast.LENGTH_SHORT).show());
-            } catch (Exception e) {
-                runOnUiThread(() -> Toast.makeText(this, "保存失败", Toast.LENGTH_SHORT).show());
-            }
-        }).start();
-    }
-
-    private static void copy(File a, File b) throws IOException {
-        try (InputStream in = new FileInputStream(a);
-             OutputStream out = new FileOutputStream(b)) {
-            byte[] buf = new byte[64 * 1024];
-            int n;
-            while ((n = in.read(buf)) > 0) out.write(buf, 0, n);
-        }
-    }
-
-    private static String sha256(String s) {
         try {
-            byte[] d = MessageDigest.getInstance("SHA-256").digest(s.getBytes("UTF-8"));
-            StringBuilder b = new StringBuilder();
-            for (byte x : d) b.append(String.format(Locale.US, "%02x", x & 255));
-            return b.toString();
+            File src = new File(m.filePath);
+            if (!src.isFile()) throw new IOException();
+            String name = m.fileName == null || m.fileName.isEmpty() ? "文件" : m.fileName;
+            if (Build.VERSION.SDK_INT >= 29) {
+                ContentValues v = new ContentValues();
+                v.put(MediaStore.Downloads.DISPLAY_NAME, name);
+                v.put(MediaStore.Downloads.IS_PENDING, 1);
+                Uri uri = getContentResolver().insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, v);
+                if (uri == null) throw new IOException();
+                try (InputStream in = new FileInputStream(src);
+                     OutputStream out = getContentResolver().openOutputStream(uri)) {
+                    copy(in, out);
+                }
+                ContentValues done = new ContentValues();
+                done.put(MediaStore.Downloads.IS_PENDING, 0);
+                getContentResolver().update(uri, done, null, null);
+            } else {
+                File dir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS);
+                dir.mkdirs();
+                try (InputStream in = new FileInputStream(src);
+                     OutputStream out = new FileOutputStream(new File(dir, name))) {
+                    copy(in, out);
+                }
+            }
+            runOnUiThread(() -> Toast.makeText(MainActivity.this,
+                "已保存到下载", Toast.LENGTH_SHORT).show());
         } catch (Exception e) {
-            throw new RuntimeException(e);
+            runOnUiThread(() -> Toast.makeText(MainActivity.this,
+                "保存失败", Toast.LENGTH_SHORT).show());
         }
-    }
-
-    private static String formatSize(long n) {
-        if (n < 1024) return n + " B";
-        if (n < 1024 * 1024) return String.format(Locale.US, "%.1f KB", n / 1024.0);
-        return String.format(Locale.US, "%.1f MB", n / 1024.0 / 1024.0);
     }
 }
