@@ -11,7 +11,7 @@ android {
     defaultConfig {
         applicationId 'com.qxdnzbl.shuangjichuan'
         minSdk 26
-        targetSdk 35
+        targetSdk 34
         versionCode ciVersionCode
         versionName "1.0." + ciVersionCode
         testInstrumentationRunner 'androidx.test.runner.AndroidJUnitRunner'
