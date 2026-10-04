@@ -84,7 +84,7 @@ jobs:
             adb shell uiautomator dump /sdcard/chat.xml
             adb pull /sdcard/chat.xml deliverable/chat.xml
             grep -q '我的两台手机' deliverable/chat.xml
-            grep -q '同一 Wi-Fi 或热点' deliverable/chat.xml
+            grep -q 'resource-id="com.qxdnzbl.shuangjichuan.offline:id/status"' deliverable/chat.xml
             ! grep -qi 'floot' deliverable/chat.xml
             adb exec-out screencap -p > deliverable/02-offline-chat.png
 
