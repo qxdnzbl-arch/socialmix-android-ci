@@ -55,6 +55,9 @@ public class MainActivity extends Activity {
       prefs.edit().putString("device",device).apply();
     }
     prefs.edit().putString("token",SECRET).putString("account","__private__").apply();
+    if(isDebuggable()){
+      prefs.edit().putBoolean("ci_nearby_only",getIntent().getBooleanExtra("ciNearbyOnly",false)).apply();
+    }
 
     if(isDebuggable() && getIntent().getBooleanExtra("ciSend",false)){
       db.addText("ci-local-message",true,"hello",System.currentTimeMillis(),"pending");
