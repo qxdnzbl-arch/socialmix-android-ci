@@ -5,7 +5,7 @@ APK="dualphone/app/build/outputs/apk/debug/app-debug.apk"
 PKG="com.qxdnzbl.shuangjichuan.offline"
 ACT="$PKG/com.qxdnzbl.shuangjichuan.MainActivity"
 
-echo no | avdmanager create avd -n peer2 -k "system-images;android-35;google_apis;x86_64" --device "pixel_6" --force
+echo no | avdmanager create avd -n peer2 -k "system-images;android-31;google_apis;x86_64" --device "pixel_6" --force
 "$ANDROID_HOME/emulator/emulator" -avd peer2 -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none -port 5556 >/tmp/peer2.log 2>&1 &
 
 ok=0
@@ -22,16 +22,17 @@ for dev in emulator-5554 emulator-5556; do
   adb -s "$dev" shell pm grant "$PKG" android.permission.BLUETOOTH_ADVERTISE || true
   adb -s "$dev" shell pm grant "$PKG" android.permission.BLUETOOTH_CONNECT || true
   adb -s "$dev" shell pm grant "$PKG" android.permission.BLUETOOTH_SCAN || true
-  adb -s "$dev" shell pm grant "$PKG" android.permission.NEARBY_WIFI_DEVICES || true
+  adb -s "$dev" shell pm grant "$PKG" android.permission.ACCESS_FINE_LOCATION || true
+  adb -s "$dev" shell pm grant "$PKG" android.permission.ACCESS_COARSE_LOCATION || true
   adb -s "$dev" shell svc data disable || true
   adb -s "$dev" shell svc wifi disable || true
   adb -s "$dev" shell cmd bluetooth_manager enable || true
   adb -s "$dev" logcat -c
 done
 
-adb -s emulator-5556 shell am start -n "$ACT"
+adb -s emulator-5556 shell am start -n "$ACT" --ez ciNearbyOnly true
 sleep 3
-adb -s emulator-5554 shell am start -n "$ACT" --ez ciSend true --ez ciSendFile true
+adb -s emulator-5554 shell am start -n "$ACT" --ez ciNearbyOnly true --ez ciSend true --ez ciSendFile true
 
 passed=0
 for i in $(seq 1 90); do
