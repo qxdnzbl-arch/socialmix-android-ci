@@ -1,0 +1,41 @@
+name: Dual Phone Offline APK Fast
+
+on:
+  push:
+    branches: [dual-phone-transfer-build]
+    paths:
+      - '.github/workflows/dual-phone-offline-fast.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+      - name: Restore key
+        working-directory: dualphone
+        run: base64 -d keystore.b64 > app/shuangjichuan-release.jks
+      - name: Build release
+        working-directory: dualphone
+        run: gradle --no-daemon :app:assembleRelease
+      - name: Prepare
+        run: |
+          mkdir -p out
+          cp dualphone/app/build/outputs/apk/release/app-release.apk out/ShuangJiChuan_v3_Offline.apk
+          sha256sum out/ShuangJiChuan_v3_Offline.apk > out/SHA256.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: shuangjichuan-v3-offline-fast
+          path: out/
+          retention-days: 14
