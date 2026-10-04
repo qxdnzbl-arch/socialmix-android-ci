@@ -45,16 +45,11 @@ jobs:
             "inbounds":[{"listen":"127.0.0.1","port":10809,"protocol":"socks","settings":{"udp":true}}],
             "outbounds":[{
               "protocol":"vless",
-              "settings":{"vnext":[{"address":"gondola.proxy.rlwy.net","port":47854,"users":[{"id":"68bfb6c3-5959-4690-aa57-2d0147385de0","encryption":"none","flow":"xtls-rprx-vision"}]}]},
+              "settings":{"vnext":[{"address":"kehua-native-prod-api-production.up.railway.app","port":443,"users":[{"id":"33333333-3333-4333-8333-333333333333","encryption":"none"}]}]},
               "streamSettings":{
-                "network":"tcp","security":"reality",
-                "realitySettings":{
-                  "serverName":"www.samsung.com",
-                  "fingerprint":"chrome",
-                  "publicKey":"K5YXStG-jOMsQte0OWRdeN6dG3f9afYXec_bldO8NGk",
-                  "shortId":"6ebe6f",
-                  "spiderX":"/"
-                }
+                "network":"ws","security":"tls",
+                "tlsSettings":{"serverName":"kehua-native-prod-api-production.up.railway.app"},
+                "wsSettings":{"path":"/ws-railway-6f8a1c","headers":{"Host":"kehua-native-prod-api-production.up.railway.app"}}
               }
             }]
           }
@@ -66,7 +61,10 @@ jobs:
             if curl -sS --max-time 5 -o /dev/null https://kehua-original-verifier.onrender.com/; then break; fi
             sleep 5
           done
-          timeout 5 bash -c '</dev/tcp/gondola.proxy.rlwy.net/47854'
+          for i in $(seq 1 24); do
+            if curl -fsS --max-time 5 https://kehua-native-prod-api-production.up.railway.app/health >/dev/null; then break; fi
+            sleep 5
+          done
 
       - name: Benchmark Render WS TLS
         run: |
@@ -80,7 +78,7 @@ jobs:
           done
           kill $XPID || true
 
-      - name: Benchmark Railway REALITY
+      - name: Benchmark Railway WS TLS
         run: |
           /tmp/xray/xray run -config /tmp/vpnbench/railway.json >/tmp/railway-xray.log 2>&1 &
           XPID=$!
