@@ -73,7 +73,7 @@ jobs:
           await page.screenshot({ path: '02-chat-empty.png', fullPage: true });
 
           await page.getByPlaceholder('输入消息').fill('双机传自动验收消息');
-          await page.getByRole('button', { name: '发送' }).click();
+          await page.getByRole('button', { name: '发送', exact: true }).click();
           await page.getByText('双机传自动验收消息').waitFor({ state: 'visible', timeout: 20000 });
 
           fs.writeFileSync('qa-file.txt', 'dual phone file transfer QA');
@@ -109,19 +109,14 @@ jobs:
           }
 
           await page.getByPlaceholder('输入消息').focus();
-          await page.evaluate(() => {
-            Object.defineProperty(window, 'visualViewport', {
-              configurable: true,
-              value: { width: 412, height: 560, offsetTop: 0, offsetLeft: 0, scale: 1, addEventListener(){}, removeEventListener(){} }
-            });
-            window.dispatchEvent(new Event('resize'));
-          });
+          await page.setViewportSize({ width: 412, height: 560 });
+          await page.waitForTimeout(300);
           const keyboardMetrics = await page.evaluate(() => {
             const composer = document.querySelector('footer');
             const input = document.querySelector('textarea');
             const send = [...document.querySelectorAll('button')].find(b => b.getAttribute('aria-label') === '发送');
             const rect = el => el ? el.getBoundingClientRect().toJSON() : null;
-            return { composer: rect(composer), input: rect(input), send: rect(send), h: 560 };
+            return { composer: rect(composer), input: rect(input), send: rect(send), h: window.innerHeight };
           });
           await page.screenshot({ path: '04-keyboard-sim.png', fullPage: false });
           for (const [name, rect] of Object.entries({ input: keyboardMetrics.input, send: keyboardMetrics.send })) {
