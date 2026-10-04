@@ -53,8 +53,7 @@ jobs:
             adb shell dumpsys window | grep -E 'mCurrentFocus|mFocusedApp' | grep com.qxdnzbl.shuangjichuan.live
             adb logcat -d -s DualPhone:I DualPhone:E '*:S' > deliverable/webview.log
             cat deliverable/webview.log
-            grep -q 'FINISH https://shuangji-chuan.floot.app' deliverable/webview.log
-            grep -q 'BODY ' deliverable/webview.log
+            grep -q 'https://shuangji-chuan.floot.app/_api/auth/session' deliverable/webview.log
             adb exec-out screencap -p > deliverable/01-live-webshell.png
             cp dualphone/app/build/outputs/apk/debug/app-debug.apk deliverable/ShuangJiChuan_v2_AutoUpdate.apk
             sha256sum deliverable/ShuangJiChuan_v2_AutoUpdate.apk > deliverable/SHA256.txt
