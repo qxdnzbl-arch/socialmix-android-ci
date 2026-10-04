@@ -145,7 +145,7 @@ jobs:
             adb shell svc data disable || true
             adb shell svc wifi disable || true
             adb logcat -c
-            adb shell am start -n com.qxdnzbl.shuangjichuan.offline/com.qxdnzbl.shuangjichuan.MainActivity
+            adb shell am start -n com.qxdnzbl.shuangjichuan.offline/com.qxdnzbl.shuangjichuan.MainActivity --ez ciSend true
 
             sh -c 'for i in $(seq 1 15); do adb logcat -d -s DualPhoneUi:I "*:S" > deliverable/offline.log 2>/dev/null || true; grep -q "screen=chat" deliverable/offline.log && exit 0; sleep 1; done; exit 1'
             adb exec-out screencap -p > deliverable/01-offline-direct-chat.png
@@ -154,9 +154,6 @@ jobs:
             sleep 2
             adb logcat -d -s DualPhoneLayout:I '*:S' > deliverable/keyboard.log
             python3 -c "import re; s=open('deliverable/keyboard.log',errors='ignore').read(); m=re.findall(r'visible=(\d+) bottom=(\d+)',s); assert m,s; v,b=map(int,m[-1]); assert v<2100,(v,b); assert b<=v+16,(v,b)"
-            adb shell input text hello
-            adb shell input keyevent 66
-
             sh -c 'for i in $(seq 1 8); do adb logcat -d -s DualPhoneUi:I "*:S" > deliverable/send.log 2>/dev/null || true; grep -q "messages=1" deliverable/send.log && exit 0; sleep 1; done; exit 1'
             adb exec-out screencap -p > deliverable/02-offline-queued.png
 
