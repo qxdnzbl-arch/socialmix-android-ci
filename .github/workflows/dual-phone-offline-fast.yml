@@ -5,8 +5,16 @@ on:
   push:
     branches: [dual-phone-transfer-build]
     paths:
-      - '.github/workflows/dual-phone-offline-fast.yml'
+      - 'dualphone/app/**'
+      - 'dualphone/build.gradle'
+      - 'dualphone/settings.gradle'
+      - 'dualphone/gradle.properties'
+      - 'dualphone/keystore.b64'
   workflow_dispatch:
+
+concurrency:
+  group: dual-phone-offline-fast
+  cancel-in-progress: true
 
 permissions:
   contents: read
