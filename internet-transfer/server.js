@@ -540,6 +540,19 @@ function createApp() {
     });
   });
 
+  app.get('/api/dual/status/:room/:device', (req, res) => {
+    if (!validDual(req)) return res.status(403).json({error:'forbidden'});
+    const room = String(req.params.room);
+    const device = String(req.params.device || '').replace(/[^a-zA-Z0-9_-]/g, '').slice(0,80);
+    let peerReady = false;
+    for (const [key, receiver] of dualReceivers) {
+      if (key.startsWith(room + ':') && key !== dualKey(room, device) && !receiver.writableEnded) {
+        peerReady = true; break;
+      }
+    }
+    res.set('Cache-Control','no-store').json({ok:true, peerReady});
+  });
+
   app.post('/api/dual/send/:room/:device', (req, res) => {
     if (!validDual(req)) return res.status(403).json({error:'forbidden'});
     const room = String(req.params.room);
@@ -547,7 +560,7 @@ function createApp() {
     const kind = String(req.get('x-dual-kind') || '');
     const id = String(req.get('x-dual-id') || '').slice(0,120);
     const created = String(req.get('x-dual-created') || Date.now());
-    const fileName = String(req.get('x-dual-file-name') || '').slice(0,500);
+    const fileNameB64 = String(req.get('x-dual-file-name') || '').slice(0,1000);
 
     if (!sender || !id || !['text','file'].includes(kind)) {
       req.resume();
@@ -573,8 +586,9 @@ function createApp() {
       'X-Dual-Kind': kind,
       'X-Dual-Id': id,
       'X-Dual-Created': created,
-      'X-Dual-File-Name': encodeURIComponent(fileName)
+      'X-Dual-File-Name': fileNameB64
     });
+    if (req.headers['content-length']) target.set('Content-Length', req.headers['content-length']);
     target.flushHeaders();
 
     let failed = false;
