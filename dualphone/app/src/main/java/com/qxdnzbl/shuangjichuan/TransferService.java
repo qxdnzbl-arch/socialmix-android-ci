@@ -16,8 +16,9 @@ public class TransferService extends Service {
     public static final String ACTION_STATE = "com.qxdnzbl.shuangjichuan.STATE";
     public static final String ACTION_CHANGED = "com.qxdnzbl.shuangjichuan.CHANGED";
     private static final int NOTIFY_ID = 31021;
-    private static final int DISCOVERY_PORT = 39731;\n    private static final int TRANSFER_PORT = 39732;
-    private static final int MAGIC = 0x534A4331;\n    private static final int SERVER_PORT = 39732;
+    private static final int DISCOVERY_PORT = 39731;
+    private static final int TRANSFER_PORT = 39732;
+    private static final int MAGIC = 0x534A4331;
     private static final String GROUP = "239.255.42.99";
 
     private final ExecutorService io = Executors.newCachedThreadPool();
@@ -35,7 +36,10 @@ public class TransferService extends Service {
     static class Peer {
         final InetAddress host;
         final int port;
-        Peer(InetAddress host, int port) { this.host = host; this.port = port; }
+        Peer(InetAddress host, int port) {
+            this.host = host;
+            this.port = port;
+        }
     }
 
     @Override public void onCreate() {
@@ -98,7 +102,8 @@ public class TransferService extends Service {
         sendBroadcast(i);
 
         NotificationManager nm = (NotificationManager)getSystemService(NOTIFICATION_SERVICE);
-        nm.notify(NOTIFY_ID, notification(connected ? "已连接另一台手机" : "等待另一台手机 · 同一 Wi‑Fi 或热点"));
+        nm.notify(NOTIFY_ID, notification(
+            connected ? "已连接另一台手机" : "等待另一台手机 · 同一 Wi‑Fi 或热点"));
     }
 
     private void changed() {
@@ -136,20 +141,27 @@ public class TransferService extends Service {
                 discovery.setReuseAddress(true);
                 discovery.bind(new InetSocketAddress(DISCOVERY_PORT));
                 discovery.setBroadcast(true);
-                try { discovery.joinGroup(InetAddress.getByName(GROUP)); } catch (Exception ignored) {}
+                try {
+                    discovery.joinGroup(InetAddress.getByName(GROUP));
+                } catch (Exception ignored) {}
 
                 byte[] buf = new byte[512];
                 while (running) {
                     DatagramPacket p = new DatagramPacket(buf, buf.length);
                     discovery.receive(p);
-                    String s = new String(p.getData(), p.getOffset(), p.getLength(), StandardCharsets.UTF_8);
-                    String[] a = s.split("\\|");
+                    String msg = new String(
+                        p.getData(), p.getOffset(), p.getLength(), StandardCharsets.UTF_8);
+                    String[] a = msg.split("\\|");
                     if (a.length != 5 || !"SJC3".equals(a[0])) continue;
                     if (!prefix.equals(a[1])) continue;
                     if (deviceId.equals(a[2])) continue;
 
                     int port;
-                    try { port = Integer.parseInt(a[3]); } catch (Exception e) { continue; }
+                    try {
+                        port = Integer.parseInt(a[3]);
+                    } catch (Exception e) {
+                        continue;
+                    }
                     if (port <= 0 || port > 65535) continue;
 
                     peer = new Peer(p.getAddress(), port);
@@ -210,8 +222,10 @@ public class TransferService extends Service {
             s.connect(new InetSocketAddress(p.host, p.port), 2000);
             s.setSoTimeout(5000);
 
-            DataOutputStream out = new DataOutputStream(new BufferedOutputStream(s.getOutputStream()));
-            DataInputStream in = new DataInputStream(new BufferedInputStream(s.getInputStream()));
+            DataOutputStream out =
+                new DataOutputStream(new BufferedOutputStream(s.getOutputStream()));
+            DataInputStream in =
+                new DataInputStream(new BufferedInputStream(s.getInputStream()));
 
             out.writeInt(MAGIC);
             writeString(out, token);
@@ -223,17 +237,20 @@ public class TransferService extends Service {
                 out.writeByte(1);
                 writeString(out, m.text == null ? "" : m.text);
             } else {
-                File f = new File(m.filePath == null ? "" : m.filePath);
-                if (!f.isFile()) return false;
+                File file = new File(m.filePath == null ? "" : m.filePath);
+                if (!file.isFile()) return false;
+
                 out.writeByte(2);
                 writeString(out, m.fileName == null ? "文件" : m.fileName);
-                out.writeLong(f.length());
-                try (FileInputStream fin = new FileInputStream(f)) {
+                out.writeLong(file.length());
+
+                try (FileInputStream fin = new FileInputStream(file)) {
                     byte[] buf = new byte[64 * 1024];
                     int n;
                     while ((n = fin.read(buf)) > 0) out.write(buf, 0, n);
                 }
             }
+
             out.flush();
             return in.readInt() == 1;
         } catch (Exception e) {
@@ -245,10 +262,14 @@ public class TransferService extends Service {
     private void receive(Socket s) {
         try (Socket socket = s) {
             socket.setSoTimeout(30000);
-            DataInputStream in = new DataInputStream(new BufferedInputStream(socket.getInputStream()));
-            DataOutputStream out = new DataOutputStream(new BufferedOutputStream(socket.getOutputStream()));
+
+            DataInputStream in =
+                new DataInputStream(new BufferedInputStream(socket.getInputStream()));
+            DataOutputStream out =
+                new DataOutputStream(new BufferedOutputStream(socket.getOutputStream()));
 
             if (in.readInt() != MAGIC) return;
+
             String incomingToken = readString(in, 512);
             if (!token.equals(incomingToken)) return;
 
@@ -267,9 +288,9 @@ public class TransferService extends Service {
 
                 File dir = new File(getFilesDir(), "incoming");
                 dir.mkdirs();
-                File f = new File(dir, id + "_" + name);
+                File file = new File(dir, id + "_" + name);
 
-                try (FileOutputStream fout = new FileOutputStream(f)) {
+                try (FileOutputStream fout = new FileOutputStream(file)) {
                     byte[] buf = new byte[64 * 1024];
                     long left = size;
                     while (left > 0) {
@@ -279,7 +300,8 @@ public class TransferService extends Service {
                         left -= n;
                     }
                 }
-                db.addFile(id, false, name, f.getAbsolutePath(), size, createdAt, "received");
+
+                db.addFile(id, false, name, file.getAbsolutePath(), size, createdAt, "received");
             } else {
                 return;
             }
@@ -318,13 +340,22 @@ public class TransferService extends Service {
 
     @Override public void onDestroy() {
         running = false;
-        try { if (server != null) server.close(); } catch (Exception ignored) {}
-        try { if (discovery != null) discovery.close(); } catch (Exception ignored) {}
-        try { if (multicastLock != null && multicastLock.isHeld()) multicastLock.release(); } catch (Exception ignored) {}
+        try {
+            if (server != null) server.close();
+        } catch (Exception ignored) {}
+        try {
+            if (discovery != null) discovery.close();
+        } catch (Exception ignored) {}
+        try {
+            if (multicastLock != null && multicastLock.isHeld()) multicastLock.release();
+        } catch (Exception ignored) {}
+
         timer.shutdownNow();
         io.shutdownNow();
         super.onDestroy();
     }
 
-    @Override public android.os.IBinder onBind(Intent intent) { return null; }
+    @Override public IBinder onBind(Intent intent) {
+        return null;
+    }
 }
