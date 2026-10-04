@@ -59,6 +59,14 @@ public class MainActivity extends Activity {
     if(isDebuggable() && getIntent().getBooleanExtra("ciSend",false)){
       db.addText("ci-local-message",true,"hello",System.currentTimeMillis(),"pending");
     }
+    if(isDebuggable() && getIntent().getBooleanExtra("ciSendFile",false)){
+      try{
+        File dir=new File(getFilesDir(),"outgoing");dir.mkdirs();
+        File test=new File(dir,"ci-offline-file.txt");
+        try(FileOutputStream out=new FileOutputStream(test)){out.write("offline-file".getBytes(StandardCharsets.UTF_8));}
+        db.addFile("ci-local-file",true,"ci-offline-file.txt",test.getAbsolutePath(),test.length(),System.currentTimeMillis()+1,"pending");
+      }catch(Exception e){throw new RuntimeException(e);}
+    }
 
     web=new WebView(this);
     WebSettings s=web.getSettings();
