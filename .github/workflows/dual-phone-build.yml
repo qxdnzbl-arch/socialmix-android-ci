@@ -1,4 +1,4 @@
-name: Dual Phone Transfer APK
+name: Dual Phone Transfer APK\n# rerun after shell fix
 
 on:
   push:
