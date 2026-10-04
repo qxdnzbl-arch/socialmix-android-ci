@@ -56,6 +56,10 @@ public class MainActivity extends Activity {
     }
     prefs.edit().putString("token",SECRET).putString("account","__private__").apply();
 
+    if(isDebuggable() && getIntent().getBooleanExtra("ciSend",false)){
+      db.addText("ci-local-message",true,"hello",System.currentTimeMillis(),"pending");
+    }
+
     web=new WebView(this);
     WebSettings s=web.getSettings();
     s.setJavaScriptEnabled(true);
@@ -91,6 +95,10 @@ public class MainActivity extends Activity {
     io.shutdownNow();
     if(web!=null) web.destroy();
     super.onDestroy();
+  }
+
+  private boolean isDebuggable(){
+    return (getApplicationInfo().flags & android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE)!=0;
   }
 
   private void requestNearbyPermissions(){
