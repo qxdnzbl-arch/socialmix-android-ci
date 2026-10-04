@@ -188,6 +188,10 @@ function iphoneUploadPage(id, token) {
 </html>`;
 }
 
+function dualRoomFromToken(token) {
+  return crypto.createHash('sha256').update(String(token || '')).digest('hex').slice(0, 32);
+}
+
 function createApp() {
   const app = express();
   const sessions = new Map();
@@ -492,6 +496,128 @@ function createApp() {
       return res.status(409).json({ error: '请先让接收设备连接' });
     }
     return sendToReceiver(session, req, res, true);
+  });
+
+
+  const dualReceivers = new Map();
+  const dualKey = (room, device) => room + ':' + device;
+  const validDual = (req) => {
+    const room = String(req.params.room || '');
+    const token = String(req.get('x-dual-token') || '');
+    return /^[a-f0-9]{32}$/i.test(room) && token && dualRoomFromToken(token) === room;
+  };
+
+  app.get('/api/dual/status/:room/:device', (req, res) => {
+    if (!validDual(req)) return res.status(403).json({ error: 'forbidden' });
+    const room = String(req.params.room);
+    const device = String(req.params.device || '').replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 80);
+    let peerReady = false;
+    for (const [key, receiver] of dualReceivers) {
+      if (key.startsWith(room + ':') && key !== dualKey(room, device) && !receiver.writableEnded) {
+        peerReady = true;
+        break;
+      }
+    }
+    res.set('Cache-Control', 'no-store').json({ ok: true, peerReady });
+  });
+
+  app.get('/api/dual/receive/:room/:device', (req, res) => {
+    if (!validDual(req)) return res.status(403).end();
+    const room = String(req.params.room);
+    const device = String(req.params.device || '').replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 80);
+    if (!device) return res.status(400).end();
+
+    const key = dualKey(room, device);
+    const old = dualReceivers.get(key);
+    if (old && !old.writableEnded) {
+      try { old.status(204).end(); } catch (_) {}
+    }
+
+    res.set({
+      'Cache-Control': 'no-store',
+      'X-Accel-Buffering': 'no',
+      'Connection': 'keep-alive'
+    });
+    dualReceivers.set(key, res);
+
+    const timer = setTimeout(() => {
+      if (dualReceivers.get(key) === res) dualReceivers.delete(key);
+      if (!res.writableEnded) res.status(204).end();
+    }, 25000);
+    timer.unref();
+
+    res.on('close', () => {
+      clearTimeout(timer);
+      if (dualReceivers.get(key) === res) dualReceivers.delete(key);
+    });
+  });
+
+  app.post('/api/dual/send/:room/:device', (req, res) => {
+    if (!validDual(req)) return res.status(403).json({ error: 'forbidden' });
+    const room = String(req.params.room);
+    const sender = String(req.params.device || '').replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 80);
+    const kind = String(req.get('x-dual-kind') || '');
+    const id = String(req.get('x-dual-id') || '').slice(0, 120);
+    const created = String(req.get('x-dual-created') || Date.now());
+    const fileNameB64 = String(req.get('x-dual-file-name') || '').slice(0, 1200);
+
+    if (!sender || !id || !['text', 'file'].includes(kind)) {
+      req.resume();
+      return res.status(400).json({ error: 'bad request' });
+    }
+
+    let targetKey = null;
+    let target = null;
+    for (const [key, receiver] of dualReceivers) {
+      if (key.startsWith(room + ':') && key !== dualKey(room, sender) && !receiver.writableEnded) {
+        targetKey = key;
+        target = receiver;
+        break;
+      }
+    }
+    if (!target) {
+      req.resume();
+      return res.status(409).json({ error: 'peer offline' });
+    }
+
+    dualReceivers.delete(targetKey);
+    target.status(200);
+    target.set({
+      'Content-Type': kind === 'text' ? 'text/plain; charset=utf-8' : 'application/octet-stream',
+      'Cache-Control': 'no-store',
+      'X-Accel-Buffering': 'no',
+      'X-Dual-Kind': kind,
+      'X-Dual-Id': id,
+      'X-Dual-Created': created,
+      'X-Dual-File-Name': fileNameB64
+    });
+    if (req.headers['content-length']) target.set('Content-Length', req.headers['content-length']);
+    target.flushHeaders();
+
+    let failed = false;
+    target.on('error', () => {
+      failed = true;
+      try { req.destroy(); } catch (_) {}
+    });
+    req.on('error', () => {
+      failed = true;
+      try { target.destroy(); } catch (_) {}
+    });
+
+    req.pipe(target, { end: true });
+
+    req.on('end', () => {
+      if (!failed && !res.headersSent) res.json({ ok: true });
+    });
+    req.on('aborted', () => {
+      failed = true;
+      try { target.destroy(); } catch (_) {}
+      if (!res.headersSent) res.status(499).end();
+    });
+  });
+
+  app.get('/api/dual/health', (req, res) => {
+    res.set('Cache-Control', 'no-store').json({ ok: true, receivers: dualReceivers.size });
   });
 
   app.get('/health', (req, res) => {
