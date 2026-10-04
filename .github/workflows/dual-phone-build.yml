@@ -108,6 +108,16 @@ jobs:
             adb shell uiautomator dump /sdcard/keyboard.xml
             adb pull /sdcard/keyboard.xml deliverable/keyboard.xml
             grep -q 'resource-id="com.qxdnzbl.shuangjichuan.offline:id/send"' deliverable/keyboard.xml
+            adb logcat -d -s DualPhoneLayout:I '*:S' > deliverable/layout.log
+            python3 - <<'PY'
+import re
+s=open('deliverable/layout.log',encoding='utf-8',errors='ignore').read()
+m=list(re.finditer(r'visibleBottom=(\d+) barY=(-?\d+) barBottom=(-?\d+) covered=(\d+)',s))
+assert m, s
+v, y, b, covered=map(int,m[-1].groups())
+assert covered > 100, (v,y,b,covered)
+assert b <= v + 4, (v,y,b,covered)
+PY
             adb exec-out screencap -p > deliverable/04-keyboard.png
 
             cp dualphone/app/build/outputs/apk/release/app-release.apk deliverable/ShuangJiChuan_v3_Offline.apk
