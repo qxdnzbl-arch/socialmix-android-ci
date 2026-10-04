@@ -1,4 +1,5 @@
 name: Dual Phone Offline APK Fast
+# latest offline build
 
 on:
   push:
