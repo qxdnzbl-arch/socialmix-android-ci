@@ -70,15 +70,15 @@ manifest.write_text(m)
 
 asset = root / "V2rayNG/app/src/main/assets/nzbl_nodes.txt"
 asset.write_text(
-    "vless://00000000-0000-4000-8000-000000000001@render-placeholder.invalid:443?encryption=none&security=tls&sni=render-placeholder.invalid&type=ws&host=render-placeholder.invalid&path=%2Frender-placeholder#NZBL-AUTO-Render-SG\\n"
-    "vless://00000000-0000-4000-8000-000000000002@railway-placeholder.invalid:443?encryption=none&security=tls&sni=railway-placeholder.invalid&type=ws&host=railway-placeholder.invalid&path=%2Frailway-placeholder#NZBL-AUTO-Railway-SG\\n"
+    "vless://00000000-0000-4000-8000-000000000001@render-placeholder.invalid:443?encryption=none&security=tls&sni=render-placeholder.invalid&type=ws&host=render-placeholder.invalid&path=%2Frender-placeholder#NZBL-AUTO-Render-SG\n"
+    "vless://00000000-0000-4000-8000-000000000002@railway-placeholder.invalid:443?encryption=none&security=tls&sni=railway-placeholder.invalid&type=ws&host=railway-placeholder.invalid&path=%2Frailway-placeholder#NZBL-AUTO-Railway-SG\n"
 )
 
 app = root / "V2rayNG/app/src/main/java/com/v2ray/ang/AngApplication.kt"
 a = app.read_text()
 a = a.replace(
-    "import com.v2ray.ang.AppConfig.ANG_PACKAGE\\nimport com.v2ray.ang.handler.SettingsManager",
-    "import com.v2ray.ang.AppConfig.ANG_PACKAGE\\nimport com.v2ray.ang.AppConfig.DEFAULT_SUBSCRIPTION_ID\\nimport com.v2ray.ang.handler.AngConfigManager\\nimport com.v2ray.ang.handler.MmkvManager\\nimport com.v2ray.ang.handler.SettingsManager"
+    "import com.v2ray.ang.AppConfig.ANG_PACKAGE\nimport com.v2ray.ang.handler.SettingsManager",
+    "import com.v2ray.ang.AppConfig.ANG_PACKAGE\nimport com.v2ray.ang.AppConfig.DEFAULT_SUBSCRIPTION_ID\nimport com.v2ray.ang.handler.AngConfigManager\nimport com.v2ray.ang.handler.MmkvManager\nimport com.v2ray.ang.handler.SettingsManager"
 )
 anchor_app = """        SettingsManager.initApp(this)
         SettingsManager.setNightMode()
@@ -120,11 +120,11 @@ vm = root / "V2rayNG/app/src/main/java/com/v2ray/ang/viewmodel/MainViewModel.kt"
 v = vm.read_text()
 v = v.replace(
     "val updateTestResultAction by lazy { MutableLiveData<String>() }",
-    "val updateTestResultAction by lazy { MutableLiveData<String>() }\\n    val autoSelectFinishedAction by lazy { MutableLiveData<String>() }\\n    private var autoSelectAfterTest = false"
+    "val updateTestResultAction by lazy { MutableLiveData<String>() }\n    val autoSelectFinishedAction by lazy { MutableLiveData<String>() }\n    private var autoSelectAfterTest = false"
 )
 v = v.replace(
     "fun testAllRealPing() {",
-    "fun testAllRealPing(autoSelect: Boolean = false) {\\n        if (autoSelect) autoSelectAfterTest = true"
+    "fun testAllRealPing(autoSelect: Boolean = false) {\n        if (autoSelect) autoSelectAfterTest = true"
 )
 anchor_on = """    fun onTestsFinished() {
         viewModelScope.launch(Dispatchers.Default) {
@@ -181,7 +181,7 @@ main = root / "V2rayNG/app/src/main/java/com/v2ray/ang/ui/MainActivity.kt"
 q = main.read_text()
 q = q.replace(
     "private var tabMediator: TabLayoutMediator? = null",
-    "private var tabMediator: TabLayoutMediator? = null\\n    private var pendingConnectAfterAutoSelect = false"
+    "private var tabMediator: TabLayoutMediator? = null\n    private var pendingConnectAfterAutoSelect = false"
 )
 q = q.replace(
 """        mainViewModel.isRunning.observe(this) { isRunning ->
