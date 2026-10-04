@@ -5,7 +5,7 @@ import android.os.*;
 import android.content.*;
 import android.graphics.Color;
 import android.net.Uri;
-import android.view.*;
+import android.view.*;\nimport android.util.Log;
 import android.webkit.*;
 import android.widget.Toast;
 import java.util.*;
@@ -22,7 +22,7 @@ public class MainActivity extends Activity {
     getWindow().setNavigationBarColor(Color.WHITE);
     getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR);
 
-    web = new WebView(this);
+    WebView.setWebContentsDebuggingEnabled(true);\n    web = new WebView(this);
     web.setBackgroundColor(Color.WHITE);
     WebSettings s = web.getSettings();
     s.setJavaScriptEnabled(true);
@@ -37,6 +37,9 @@ public class MainActivity extends Activity {
     cm.setAcceptThirdPartyCookies(web, true);
 
     web.setWebViewClient(new WebViewClient() {
+      @Override public void onPageStarted(WebView view,String url,android.graphics.Bitmap favicon) {
+        Log.i("DualPhone","START "+url);
+      }
       @Override public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest req) {
         Uri u=req.getUrl();
         if ("http".equals(u.getScheme()) || "https".equals(u.getScheme())) {
@@ -49,6 +52,16 @@ public class MainActivity extends Activity {
       @Override public void onPageFinished(WebView view,String url) {
         super.onPageFinished(view,url);
         CookieManager.getInstance().flush();
+        Log.i("DualPhone","FINISH "+url);
+        view.evaluateJavascript("(document.body&&document.body.innerText)||''", value -> Log.i("DualPhone","BODY "+value));
+      }
+      @Override public void onReceivedError(WebView view, WebResourceRequest request, WebResourceError error) {
+        Log.e("DualPhone","ERROR "+error.getErrorCode()+" "+error.getDescription()+" "+request.getUrl());
+        super.onReceivedError(view,request,error);
+      }
+      @Override public void onReceivedHttpError(WebView view, WebResourceRequest request, WebResourceResponse response) {
+        Log.e("DualPhone","HTTP "+response.getStatusCode()+" "+request.getUrl());
+        super.onReceivedHttpError(view,request,response);
       }
     });
 
