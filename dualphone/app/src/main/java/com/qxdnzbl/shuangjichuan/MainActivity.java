@@ -26,8 +26,8 @@ public class MainActivity extends Activity {
   final Handler ui=new Handler(Looper.getMainLooper());
   SharedPreferences prefs; String cookie="",deviceId="";
   LinearLayout messages; ScrollView scroll; EditText input; TextView sync;
-  boolean loading=false, demo=false;
-  final Runnable poll=new Runnable(){ public void run(){ if(!cookie.isEmpty()&&!demo) loadMessages(false); ui.postDelayed(this,1800);}};
+  boolean loading=false, demo=false, sendingText=false;
+  final Runnable poll=new Runnable(){ public void run(){ if(!cookie.isEmpty()&&!demo&&!sendingText) loadMessages(false); ui.postDelayed(this,350);}};
 
   public void onCreate(Bundle b){
     super.onCreate(b);
@@ -90,7 +90,7 @@ public class MainActivity extends Activity {
     Button send=new Button(this);send.setText("发送");send.setTextColor(Color.WHITE);send.setAllCaps(false);send.setBackground(box(Color.rgb(36,107,219),12));bar.addView(send,new LinearLayout.LayoutParams(dp(68),dp(48)));root.addView(bar);
     add.setOnClickListener(v->pick());send.setOnClickListener(v->sendText(send));input.setOnEditorActionListener((v,id,event)->{if(id==EditorInfo.IME_ACTION_SEND){sendText(send);return true;}return false;});
     setContentView(root);
-    if(demoMode) renderDemo(); else {loadMessages(true);ui.postDelayed(poll,1800);}
+    if(demoMode) renderDemo(); else {loadMessages(true);ui.postDelayed(poll,350);}
   }
 
   void renderDemo(){
@@ -111,8 +111,31 @@ public class MainActivity extends Activity {
   }
 
   void sendText(Button send){
-    String s=input.getText().toString().trim();if(s.isEmpty()||demo)return;input.setText("");send.setEnabled(false);
-    io.execute(()->{try{JSONObject x=new JSONObject();x.put("action","sendText");x.put("text",s);x.put("deviceId",deviceId);Resp r=req("POST","/_api/messages_action",wrap(x),cookie);if(r.code/100!=2)throw new Exception(error(r.body));loadMessages(true);}catch(Exception e){runOnUiThread(()->{input.setText(s);Toast.makeText(this,e.getMessage(),Toast.LENGTH_LONG).show();});}finally{runOnUiThread(()->send.setEnabled(true));}});
+    String s=input.getText().toString().trim();if(s.isEmpty()||demo)return;
+    input.setText("");
+    send.setEnabled(false);
+    sendingText=true;
+
+    // Optimistic UI: the sender sees the message immediately instead of waiting for network round-trip.
+    addText("",s,true);
+    scroll.post(()->scroll.fullScroll(View.FOCUS_DOWN));
+
+    io.execute(()->{try{
+      JSONObject x=new JSONObject();x.put("action","sendText");x.put("text",s);x.put("deviceId",deviceId);
+      Resp r=req("POST","/_api/messages_action",wrap(x),cookie);
+      if(r.code/100!=2)throw new Exception(error(r.body));
+      sendingText=false;
+      loadMessages(true);
+    }catch(Exception e){
+      sendingText=false;
+      runOnUiThread(()->{
+        input.setText(s);
+        Toast.makeText(this,e.getMessage(),Toast.LENGTH_LONG).show();
+        loadMessages(true);
+      });
+    }finally{
+      runOnUiThread(()->send.setEnabled(true));
+    }});
   }
   void loadMessages(boolean bottom){
     if(loading)return;loading=true;io.execute(()->{try{Resp r=req("GET","/_api/messages",null,cookie);if(r.code==401){cookie="";prefs.edit().remove("cookie").apply();runOnUiThread(this::showLogin);return;}if(r.code/100!=2)throw new Exception("同步失败");JSONArray a=unwrap(r.body).getJSONArray("messages");runOnUiThread(()->{messages.removeAllViews();if(a.length()==0){TextView e=tv("直接发就行\n从任意一台手机发文字、图片或文件，另一台会自动收到。",14,Color.rgb(108,119,130));e.setGravity(Gravity.CENTER);e.setPadding(dp(28),dp(80),dp(28),0);messages.addView(e);}for(int i=0;i<a.length();i++){try{JSONObject m=a.getJSONObject(i);boolean mine=deviceId.equals(m.optString("senderDeviceId"));if("text".equals(m.optString("kind")))addText("",m.optString("textContent"),mine);else addRealFile(m,mine);}catch(Exception ignored){}}if(bottom)scroll.post(()->scroll.fullScroll(View.FOCUS_DOWN));sync.setText("● 自动同步");sync.setTextColor(Color.rgb(35,133,91));});}catch(Exception e){runOnUiThread(()->{if(sync!=null){sync.setText("● 正在重连");sync.setTextColor(Color.rgb(165,107,24));}});}finally{loading=false;}});
