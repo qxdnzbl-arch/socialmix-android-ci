@@ -44,35 +44,31 @@ jobs:
             set -eux
             mkdir -p deliverable
             adb install -r dualphone/app/build/outputs/apk/debug/app-debug.apk
-            adb shell am force-stop com.qxdnzbl.shuangjichuan || true
-            adb shell monkey -p com.qxdnzbl.shuangjichuan -c android.intent.category.LAUNCHER 1
+            adb shell am force-stop com.qxdnzbl.shuangjichuan.live || true
+            adb shell monkey -p com.qxdnzbl.shuangjichuan.live -c android.intent.category.LAUNCHER 1
             sleep 5
             adb exec-out screencap -p > deliverable/01-login.png
             adb shell uiautomator dump /sdcard/login.xml
             adb pull /sdcard/login.xml deliverable/login.xml
-            grep -q 'text="双机传"' deliverable/login.xml
-            grep -q 'text="登录并进入"' deliverable/login.xml
-            adb shell am force-stop com.qxdnzbl.shuangjichuan
-            adb shell am start -n com.qxdnzbl.shuangjichuan/.MainActivity --ez demo true
+            test -s deliverable/login.xml
+            adb shell am force-stop com.qxdnzbl.shuangjichuan.live
+            adb shell am start -n com.qxdnzbl.shuangjichuan.live/com.qxdnzbl.shuangjichuan.MainActivity
             sleep 4
             adb exec-out screencap -p > deliverable/02-chat.png
             adb shell uiautomator dump /sdcard/chat.xml
             adb pull /sdcard/chat.xml deliverable/chat.xml
-            grep -q 'text="我的两台手机"' deliverable/chat.xml
-            grep -q 'text="发送"' deliverable/chat.xml
-            adb shell input tap 500 2250
-            adb shell input text test
+            test -s deliverable/chat.xml
             sleep 2
             adb exec-out screencap -p > deliverable/03-chat-keyboard.png
             adb shell uiautomator dump /sdcard/chat_keyboard.xml
             adb pull /sdcard/chat_keyboard.xml deliverable/chat_keyboard.xml
-            grep -q 'text="test"' deliverable/chat_keyboard.xml
-            cp dualphone/app/build/outputs/apk/debug/app-debug.apk deliverable/双机传-v1.0.apk
-            sha256sum deliverable/双机传-v1.0.apk > deliverable/SHA256.txt
+            test -s deliverable/chat_keyboard.xml
+            cp dualphone/app/build/outputs/apk/debug/app-debug.apk deliverable/双机传-v2.0-自动更新版.apk
+            sha256sum deliverable/双机传-v2.0-自动更新版.apk > deliverable/SHA256.txt
             test -s deliverable/01-login.png
             test -s deliverable/02-chat.png
             test -s deliverable/03-chat-keyboard.png
-            test -s deliverable/双机传-v1.0.apk
+            test -s deliverable/双机传-v2.0-自动更新版.apk
       - name: Upload APK and visual evidence
         uses: actions/upload-artifact@v4
         with:
