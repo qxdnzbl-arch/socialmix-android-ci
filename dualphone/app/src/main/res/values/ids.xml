@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <item name="account" type="id"/>
+    <item name="password" type="id"/>
+    <item name="enter" type="id"/>
+    <item name="message" type="id"/>
+    <item name="send" type="id"/>
+    <item name="attach" type="id"/>
+    <item name="status" type="id"/>
+</resources>
