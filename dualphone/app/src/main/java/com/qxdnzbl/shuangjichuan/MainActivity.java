@@ -9,6 +9,7 @@ import android.net.Uri;
 import android.os.*;
 import android.provider.MediaStore;
 import android.provider.OpenableColumns;
+import android.util.Log;
 import android.view.*;
 import android.view.inputmethod.EditorInfo;
 import android.widget.*;
@@ -43,6 +44,7 @@ public class MainActivity extends Activity {
         getWindow().setStatusBarColor(Color.WHITE);
         getWindow().setNavigationBarColor(Color.WHITE);
         getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR);
+        getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
 
         prefs = getSharedPreferences("dual", MODE_PRIVATE);
         db = new TransferDb(this);
@@ -234,6 +236,24 @@ public class MainActivity extends Activity {
         send.setBackground(box(Color.rgb(66, 126, 214), 12));
         bar.addView(send, new LinearLayout.LayoutParams(dp(68), dp(48)));
         root.addView(bar);
+
+        // Android 15+ may draw edge-to-edge and let the IME cover bottom controls even
+        // with adjustResize. Keep the composer physically above the visible window.
+        root.getViewTreeObserver().addOnGlobalLayoutListener(() -> {
+            Rect visible = new Rect();
+            root.getWindowVisibleDisplayFrame(visible);
+            int fullBottom = root.getRootView().getHeight();
+            int covered = Math.max(0, fullBottom - visible.bottom);
+            float shift = covered > dp(120) ? -covered : 0f;
+            if (bar.getTranslationY() != shift) bar.setTranslationY(shift);
+            if (covered > dp(120)) {
+                Log.i("DualPhoneLayout",
+                    "visibleBottom=" + visible.bottom +
+                    " barY=" + (int)bar.getY() +
+                    " barBottom=" + (int)(bar.getY() + bar.getHeight()) +
+                    " covered=" + covered);
+            }
+        });
 
         attach.setOnClickListener(v -> pickFiles());
         send.setOnClickListener(v -> sendText());
