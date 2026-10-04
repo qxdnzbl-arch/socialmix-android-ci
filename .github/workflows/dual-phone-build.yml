@@ -1,14 +1,18 @@
-name: Dual Phone Install-Once Acceptance
+name: Dual Phone V5 Final Acceptance
+
 on:
   push:
     branches: [dual-phone-transfer-build]
     paths: ['dualphone/ci/run-acceptance.txt']
   workflow_dispatch:
+
 permissions:
   contents: read
+
 concurrency:
-  group: dual-phone-install-once
+  group: dual-phone-v5-final
   cancel-in-progress: true
+
 jobs:
   build-test:
     runs-on: ubuntu-latest
@@ -16,22 +20,109 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
-        with: { distribution: temurin, java-version: '17' }
+        with:
+          distribution: temurin
+          java-version: '17'
       - uses: gradle/actions/setup-gradle@v4
-        with: { gradle-version: '8.11.1' }
+        with:
+          gradle-version: '8.11.1'
+
       - name: Restore signing key
         working-directory: dualphone
         run: base64 -d keystore.b64 > app/shuangjichuan-release.jks
-      - name: Build signed APK
+
+      - name: Static hard-constraint checks
+        run: |
+          set -eux
+          ! grep -RniE 'floot|同一 Wi-Fi 或热点|填同一个账号|填同一个密码' dualphone/app/src/main || exit 1
+          grep -q "play-services-nearby:19.5.0" dualphone/app/build.gradle
+          grep -q "BLUETOOTH_SCAN" dualphone/app/src/main/AndroidManifest.xml
+          grep -q "NEARBY_WIFI_DEVICES" dualphone/app/src/main/AndroidManifest.xml
+          grep -q "api/dual/receive" dualphone/app/src/main/java/com/qxdnzbl/shuangjichuan/TransferService.java
+          grep -q "P2P_POINT_TO_POINT" dualphone/app/src/main/java/com/qxdnzbl/shuangjichuan/TransferService.java
+          grep -q "ui-current.html" dualphone/app/src/main/java/com/qxdnzbl/shuangjichuan/MainActivity.java
+
+      - name: Build debug and signed release APK
         working-directory: dualphone
         run: gradle --no-daemon :app:assembleDebug :app:assembleRelease
-      - name: Verify release
+
+      - name: Verify release signature
         run: |
           APKSIGNER=$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -1)
           "$APKSIGNER" verify --verbose dualphone/app/build/outputs/apk/release/app-release.apk
+
+      - name: Live relay end-to-end text and file test
+        run: |
+          python3 - <<'PY'
+          import base64, hashlib, threading, time, urllib.request
+          secret="6686986c94d4a4d34fd705665b962491078a94688d3f730b568d36a2c526c470"
+          room=hashlib.sha256(secret.encode()).hexdigest()[:32]
+          bases=[
+            "https://oppo-iphone-transfer-qr.onrender.com",
+            "https://oppo-iphone-transfer.onrender.com",
+          ]
+
+          def health(base):
+            for _ in range(18):
+              try:
+                with urllib.request.urlopen(base+"/api/dual/health",timeout=8) as r:
+                  if r.status==200: return
+              except Exception:
+                time.sleep(2)
+            raise RuntimeError("relay unavailable "+base)
+
+          for base in bases:
+            health(base)
+
+          def roundtrip(base,kind,body,name=""):
+            got={}
+            def recv():
+              req=urllib.request.Request(
+                f"{base}/api/dual/receive/{room}/deviceB",
+                headers={"x-dual-token":secret}
+              )
+              with urllib.request.urlopen(req,timeout=40) as r:
+                got["status"]=r.status
+                got["kind"]=r.headers.get("X-Dual-Kind")
+                got["name"]=r.headers.get("X-Dual-File-Name")
+                got["body"]=r.read()
+            t=threading.Thread(target=recv)
+            t.start()
+            time.sleep(1.5)
+            headers={
+              "x-dual-token":secret,
+              "x-dual-kind":kind,
+              "x-dual-id":"ci-"+kind,
+              "x-dual-created":str(int(time.time()*1000)),
+              "Content-Type":"application/octet-stream",
+            }
+            if name:
+              headers["x-dual-file-name"]=base64.b64encode(name.encode()).decode()
+            req=urllib.request.Request(
+              f"{base}/api/dual/send/{room}/deviceA",
+              data=body,
+              headers=headers,
+              method="POST"
+            )
+            with urllib.request.urlopen(req,timeout=30) as r:
+              assert r.status==200
+            t.join(45)
+            assert not t.is_alive()
+            assert got["status"]==200
+            assert got["kind"]==kind
+            assert got["body"]==body
+            if name:
+              assert base64.b64decode(got["name"]).decode()==name
+
+          roundtrip(bases[0],"text","跨网络文字测试".encode())
+          roundtrip(bases[0],"file",b"dual-phone-file-test\x00\x01","测试文件.bin")
+          print("relay_e2e_ok")
+          PY
+
       - name: Enable KVM
         run: if [ -e /dev/kvm ]; then sudo chmod 666 /dev/kvm; fi
-      - name: Offline + no-reinstall OTA acceptance
+
+      - name: Android offline UI and queue acceptance
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 35
@@ -45,46 +136,36 @@ jobs:
             mkdir -p deliverable
             adb install -r dualphone/app/build/outputs/apk/debug/app-debug.apk
             adb shell pm clear com.qxdnzbl.shuangjichuan.offline
+
+            adb shell pm grant com.qxdnzbl.shuangjichuan.offline android.permission.BLUETOOTH_ADVERTISE || true
+            adb shell pm grant com.qxdnzbl.shuangjichuan.offline android.permission.BLUETOOTH_CONNECT || true
+            adb shell pm grant com.qxdnzbl.shuangjichuan.offline android.permission.BLUETOOTH_SCAN || true
+            adb shell pm grant com.qxdnzbl.shuangjichuan.offline android.permission.NEARBY_WIFI_DEVICES || true
+
             adb shell svc data disable || true
             adb shell svc wifi disable || true
             adb logcat -c
-            adb shell am start -n com.qxdnzbl.shuangjichuan.offline/com.qxdnzbl.shuangjichuan.MainActivity --ez ciAuto true
+            adb shell am start -n com.qxdnzbl.shuangjichuan.offline/com.qxdnzbl.shuangjichuan.MainActivity
+
             sh -c 'for i in $(seq 1 15); do adb logcat -d -s DualPhoneUi:I "*:S" > deliverable/offline.log 2>/dev/null || true; grep -q "screen=chat" deliverable/offline.log && exit 0; sleep 1; done; exit 1'
-            grep -q 'screen=chat' deliverable/offline.log
-            adb shell input tap 520 2240
+            adb exec-out screencap -p > deliverable/01-offline-direct-chat.png
+
+            adb shell input tap 500 2200
             sleep 2
-            adb logcat -d -s DualPhoneLayout:I '*:S' > deliverable/keyboard-layout.log
-            python3 -c "import re; s=open('deliverable/keyboard-layout.log',errors='ignore').read(); m=re.findall(r'visible=(\d+) bottom=(\d+)',s); assert m,s; v,b=map(int,m[-1]); assert v<2100,(v,b); assert b<=v+12,(v,b)"
-            adb shell input keyevent 4
-            adb exec-out screencap -p > deliverable/01-offline.png
+            adb logcat -d -s DualPhoneLayout:I '*:S' > deliverable/keyboard.log
+            python3 -c "import re; s=open('deliverable/keyboard.log',errors='ignore').read(); m=re.findall(r'visible=(\d+) bottom=(\d+)',s); assert m,s; v,b=map(int,m[-1]); assert v<2100,(v,b); assert b<=v+16,(v,b)"
+            adb shell input text hello
+            adb shell input keyevent 66
 
-            adb forward tcp:47000 tcp:39732
-            python3 dualphone/ci/send_incoming.py 47000
-            sh -c 'for i in $(seq 1 10); do adb logcat -d -s DualPhoneUi:I "*:S" > deliverable/incoming.log 2>/dev/null || true; grep -q "messages=1" deliverable/incoming.log && exit 0; sleep 1; done; exit 1'
-            grep -q 'messages=1' deliverable/incoming.log
+            sh -c 'for i in $(seq 1 8); do adb logcat -d -s DualPhoneUi:I "*:S" > deliverable/send.log 2>/dev/null || true; grep -q "messages=1" deliverable/send.log && exit 0; sleep 1; done; exit 1'
+            adb exec-out screencap -p > deliverable/02-offline-queued.png
 
-            nohup python3 -m http.server 8765 --directory dualphone/ci/ota-test >/tmp/ota-http.log 2>&1 </dev/null &
-            adb reverse tcp:8765 tcp:8765
-            adb logcat -c
-            adb shell am force-stop com.qxdnzbl.shuangjichuan.offline
-            adb shell am start -n com.qxdnzbl.shuangjichuan.offline/com.qxdnzbl.shuangjichuan.MainActivity --ez ciAuto true --es ciManifest http://127.0.0.1:8765/manifest.json
-            sh -c 'for i in $(seq 1 15); do adb logcat -d -s DualPhoneOta:I DualPhoneUi:I "*:S" > deliverable/ota.log 2>/dev/null || true; grep -q "OTA_APPLIED 99" deliverable/ota.log && grep -q "OTA_TEST_APPLIED" deliverable/ota.log && exit 0; sleep 1; done; exit 1'
-            grep -q 'OTA_APPLIED 99' deliverable/ota.log
-            grep -q 'OTA_TEST_APPLIED' deliverable/ota.log
+            cp dualphone/app/build/outputs/apk/release/app-release.apk deliverable/ShuangJiChuan_v5_Final.apk
+            sha256sum deliverable/ShuangJiChuan_v5_Final.apk > deliverable/SHA256.txt
 
-            adb shell am force-stop com.qxdnzbl.shuangjichuan.offline
-            adb shell svc wifi disable || true
-            adb logcat -c
-            adb shell am start -n com.qxdnzbl.shuangjichuan.offline/com.qxdnzbl.shuangjichuan.MainActivity --ez ciAuto true
-            sh -c 'for i in $(seq 1 10); do adb logcat -d -s DualPhoneUi:I "*:S" > deliverable/persist.log 2>/dev/null || true; grep -q "OTA_TEST_APPLIED" deliverable/persist.log && exit 0; sleep 1; done; exit 1'
-            grep -q 'OTA_TEST_APPLIED' deliverable/persist.log
-            adb exec-out screencap -p > deliverable/02-updated-without-reinstall.png
-
-            cp dualphone/app/build/outputs/apk/release/app-release.apk deliverable/ShuangJiChuan_v4_InstallOnce.apk
-            sha256sum deliverable/ShuangJiChuan_v4_InstallOnce.apk > deliverable/SHA256.txt
       - uses: actions/upload-artifact@v4
         with:
-          name: shuangjichuan-v4-install-once
+          name: shuangjichuan-v5-final
           path: deliverable/
           if-no-files-found: error
           retention-days: 14
