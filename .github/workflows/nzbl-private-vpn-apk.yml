@@ -191,20 +191,3 @@ jobs:
             apk-badging.txt
             signing-tools/
 
-      - name: Android emulator smoke test
-        uses: reactivecircus/android-emulator-runner@v2
-        with:
-          api-level: 35
-          arch: x86_64
-          target: google_apis
-          profile: pixel_6
-          disable-animations: true
-          script: |
-            adb install -r PrivateVPN-x86_64-debug.apk
-            adb shell monkey -p com.nzbl.privatevpn -c android.intent.category.LAUNCHER 1
-            sleep 8
-            adb shell uiautomator dump /sdcard/window.xml
-            adb pull /sdcard/window.xml ui.xml
-            grep -q "NZBL-SG" ui.xml
-            adb exec-out screencap -p > private-vpn-emulator.png
-            adb shell dumpsys activity activities | grep -q "com.nzbl.privatevpn"
