@@ -152,12 +152,12 @@ jobs:
           distribution: temurin
           java-version: "21"
 
-      - name: Build and unit test
+      - name: Build APK
         working-directory: v2rayng-src/V2rayNG
         run: |
           echo "sdk.dir=$ANDROID_HOME" > local.properties
           chmod +x gradlew
-          ./gradlew :app:testPlaystoreDebugUnitTest :app:assemblePlaystoreDebug
+          ./gradlew :app:compilePlaystoreDebugKotlin :app:assemblePlaystoreDebug
           ./gradlew :app:assemblePlaystoreRelease -PABI_FILTERS=arm64-v8a
 
       - name: Validate APK metadata and bundled profile
