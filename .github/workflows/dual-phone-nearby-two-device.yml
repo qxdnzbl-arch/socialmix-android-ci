@@ -23,7 +23,7 @@ jobs:
       - name: Two-emulator Nearby P2P
         uses: reactivecircus/android-emulator-runner@v2
         with:
-          api-level: 35
+          api-level: 31
           arch: x86_64
           target: google_apis
           profile: pixel_6
