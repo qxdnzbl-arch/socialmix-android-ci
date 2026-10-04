@@ -606,7 +606,7 @@ function createApp() {
 
     req.pipe(target, { end: true });
 
-    req.on('end', () => {
+    target.on('finish', () => {
       if (!failed && !res.headersSent) res.json({ ok: true });
     });
     req.on('aborted', () => {
