@@ -4,9 +4,12 @@ on:
   push:
     branches: [dual-phone-transfer-build]
     paths:
-      - 'dualphone/**'
-      - '.github/workflows/dual-phone-build.yml'
+      - 'dualphone/ci/offline-v3-trigger.txt'
   workflow_dispatch:
+
+concurrency:
+  group: dual-phone-offline-acceptance
+  cancel-in-progress: true
 
 permissions:
   contents: read
