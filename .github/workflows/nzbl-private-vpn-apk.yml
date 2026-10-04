@@ -1,3 +1,4 @@
+# build-input-revision: v2-newline-fix
 name: Build NZBL Private VPN APK
 
 on:
