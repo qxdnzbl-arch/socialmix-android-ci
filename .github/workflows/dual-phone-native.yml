@@ -1,0 +1,100 @@
+name: Dual Phone Native APK
+
+on:
+  push:
+    branches:
+      - tmp/dual-phone-apk-20261004
+
+permissions:
+  contents: read
+
+jobs:
+  build-test-package:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+
+      - name: Compile APK and tests
+        run: gradle --no-daemon :app:assembleDebug :app:assembleDebugAndroidTest
+
+      - name: Enable KVM
+        run: |
+          if [ -e /dev/kvm ]; then sudo chmod 666 /dev/kvm; fi
+
+      - name: Native Android emulator acceptance
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          target: google_apis
+          profile: pixel_6
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none
+          script: |
+            set -e
+            adb uninstall com.qxdnzbl.shuangjichuan || true
+            adb install -r app/build/outputs/apk/debug/app-debug.apk
+            adb shell am force-stop com.qxdnzbl.shuangjichuan || true
+            adb shell monkey -p com.qxdnzbl.shuangjichuan -c android.intent.category.LAUNCHER 1
+            sleep 3
+            adb exec-out screencap -p > native-01-login.png
+            gradle --no-daemon :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.qxdnzbl.shuangjichuan.DualPhoneNativeTest
+            adb shell am force-stop com.qxdnzbl.shuangjichuan || true
+            adb shell monkey -p com.qxdnzbl.shuangjichuan -c android.intent.category.LAUNCHER 1
+            sleep 4
+            adb exec-out screencap -p > native-02-chat.png
+            adb shell uiautomator dump /sdcard/native-chat.xml >/dev/null
+            adb pull /sdcard/native-chat.xml native-chat.xml >/dev/null
+            grep -q '我的两台手机' native-chat.xml
+            grep -q 'native-qa-message' native-chat.xml
+            grep -q 'qa-file.txt' native-chat.xml
+            adb shell input tap 540 2110
+            sleep 2
+            adb exec-out screencap -p > native-03-keyboard.png
+            adb shell uiautomator dump /sdcard/native-keyboard.xml >/dev/null
+            adb pull /sdcard/native-keyboard.xml native-keyboard.xml >/dev/null
+            grep -q '发送' native-keyboard.xml
+
+      - name: Prepare deliverable
+        if: success()
+        run: |
+          mkdir -p deliverable
+          cp app/build/outputs/apk/debug/app-debug.apk deliverable/shuangjichuan-v1.0.apk
+          sha256sum deliverable/shuangjichuan-v1.0.apk > deliverable/SHA256.txt
+
+      - name: Upload APK
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: shuangjichuan-native-apk
+          path: deliverable/
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Upload native QA screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: shuangjichuan-native-qa
+          path: |
+            native-01-login.png
+            native-02-chat.png
+            native-03-keyboard.png
+            native-chat.xml
+            native-keyboard.xml
+            app/build/reports/androidTests/connected/
+          if-no-files-found: warn
+          retention-days: 7
