@@ -73,7 +73,9 @@ jobs:
 
             adb shell uiautomator dump /sdcard/setup.xml
             adb pull /sdcard/setup.xml deliverable/setup.xml
-            grep -q '不用联网，不用 VPN' deliverable/setup.xml
+            grep -q 'resource-id="com.qxdnzbl.shuangjichuan.offline:id/account"' deliverable/setup.xml
+            grep -q 'resource-id="com.qxdnzbl.shuangjichuan.offline:id/password"' deliverable/setup.xml
+            grep -q 'resource-id="com.qxdnzbl.shuangjichuan.offline:id/enter"' deliverable/setup.xml
             ! grep -qi 'floot' deliverable/setup.xml
             adb exec-out screencap -p > deliverable/01-offline-setup.png
 
