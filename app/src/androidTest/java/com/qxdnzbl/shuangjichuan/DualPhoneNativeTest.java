@@ -59,7 +59,7 @@ public class DualPhoneNativeTest {
             onView(withId(MainActivity.ID_REGISTER)).perform(click());
 
             waitForVisible(MainActivity.ID_INPUT, 30000);
-            onView(withId(MainActivity.ID_INPUT)).perform(typeText("native-qa-message"), closeSoftKeyboard());
+            onView(withId(MainActivity.ID_INPUT)).perform(replaceText("native-qa-message"), closeSoftKeyboard());
             onView(withId(MainActivity.ID_SEND)).perform(click());
             waitForText("native-qa-message", 20000);
 
