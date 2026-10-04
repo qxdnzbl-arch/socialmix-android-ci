@@ -64,11 +64,24 @@ jobs:
 
           const email = `qa-${Date.now()}@example.com`;
           const password = 'QaPass1234';
-          await page.getByRole('button', { name: '第一次使用' }).click();
-          await page.getByPlaceholder('用同一个邮箱登录两台手机').fill(email);
-          await page.getByPlaceholder('至少 8 位').fill(password);
-          await page.getByRole('button', { name: '创建并进入' }).click();
-          await page.waitForURL('**/', { timeout: 30000 });
+          const reg = await context.request.post('https://shuangji-chuan.floot.app/_api/auth/register_with_password', {
+            headers: { 'content-type': 'application/json' },
+            data: { json: { email, password, displayName: 'QA' } },
+          });
+          if (!reg.ok()) throw new Error('API register failed: ' + reg.status() + ' ' + await reg.text());
+          const setCookie = reg.headers()['set-cookie'];
+          if (!setCookie) throw new Error('Registration did not return session cookie');
+          const pair = setCookie.split(';')[0];
+          const eq = pair.indexOf('=');
+          await context.addCookies([{
+            name: pair.slice(0, eq),
+            value: pair.slice(eq + 1),
+            domain: 'shuangji-chuan.floot.app',
+            path: '/',
+            secure: true,
+            httpOnly: true,
+          }]);
+          await page.goto('https://shuangji-chuan.floot.app/', { waitUntil: 'networkidle', timeout: 60000 });
           await page.getByPlaceholder('输入消息').waitFor({ state: 'visible', timeout: 30000 });
           await page.screenshot({ path: '02-chat-empty.png', fullPage: true });
 
