@@ -25,7 +25,10 @@ for dev in emulator-5554 emulator-5556; do
   adb -s "$dev" shell pm grant "$PKG" android.permission.ACCESS_FINE_LOCATION || true
   adb -s "$dev" shell pm grant "$PKG" android.permission.ACCESS_COARSE_LOCATION || true
   adb -s "$dev" shell svc data disable || true
-  adb -s "$dev" shell svc wifi disable || true
+  adb -s "$dev" shell svc wifi enable || true
+  adb -s "$dev" shell settings put secure location_mode 3 || true
+  adb -s "$dev" shell cmd location set-location-enabled true || true
+  adb -s "$dev" shell svc bluetooth enable || true
   adb -s "$dev" shell cmd bluetooth_manager enable || true
   adb -s "$dev" logcat -c
 done
@@ -47,5 +50,7 @@ adb -s emulator-5554 logcat -d -s DualNearby:V "*:S" || true
 echo "=== receiver nearby ==="
 adb -s emulator-5556 logcat -d -s DualNearby:V "*:S" || true
 
+grep -q "connected " <(adb -s emulator-5554 logcat -d -s DualNearby:I "*:S" || true)
+grep -q "connected " <(adb -s emulator-5556 logcat -d -s DualNearby:I "*:S" || true)
 [[ "$passed" == "1" ]]
 adb -s emulator-5556 exec-out screencap -p > nearby-receiver.png
