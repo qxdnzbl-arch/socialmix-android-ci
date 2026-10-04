@@ -36,6 +36,7 @@ public class TransferService extends Service {
   private final Set<String> endpoints=new CopyOnWriteArraySet<>();
   private final Set<String> requested=new CopyOnWriteArraySet<>();
   private final Map<Long,String> outgoing=new ConcurrentHashMap<>();
+  private final Set<String> inFlight=ConcurrentHashMap.newKeySet();
   private final Map<Long,Payload> incomingFiles=new ConcurrentHashMap<>();
   private final Map<Long,FileMeta> incomingMeta=new ConcurrentHashMap<>();
   private final Set<Long> completedIncoming=ConcurrentHashMap.newKeySet();
@@ -191,6 +192,8 @@ public class TransferService extends Service {
     @Override public void onDisconnected(String endpointId){
       endpoints.remove(endpointId);
       requested.remove(endpointId);
+      outgoing.clear();
+      inFlight.clear();
     }
   };
 
@@ -244,6 +247,7 @@ public class TransferService extends Service {
       if(update.getStatus()==PayloadTransferUpdate.Status.SUCCESS){
         String msgId=outgoing.remove(id);
         if(msgId!=null){
+          inFlight.remove(msgId);
           db.markSent(msgId);
           changed();
           return;
@@ -255,7 +259,8 @@ public class TransferService extends Service {
         update.getStatus()==PayloadTransferUpdate.Status.FAILURE
         || update.getStatus()==PayloadTransferUpdate.Status.CANCELED
       ){
-        outgoing.remove(id);
+        String failedMsg=outgoing.remove(id);
+        if(failedMsg!=null) inFlight.remove(failedMsg);
         Payload p=incomingFiles.remove(id);
         incomingMeta.remove(id);
         completedIncoming.remove(id);
@@ -329,6 +334,7 @@ public class TransferService extends Service {
   }
 
   private boolean sendNearby(String endpoint,TransferDb.Msg m){
+    if(inFlight.contains(m.id)) return true;
     try{
       if("text".equals(m.kind)){
         JSONObject j=new JSONObject()
@@ -342,10 +348,11 @@ public class TransferService extends Service {
         if(bytes.length>30000) return false;
 
         Payload p=Payload.fromBytes(bytes);
+        inFlight.add(m.id);
         outgoing.put(p.getId(),m.id);
 
         nearby.sendPayload(endpoint,p)
-          .addOnFailureListener(e->outgoing.remove(p.getId()));
+          .addOnFailureListener(e->{outgoing.remove(p.getId());inFlight.remove(m.id);});
 
         return true;
       }
@@ -370,9 +377,10 @@ public class TransferService extends Service {
         Payload.fromBytes(meta.toString().getBytes(StandardCharsets.UTF_8))
       );
 
+      inFlight.add(m.id);
       outgoing.put(fp.getId(),m.id);
       nearby.sendPayload(endpoint,fp)
-        .addOnFailureListener(e->outgoing.remove(fp.getId()));
+        .addOnFailureListener(e->{outgoing.remove(fp.getId());inFlight.remove(m.id);});
 
       return true;
     }catch(Exception e){
