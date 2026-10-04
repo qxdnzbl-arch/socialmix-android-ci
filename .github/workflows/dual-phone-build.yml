@@ -60,7 +60,7 @@ jobs:
             adb pull /sdcard/chat.xml deliverable/chat.xml
             grep -q 'text="我的两台手机"' deliverable/chat.xml
             grep -q 'text="发送"' deliverable/chat.xml
-            adb shell input tap 500 2200
+            adb shell input tap 500 2250
             adb shell input text test
             sleep 2
             adb exec-out screencap -p > deliverable/03-chat-keyboard.png
