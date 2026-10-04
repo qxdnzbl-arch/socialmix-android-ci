@@ -17,7 +17,7 @@ public class TransferService extends Service {
     public static final String ACTION_CHANGED = "com.qxdnzbl.shuangjichuan.CHANGED";
     private static final int NOTIFY_ID = 31021;
     private static final int DISCOVERY_PORT = 39731;\n    private static final int TRANSFER_PORT = 39732;
-    private static final int MAGIC = 0x534A4331;
+    private static final int MAGIC = 0x534A4331;\n    private static final int SERVER_PORT = 39732;
     private static final String GROUP = "239.255.42.99";
 
     private final ExecutorService io = Executors.newCachedThreadPool();
