@@ -24,90 +24,19 @@ jobs:
         run: |
           git clone --branch 2.2.6 --depth 1 --recurse-submodules --shallow-submodules https://github.com/2dust/v2rayNG.git v2rayng-src
 
-      - name: Apply private VPN app patch
+      - name: Apply NZBL multi-node patch
         run: |
-          python3 - <<'PY'
-          from pathlib import Path
+          python3 private-vpn/patch_v2.py v2rayng-src
+          cp v2rayng-src/V2rayNG/app/src/main/assets/nzbl_nodes.txt /tmp/nzbl-placeholders.txt
+          grep -q "autoSelectFinishedAction" v2rayng-src/V2rayNG/app/src/main/java/com/v2ray/ang/viewmodel/MainViewModel.kt
+          grep -q "testAllRealPing(autoSelect = true)" v2rayng-src/V2rayNG/app/src/main/java/com/v2ray/ang/ui/MainActivity.kt
 
-          root = Path("v2rayng-src")
-          app_gradle = root / "V2rayNG/app/build.gradle.kts"
-          s = app_gradle.read_text()
-          s = s.replace('applicationId = "com.v2ray.ang"', 'applicationId = "com.nzbl.privatevpn"')
-          s = s.replace('"v2rayNG_${variant.versionName}-fdroid_${abi}.apk"', '"PrivateVPN_${variant.versionName}-fdroid_${abi}.apk"')
-          s = s.replace('"v2rayNG_${variant.versionName}_${abi}.apk"', '"PrivateVPN_${variant.versionName}_${abi}.apk"')
-          app_gradle.write_text(s)
-
-          for rel in [
-              "V2rayNG/app/src/main/res/values/strings.xml",
-              "V2rayNG/app/src/fdroid/res/values/strings.xml",
-              "V2rayNG/app/src/dev/res/values/strings.xml",
-              "V2rayNG/app/src/pre_release/res/values/strings.xml",
-          ]:
-              p = root / rel
-              t = p.read_text()
-              t = t.replace("v2rayNG (F-Droid)", "私人VPN")
-              t = t.replace("v2rayNG (DEV)", "私人VPN")
-              t = t.replace("v2rayNG (PR)", "私人VPN")
-              t = t.replace(">v2rayNG<", ">私人VPN<")
-              p.write_text(t)
-
-          icon = root / "V2rayNG/app/src/main/res/drawable/ic_private_vpn.xml"
-          icon.parent.mkdir(parents=True, exist_ok=True)
-          icon.write_text("""<?xml version="1.0" encoding="utf-8"?>
-          <vector xmlns:android="http://schemas.android.com/apk/res/android"
-              android:width="108dp"
-              android:height="108dp"
-              android:viewportWidth="108"
-              android:viewportHeight="108">
-              <path
-                  android:fillColor="#FFFFFF"
-                  android:pathData="M54,8 L91,22 L86,60 C82,79 69,92 54,100 C39,92 26,79 22,60 L17,22 Z"/>
-              <path
-                  android:fillColor="#111111"
-                  android:pathData="M54,27 C44,27 36,35 36,45 C36,52 40,58 46,61 L46,77 L62,77 L62,61 C68,58 72,52 72,45 C72,35 64,27 54,27 Z M54,37 C59,37 62,40 62,45 C62,50 59,53 54,53 C49,53 46,50 46,45 C46,40 49,37 54,37 Z"/>
-          </vector>
-          """)
-
-          manifest = root / "V2rayNG/app/src/main/AndroidManifest.xml"
-          m = manifest.read_text()
-          m = m.replace('android:icon="@mipmap/ic_launcher"', 'android:icon="@drawable/ic_private_vpn"')
-          manifest.write_text(m)
-
-          asset = root / "V2rayNG/app/src/main/assets/nzbl_node.txt"
-          asset.write_text("vless://00000000-0000-4000-8000-000000000000@example.com:443?encryption=none&security=tls&sni=example.com&type=ws&host=example.com&path=%2Fplaceholder#NZBL-SG\n")
-
-          app = root / "V2rayNG/app/src/main/java/com/v2ray/ang/AngApplication.kt"
-          a = app.read_text()
-          a = a.replace(
-              "import com.v2ray.ang.AppConfig.ANG_PACKAGE\nimport com.v2ray.ang.handler.SettingsManager",
-              "import com.v2ray.ang.AppConfig.ANG_PACKAGE\nimport com.v2ray.ang.AppConfig.DEFAULT_SUBSCRIPTION_ID\nimport com.v2ray.ang.handler.AngConfigManager\nimport com.v2ray.ang.handler.MmkvManager\nimport com.v2ray.ang.handler.SettingsManager"
-          )
-          anchor = """        SettingsManager.initApp(this)
-                  SettingsManager.setNightMode()
-          """
-          insertion = """        SettingsManager.initApp(this)
-                  SettingsManager.setNightMode()
-
-                  if (MmkvManager.getSelectServer().isNullOrBlank()) {
-                      val bundledNode = runCatching {
-                          assets.open("nzbl_node.txt").bufferedReader().use { it.readText().trim() }
-                      }.getOrNull()
-                      if (!bundledNode.isNullOrBlank()) {
-                          AngConfigManager.importBatchConfig(
-                              bundledNode,
-                              DEFAULT_SUBSCRIPTION_ID,
-                              true
-                          )
-                      }
-                  }
-          """
-          if anchor not in a:
-              raise SystemExit("AngApplication patch anchor not found")
-          a = a.replace(anchor, insertion)
-          app.write_text(a)
-
-          print("Patch applied")
-          PY
+      - name: Put temporary verified nodes in debug build
+        run: |
+          cat > v2rayng-src/V2rayNG/app/src/main/assets/nzbl_nodes.txt <<'EOF'
+          vless://22222222-2222-4222-8222-222222222222@kehua-original-verifier.onrender.com:443?encryption=none&security=tls&sni=kehua-original-verifier.onrender.com&type=ws&host=kehua-original-verifier.onrender.com&path=%2Fws-ee876e404c2e8bb99b9b4a63#NZBL-AUTO-Render-SG
+          vless://33333333-3333-4333-8333-333333333333@kehua-native-prod-api-production.up.railway.app:443?encryption=none&security=tls&sni=kehua-native-prod-api-production.up.railway.app&type=ws&host=kehua-native-prod-api-production.up.railway.app&path=%2Fws-railway-6f8a1c#NZBL-AUTO-Railway-SG
+          EOF
 
       - name: Setup Android SDK
         uses: android-actions/setup-android@v4
@@ -155,45 +84,18 @@ jobs:
       - name: Cache Gradle
         uses: gradle/actions/setup-gradle@v4
 
-      - name: Build APK
+      - name: Build debug APK
         working-directory: v2rayng-src/V2rayNG
         run: |
           echo "sdk.dir=$ANDROID_HOME" > local.properties
           chmod +x gradlew
           ./gradlew :app:compilePlaystoreDebugKotlin :app:assemblePlaystoreDebug
-          ./gradlew :app:assemblePlaystoreRelease -PABI_FILTERS=arm64-v8a
 
-      - name: Validate APK metadata and bundled profile
+      - name: Collect debug APK
         run: |
           DEBUG_APK="$(find v2rayng-src/V2rayNG/app/build/outputs/apk -type f -name '*x86_64*.apk' | grep '/debug/' | head -1)"
-          RELEASE_APK="$(find v2rayng-src/V2rayNG/app/build/outputs/apk -type f -name '*.apk' | grep '/release/' | head -1)"
           test -n "$DEBUG_APK"
-          test -n "$RELEASE_APK"
-          "$ANDROID_HOME/build-tools/37.0.0/aapt" dump badging "$RELEASE_APK" | tee apk-badging.txt
-          grep -q "package: name='com.nzbl.privatevpn'" apk-badging.txt
-          grep -q "application-label:'私人VPN'" apk-badging.txt
-          unzip -p "$RELEASE_APK" assets/nzbl_node.txt | tee bundled-node.txt
-          grep -q "00000000-0000-4000-8000-000000000000" bundled-node.txt
-          cp "$RELEASE_APK" PrivateVPN-arm64-unsigned.apk
           cp "$DEBUG_APK" PrivateVPN-x86_64-debug.apk
-
-      - name: Collect local signing tools
-        run: |
-          mkdir -p signing-tools
-          cp "$ANDROID_HOME/build-tools/37.0.0/apksigner" signing-tools/
-          cp "$ANDROID_HOME/build-tools/37.0.0/lib/apksigner.jar" signing-tools/
-          cp "$ANDROID_HOME/build-tools/37.0.0/zipalign" signing-tools/
-
-      - name: Upload private VPN build
-        uses: actions/upload-artifact@v4
-        with:
-          name: private-vpn-build
-          retention-days: 3
-          path: |
-            PrivateVPN-arm64-unsigned.apk
-            PrivateVPN-x86_64-debug.apk
-            apk-badging.txt
-            signing-tools/
 
       - name: Android emulator smoke test
         uses: reactivecircus/android-emulator-runner@v2
@@ -208,9 +110,46 @@ jobs:
           script: |
             adb install -r PrivateVPN-x86_64-debug.apk
             adb shell monkey -p com.nzbl.privatevpn -c android.intent.category.LAUNCHER 1
-            sleep 6
+            sleep 7
             adb shell uiautomator dump /sdcard/window.xml
             adb pull /sdcard/window.xml ui.xml
-            grep -q "NZBL-SG" ui.xml
+            grep -q "NZBL-AUTO-Render-SG" ui.xml
+            grep -q "NZBL-AUTO-Railway-SG" ui.xml
             adb shell dumpsys activity activities | grep -q "com.nzbl.privatevpn"
 
+      - name: Restore private placeholders and build ARM64 release
+        working-directory: v2rayng-src/V2rayNG
+        run: |
+          cp /tmp/nzbl-placeholders.txt app/src/main/assets/nzbl_nodes.txt
+          ./gradlew :app:assemblePlaystoreRelease -PABI_FILTERS=arm64-v8a
+
+      - name: Validate release APK
+        run: |
+          RELEASE_APK="$(find v2rayng-src/V2rayNG/app/build/outputs/apk -type f -name '*.apk' | grep '/release/' | head -1)"
+          test -n "$RELEASE_APK"
+          "$ANDROID_HOME/build-tools/37.0.0/aapt" dump badging "$RELEASE_APK" | tee apk-badging.txt
+          grep -q "package: name='com.nzbl.privatevpn'" apk-badging.txt
+          grep -q "application-label:'私人VPN'" apk-badging.txt
+          unzip -p "$RELEASE_APK" assets/nzbl_nodes.txt | tee bundled-nodes.txt
+          grep -q "render-placeholder.invalid" bundled-nodes.txt
+          grep -q "railway-placeholder.invalid" bundled-nodes.txt
+          cp "$RELEASE_APK" PrivateVPN-arm64-unsigned.apk
+
+      - name: Collect local signing tools
+        run: |
+          mkdir -p signing-tools
+          cp "$ANDROID_HOME/build-tools/37.0.0/apksigner" signing-tools/
+          cp "$ANDROID_HOME/build-tools/37.0.0/lib/apksigner.jar" signing-tools/
+          cp "$ANDROID_HOME/build-tools/37.0.0/zipalign" signing-tools/
+
+      - name: Upload final build inputs
+        uses: actions/upload-artifact@v4
+        with:
+          name: private-vpn-v2-build
+          retention-days: 3
+          path: |
+            PrivateVPN-arm64-unsigned.apk
+            apk-badging.txt
+            bundled-nodes.txt
+            ui.xml
+            signing-tools/
