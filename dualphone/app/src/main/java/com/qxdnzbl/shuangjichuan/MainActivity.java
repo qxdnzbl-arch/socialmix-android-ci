@@ -101,10 +101,6 @@ public class MainActivity extends Activity {
     return (getApplicationInfo().flags & android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE)!=0;
   }
 
-  private boolean isDebuggable(){
-    return (getApplicationInfo().flags & android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE)!=0;
-  }
-
   private void requestNearbyPermissions(){
     ArrayList<String> need=new ArrayList<>();
     if(Build.VERSION.SDK_INT>=32){
