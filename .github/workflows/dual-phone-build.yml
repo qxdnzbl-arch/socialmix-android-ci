@@ -2,10 +2,11 @@ name: Dual Phone Transfer APK
 
 on:
   push:
-    branches: [dual-phone-transfer-build]
+    branches:
+      - dual-phone-transfer-build
     paths:
-      - 'dualphone/**'
-      - '.github/workflows/dual-phone-build.yml'
+      - dualphone/**
+      - .github/workflows/dual-phone-build.yml
   workflow_dispatch:
 
 permissions:
@@ -43,7 +44,6 @@ jobs:
             set -eux
             mkdir -p deliverable
             adb install -r dualphone/app/build/outputs/apk/debug/app-debug.apk
-
             adb shell am force-stop com.qxdnzbl.shuangjichuan || true
             adb shell monkey -p com.qxdnzbl.shuangjichuan -c android.intent.category.LAUNCHER 1
             sleep 5
@@ -52,7 +52,6 @@ jobs:
             adb pull /sdcard/login.xml deliverable/login.xml
             grep -q 'text="双机传"' deliverable/login.xml
             grep -q 'text="登录并进入"' deliverable/login.xml
-
             adb shell am force-stop com.qxdnzbl.shuangjichuan
             adb shell am start -n com.qxdnzbl.shuangjichuan/.MainActivity --ez demo true
             sleep 4
@@ -61,27 +60,13 @@ jobs:
             adb pull /sdcard/chat.xml deliverable/chat.xml
             grep -q 'text="我的两台手机"' deliverable/chat.xml
             grep -q 'text="发送"' deliverable/chat.xml
-
-            coords=$(python3 - <<'PY'
-import re
-s=open('deliverable/chat.xml', encoding='utf-8').read()
-m=re.search(r'class="android.widget.EditText"[^>]*bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"', s)
-if not m:
-    raise SystemExit("EditText not found")
-x1,y1,x2,y2=map(int,m.groups())
-print(f"{(x1+x2)//2},{(y1+y2)//2}")
-PY
-)
-            x=$(echo "$coords" | cut -d, -f1)
-            y=$(echo "$coords" | cut -d, -f2)
-            adb shell input tap "$x" "$y"
+            adb shell input tap 500 2200
             adb shell input text test
             sleep 2
             adb exec-out screencap -p > deliverable/03-chat-keyboard.png
             adb shell uiautomator dump /sdcard/chat_keyboard.xml
             adb pull /sdcard/chat_keyboard.xml deliverable/chat_keyboard.xml
             grep -q 'text="test"' deliverable/chat_keyboard.xml
-
             cp dualphone/app/build/outputs/apk/debug/app-debug.apk deliverable/双机传-v1.0.apk
             sha256sum deliverable/双机传-v1.0.apk > deliverable/SHA256.txt
             test -s deliverable/01-login.png
