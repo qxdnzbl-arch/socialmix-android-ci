@@ -1,0 +1,58 @@
+name: Railway REALITY Path Test
+
+on:
+  push:
+    branches:
+      - nzbl-private-vpn-apk-20261004
+    paths:
+      - ".github/workflows/railway-reality-path-test.yml"
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Install Xray
+        run: |
+          curl -fL --retry 3 -o /tmp/xray.zip https://github.com/XTLS/Xray-core/releases/download/v26.9.30/Xray-linux-64.zip
+          unzip -q /tmp/xray.zip -d /tmp/xray
+          chmod +x /tmp/xray/xray
+
+      - name: Test both paths
+        shell: bash
+        run: |
+          set +e
+          test_one () {
+            NAME="$1"; ADDR="$2"; PORT="$3"; SOCKS="$4"
+            cat >/tmp/$NAME.json <<EOF
+          {
+            "log":{"loglevel":"debug"},
+            "inbounds":[{"listen":"127.0.0.1","port":$SOCKS,"protocol":"socks","settings":{"udp":true}}],
+            "outbounds":[{
+              "protocol":"vless",
+              "settings":{"vnext":[{"address":"$ADDR","port":$PORT,"users":[{"id":"68bfb6c3-5959-4690-aa57-2d0147385de0","encryption":"none","flow":"xtls-rprx-vision"}]}]},
+              "streamSettings":{"network":"tcp","security":"reality","realitySettings":{"serverName":"www.samsung.com","fingerprint":"chrome","publicKey":"K5YXStG-jOMsQte0OWRdeN6dG3f9afYXec_bldO8NGk","shortId":"6ebe6f","spiderX":"/"}}
+            }]
+          }
+          EOF
+            /tmp/xray/xray run -config /tmp/$NAME.json >/tmp/$NAME.log 2>&1 &
+            PID=$!
+            sleep 2
+            curl -v --max-time 15 --socks5-hostname 127.0.0.1:$SOCKS https://www.cloudflare.com/cdn-cgi/trace -o /tmp/$NAME.out 2>/tmp/$NAME.curl
+            RC=$?
+            kill $PID 2>/dev/null || true
+            echo "=== $NAME rc=$RC ==="
+            cat /tmp/$NAME.curl
+            cat /tmp/$NAME.log
+            cat /tmp/$NAME.out 2>/dev/null || true
+            echo
+            return $RC
+          }
+
+          test_one proxy gondola.proxy.rlwy.net 47854 10809
+          PROXY_RC=$?
+          test_one direct 208.77.246.38 443 10810
+          DIRECT_RC=$?
+          echo "PATH_RESULT proxy=$PROXY_RC direct=$DIRECT_RC"
+          test "$PROXY_RC" -eq 0 -o "$DIRECT_RC" -eq 0
