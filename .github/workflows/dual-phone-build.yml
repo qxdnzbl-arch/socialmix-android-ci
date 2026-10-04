@@ -1,4 +1,4 @@
-name: Dual Phone Auto WebShell Acceptance
+name: Dual Phone Offline Native Acceptance
 
 on:
   push:
@@ -12,9 +12,9 @@ permissions:
   contents: read
 
 jobs:
-  build-test-screenshot:
+  build-test:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
@@ -24,15 +24,31 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.11.1'
-      - name: Build APK
+
+      - name: Restore stable signing key
         working-directory: dualphone
-        run: gradle --no-daemon :app:assembleDebug
-      - name: Verify live web app reachable
-        run: curl -fL --max-time 20 https://shuangji-chuan.floot.app/ -o /tmp/live.html && test -s /tmp/live.html
+        run: base64 -d keystore.b64 > app/shuangjichuan-release.jks
+
+      - name: Assert no Floot or remote runtime dependency
+        run: |
+          ! grep -RniE 'floot|shuangji-chuan\.floot\.app|WebView' dualphone/app/src/main || (echo "Remote/Floot dependency found" && exit 1)
+
+      - name: Build debug and signed release APK
+        working-directory: dualphone
+        run: gradle --no-daemon :app:assembleDebug :app:assembleRelease
+
+      - name: Verify release signing and files
+        run: |
+          test -s dualphone/app/build/outputs/apk/release/app-release.apk
+          test -s dualphone/app/build/outputs/apk/debug/app-debug.apk
+          jarsigner -verify -verbose -certs dualphone/app/build/outputs/apk/release/app-release.apk >/tmp/signing.txt
+          grep -q 'jar verified' /tmp/signing.txt
+
       - name: Enable KVM
         run: |
           if [ -e /dev/kvm ]; then sudo chmod 666 /dev/kvm; fi
-      - name: Emulator visual acceptance
+
+      - name: Offline native emulator acceptance
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 35
@@ -45,24 +61,101 @@ jobs:
             set -eux
             mkdir -p deliverable
             adb install -r dualphone/app/build/outputs/apk/debug/app-debug.apk
+
+            # No internet: disable mobile data. Keep local Wi-Fi stack available for LAN transfer.
+            adb shell svc data disable || true
+            adb shell settings put global airplane_mode_on 0 || true
+
             adb logcat -c
-            adb shell am force-stop com.qxdnzbl.shuangjichuan.live || true
-            adb shell monkey -p com.qxdnzbl.shuangjichuan.live -c android.intent.category.LAUNCHER 1
-            sleep 15
-            adb shell pidof com.qxdnzbl.shuangjichuan.live
-            adb shell dumpsys window | grep -E 'mCurrentFocus|mFocusedApp' | grep com.qxdnzbl.shuangjichuan.live
-            adb logcat -d -s DualPhone:I DualPhone:E '*:S' > deliverable/webview.log
-            cat deliverable/webview.log
-            grep -q 'https://shuangji-chuan.floot.app/_api/auth/session' deliverable/webview.log
-            adb exec-out screencap -p > deliverable/01-live-webshell.png
-            cp dualphone/app/build/outputs/apk/debug/app-debug.apk deliverable/ShuangJiChuan_v2_AutoUpdate.apk
-            sha256sum deliverable/ShuangJiChuan_v2_AutoUpdate.apk > deliverable/SHA256.txt
-            test -s deliverable/01-live-webshell.png
-            test -s deliverable/ShuangJiChuan_v2_AutoUpdate.apk
-      - name: Upload APK and screenshot
+            adb shell am force-stop com.qxdnzbl.shuangjichuan.offline || true
+            adb shell monkey -p com.qxdnzbl.shuangjichuan.offline -c android.intent.category.LAUNCHER 1
+            sleep 3
+
+            adb shell uiautomator dump /sdcard/setup.xml
+            adb pull /sdcard/setup.xml deliverable/setup.xml
+            grep -q '不用联网，不用 VPN' deliverable/setup.xml
+            ! grep -qi 'floot' deliverable/setup.xml
+            adb exec-out screencap -p > deliverable/01-offline-setup.png
+
+            python3 - <<'PY'
+            import re, subprocess, xml.etree.ElementTree as ET
+            xml = open('deliverable/setup.xml',encoding='utf-8').read()
+            def center(resid):
+                root=ET.fromstring(xml)
+                for n in root.iter('node'):
+                    if n.attrib.get('resource-id','').endswith('/'+resid):
+                        x1,y1,x2,y2=map(int,re.findall(r'\d+',n.attrib['bounds']))
+                        return (x1+x2)//2,(y1+y2)//2
+                raise SystemExit('missing '+resid)
+            for rid,text in [('account','testlocal'),('password','pass1234')]:
+                x,y=center(rid)
+                subprocess.check_call(['adb','shell','input','tap',str(x),str(y)])
+                subprocess.check_call(['adb','shell','input','text',text])
+            x,y=center('enter')
+            subprocess.check_call(['adb','shell','input','tap',str(x),str(y)])
+            PY
+
+            sleep 4
+            adb shell uiautomator dump /sdcard/chat.xml
+            adb pull /sdcard/chat.xml deliverable/chat.xml
+            grep -q '我的两台手机' deliverable/chat.xml
+            grep -q '同一 Wi-Fi 或热点' deliverable/chat.xml
+            ! grep -qi 'floot' deliverable/chat.xml
+            adb exec-out screencap -p > deliverable/02-offline-chat.png
+
+            # Confirm native listener is up and accept a packet from a mock second phone.
+            sleep 2
+            PORT=$(adb logcat -d -s DualPhone:I '*:S' | sed -n 's/.*SERVER port=\([0-9]*\).*/\1/p' | tail -1)
+            test -n "$PORT"
+            adb forward tcp:47000 tcp:$PORT
+
+            python3 - <<'PY'
+            import hashlib, socket, struct, time
+            token=hashlib.sha256(b'testlocal\npass1234').hexdigest()
+            def ws(sock,s):
+                b=s.encode(); sock.sendall(struct.pack('>I',len(b))+b)
+            s=socket.create_connection(('127.0.0.1',47000),timeout=5)
+            s.sendall(struct.pack('>I',0x534A4331))
+            ws(s,token); ws(s,'ci-incoming'); ws(s,'mock-peer')
+            s.sendall(struct.pack('>q',int(time.time()*1000)))
+            s.sendall(b'\x01')
+            ws(s,'离线测试消息')
+            ack=struct.unpack('>I',s.recv(4))[0]
+            assert ack==1, ack
+            s.close()
+            PY
+
+            sleep 2
+            adb shell uiautomator dump /sdcard/incoming.xml
+            adb pull /sdcard/incoming.xml deliverable/incoming.xml
+            grep -q '离线测试消息' deliverable/incoming.xml
+            adb exec-out screencap -p > deliverable/03-offline-incoming.png
+
+            # Keyboard regression: composer and send button must remain visible.
+            python3 - <<'PY'
+            import re, subprocess, xml.etree.ElementTree as ET
+            xml=open('deliverable/incoming.xml',encoding='utf-8').read()
+            root=ET.fromstring(xml)
+            for n in root.iter('node'):
+                if n.attrib.get('resource-id','').endswith('/message'):
+                    x1,y1,x2,y2=map(int,re.findall(r'\d+',n.attrib['bounds']))
+                    subprocess.check_call(['adb','shell','input','tap',str((x1+x2)//2),str((y1+y2)//2)])
+                    break
+            PY
+            sleep 2
+            adb shell uiautomator dump /sdcard/keyboard.xml
+            adb pull /sdcard/keyboard.xml deliverable/keyboard.xml
+            grep -q 'resource-id="com.qxdnzbl.shuangjichuan.offline:id/send"' deliverable/keyboard.xml
+            adb exec-out screencap -p > deliverable/04-keyboard.png
+
+            cp dualphone/app/build/outputs/apk/release/app-release.apk deliverable/ShuangJiChuan_v3_Offline.apk
+            sha256sum deliverable/ShuangJiChuan_v3_Offline.apk > deliverable/SHA256.txt
+            test -s deliverable/ShuangJiChuan_v3_Offline.apk
+
+      - name: Upload accepted APK and evidence
         uses: actions/upload-artifact@v4
         with:
-          name: dual-phone-auto-v2
+          name: shuangjichuan-v3-offline
           path: deliverable/
           if-no-files-found: error
           retention-days: 14
