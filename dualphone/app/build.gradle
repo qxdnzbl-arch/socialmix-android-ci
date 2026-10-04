@@ -3,15 +3,29 @@ plugins { id 'com.android.application' }
 android {
     namespace 'com.qxdnzbl.shuangjichuan'
     compileSdk 35
+
     defaultConfig {
-        applicationId 'com.qxdnzbl.shuangjichuan.live'
+        applicationId 'com.qxdnzbl.shuangjichuan.offline'
         minSdk 26
-        targetSdk 34
-        versionCode 200
-        versionName '2.0'
+        targetSdk 35
+        versionCode 300
+        versionName '3.0'
     }
+
+    signingConfigs {
+        release {
+            storeFile file('shuangjichuan-release.jks')
+            storePassword 'SJC2026offline'
+            keyAlias 'shuangjichuan'
+            keyPassword 'SJC2026offline'
+        }
+    }
+
     buildTypes {
         debug { debuggable true }
-        release { minifyEnabled false }
+        release {
+            minifyEnabled false
+            signingConfig signingConfigs.release
+        }
     }
 }
