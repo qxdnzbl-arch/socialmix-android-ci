@@ -1,129 +1,223 @@
 package com.qxdnzbl.shuangjichuan;
 
-import android.app.*;
-import android.os.*;
-import android.content.*;
+import android.app.DownloadManager;
+import android.app.Activity;
+import android.content.Intent;
 import android.graphics.Color;
 import android.net.Uri;
-import android.view.*;\nimport android.util.Log;
-import android.webkit.*;
+import android.os.Bundle;
+import android.os.Environment;
+import android.util.Log;
+import android.view.View;
+import android.webkit.CookieManager;
+import android.webkit.DownloadListener;
+import android.webkit.URLUtil;
+import android.webkit.ValueCallback;
+import android.webkit.WebChromeClient;
+import android.webkit.WebResourceError;
+import android.webkit.WebResourceRequest;
+import android.webkit.WebResourceResponse;
+import android.webkit.WebSettings;
+import android.webkit.WebView;
+import android.webkit.WebViewClient;
 import android.widget.Toast;
-import java.util.*;
 
 public class MainActivity extends Activity {
-  static final String APP_URL = "https://shuangji-chuan.floot.app";
-  static final int FILE_CHOOSER = 9101;
-  WebView web;
-  ValueCallback<Uri[]> fileCallback;
+    private static final String APP_URL = "https://shuangji-chuan.floot.app";
+    private static final int FILE_CHOOSER = 9101;
 
-  @Override public void onCreate(Bundle b) {
-    super.onCreate(b);
-    getWindow().setStatusBarColor(Color.WHITE);
-    getWindow().setNavigationBarColor(Color.WHITE);
-    getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR);
+    private WebView web;
+    private ValueCallback<Uri[]> fileCallback;
 
-    WebView.setWebContentsDebuggingEnabled(true);\n    web = new WebView(this);
-    web.setBackgroundColor(Color.WHITE);
-    WebSettings s = web.getSettings();
-    s.setJavaScriptEnabled(true);
-    s.setDomStorageEnabled(true);
-    s.setDatabaseEnabled(true);
-    s.setAllowFileAccess(true);
-    s.setMediaPlaybackRequiresUserGesture(false);
-    s.setCacheMode(WebSettings.LOAD_DEFAULT);
+    @Override
+    public void onCreate(Bundle state) {
+        super.onCreate(state);
 
-    CookieManager cm = CookieManager.getInstance();
-    cm.setAcceptCookie(true);
-    cm.setAcceptThirdPartyCookies(web, true);
+        getWindow().setStatusBarColor(Color.WHITE);
+        getWindow().setNavigationBarColor(Color.WHITE);
+        getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR);
 
-    web.setWebViewClient(new WebViewClient() {
-      @Override public void onPageStarted(WebView view,String url,android.graphics.Bitmap favicon) {
-        Log.i("DualPhone","START "+url);
-      }
-      @Override public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest req) {
-        Uri u=req.getUrl();
-        if ("http".equals(u.getScheme()) || "https".equals(u.getScheme())) {
-          view.loadUrl(u.toString());
-          return true;
+        WebView.setWebContentsDebuggingEnabled(true);
+
+        web = new WebView(this);
+        web.setBackgroundColor(Color.WHITE);
+
+        WebSettings settings = web.getSettings();
+        settings.setJavaScriptEnabled(true);
+        settings.setDomStorageEnabled(true);
+        settings.setDatabaseEnabled(true);
+        settings.setAllowFileAccess(true);
+        settings.setLoadsImagesAutomatically(true);
+        settings.setMediaPlaybackRequiresUserGesture(false);
+        settings.setCacheMode(WebSettings.LOAD_DEFAULT);
+
+        CookieManager cookies = CookieManager.getInstance();
+        cookies.setAcceptCookie(true);
+        cookies.setAcceptThirdPartyCookies(web, true);
+
+        web.setWebViewClient(new WebViewClient() {
+            @Override
+            public void onPageStarted(WebView view, String url, android.graphics.Bitmap favicon) {
+                Log.i("DualPhone", "START " + url);
+            }
+
+            @Override
+            public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
+                Uri uri = request.getUrl();
+                String scheme = uri.getScheme();
+                if ("http".equalsIgnoreCase(scheme) || "https".equalsIgnoreCase(scheme)) {
+                    view.loadUrl(uri.toString());
+                    return true;
+                }
+                try {
+                    startActivity(new Intent(Intent.ACTION_VIEW, uri));
+                } catch (Exception ignored) {
+                }
+                return true;
+            }
+
+            @Override
+            public void onPageFinished(WebView view, String url) {
+                CookieManager.getInstance().flush();
+                Log.i("DualPhone", "FINISH " + url);
+                view.evaluateJavascript(
+                    "(document.body && document.body.innerText) || ''",
+                    value -> Log.i("DualPhone", "BODY " + value)
+                );
+            }
+
+            @Override
+            public void onReceivedError(WebView view, WebResourceRequest request, WebResourceError error) {
+                Log.e(
+                    "DualPhone",
+                    "ERROR " + error.getErrorCode() + " " + error.getDescription() + " " + request.getUrl()
+                );
+                super.onReceivedError(view, request, error);
+            }
+
+            @Override
+            public void onReceivedHttpError(WebView view, WebResourceRequest request, WebResourceResponse response) {
+                Log.e("DualPhone", "HTTP " + response.getStatusCode() + " " + request.getUrl());
+                super.onReceivedHttpError(view, request, response);
+            }
+        });
+
+        web.setWebChromeClient(new WebChromeClient() {
+            @Override
+            public boolean onShowFileChooser(
+                WebView view,
+                ValueCallback<Uri[]> callback,
+                FileChooserParams params
+            ) {
+                if (fileCallback != null) {
+                    fileCallback.onReceiveValue(null);
+                }
+                fileCallback = callback;
+
+                try {
+                    Intent intent = params.createIntent();
+                    intent.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true);
+                    startActivityForResult(intent, FILE_CHOOSER);
+                    return true;
+                } catch (Exception e) {
+                    fileCallback = null;
+                    Toast.makeText(MainActivity.this, "无法打开文件选择器", Toast.LENGTH_SHORT).show();
+                    return false;
+                }
+            }
+        });
+
+        web.setDownloadListener(new DownloadListener() {
+            @Override
+            public void onDownloadStart(
+                String url,
+                String userAgent,
+                String contentDisposition,
+                String mimeType,
+                long contentLength
+            ) {
+                try {
+                    String filename = URLUtil.guessFileName(url, contentDisposition, mimeType);
+                    DownloadManager.Request request = new DownloadManager.Request(Uri.parse(url));
+
+                    String cookie = CookieManager.getInstance().getCookie(url);
+                    if (cookie != null) request.addRequestHeader("Cookie", cookie);
+                    if (userAgent != null) request.addRequestHeader("User-Agent", userAgent);
+
+                    request.setMimeType(mimeType);
+                    request.setTitle(filename);
+                    request.setNotificationVisibility(
+                        DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED
+                    );
+                    request.setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, filename);
+
+                    DownloadManager manager =
+                        (DownloadManager) getSystemService(DOWNLOAD_SERVICE);
+                    manager.enqueue(request);
+
+                    Toast.makeText(MainActivity.this, "开始下载", Toast.LENGTH_SHORT).show();
+                } catch (Exception e) {
+                    try {
+                        startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(url)));
+                    } catch (Exception ignored) {
+                    }
+                }
+            }
+        });
+
+        setContentView(web);
+
+        if (state == null) {
+            web.loadUrl(APP_URL);
+        } else {
+            web.restoreState(state);
         }
-        try { startActivity(new Intent(Intent.ACTION_VIEW,u)); } catch(Exception ignored) {}
-        return true;
-      }
-      @Override public void onPageFinished(WebView view,String url) {
-        super.onPageFinished(view,url);
-        CookieManager.getInstance().flush();
-        Log.i("DualPhone","FINISH "+url);
-        view.evaluateJavascript("(document.body&&document.body.innerText)||''", value -> Log.i("DualPhone","BODY "+value));
-      }
-      @Override public void onReceivedError(WebView view, WebResourceRequest request, WebResourceError error) {
-        Log.e("DualPhone","ERROR "+error.getErrorCode()+" "+error.getDescription()+" "+request.getUrl());
-        super.onReceivedError(view,request,error);
-      }
-      @Override public void onReceivedHttpError(WebView view, WebResourceRequest request, WebResourceResponse response) {
-        Log.e("DualPhone","HTTP "+response.getStatusCode()+" "+request.getUrl());
-        super.onReceivedHttpError(view,request,response);
-      }
-    });
-
-    web.setWebChromeClient(new WebChromeClient() {
-      @Override public boolean onShowFileChooser(WebView w, ValueCallback<Uri[]> callback, FileChooserParams params) {
-        if(fileCallback!=null) fileCallback.onReceiveValue(null);
-        fileCallback=callback;
-        Intent i=params.createIntent();
-        i.putExtra(Intent.EXTRA_ALLOW_MULTIPLE,true);
-        try { startActivityForResult(i,FILE_CHOOSER); }
-        catch(Exception e) {
-          fileCallback=null;
-          Toast.makeText(MainActivity.this,"无法打开文件选择器",Toast.LENGTH_SHORT).show();
-          return false;
-        }
-        return true;
-      }
-    });
-
-    web.setDownloadListener((url,userAgent,contentDisposition,mimetype,contentLength)->{
-      try {
-        DownloadManager.Request r=new DownloadManager.Request(Uri.parse(url));
-        String cookie=CookieManager.getInstance().getCookie(url);
-        if(cookie!=null) r.addRequestHeader("Cookie",cookie);
-        if(userAgent!=null) r.addRequestHeader("User-Agent",userAgent);
-        r.setMimeType(mimetype);
-        r.setTitle(URLUtil.guessFileName(url,contentDisposition,mimetype));
-        r.setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED);
-        r.setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS,URLUtil.guessFileName(url,contentDisposition,mimetype));
-        ((DownloadManager)getSystemService(DOWNLOAD_SERVICE)).enqueue(r);
-        Toast.makeText(this,"开始下载",Toast.LENGTH_SHORT).show();
-      } catch(Exception e) {
-        try { startActivity(new Intent(Intent.ACTION_VIEW,Uri.parse(url))); }
-        catch(Exception ignored) {}
-      }
-    });
-
-    setContentView(web);
-    if(b==null) web.loadUrl(APP_URL);
-  }
-
-  @Override protected void onActivityResult(int requestCode,int resultCode,Intent data) {
-    super.onActivityResult(requestCode,resultCode,data);
-    if(requestCode!=FILE_CHOOSER || fileCallback==null) return;
-    Uri[] result=null;
-    if(resultCode==RESULT_OK && data!=null) {
-      if(data.getClipData()!=null) {
-        int n=data.getClipData().getItemCount();
-        result=new Uri[n];
-        for(int i=0;i<n;i++) result[i]=data.getClipData().getItemAt(i).getUri();
-      } else if(data.getData()!=null) result=new Uri[]{data.getData()};
     }
-    fileCallback.onReceiveValue(result);
-    fileCallback=null;
-  }
 
-  @Override public void onBackPressed() {
-    if(web!=null && web.canGoBack()) web.goBack(); else super.onBackPressed();
-  }
+    @Override
+    protected void onSaveInstanceState(Bundle outState) {
+        if (web != null) {
+            web.saveState(outState);
+        }
+        super.onSaveInstanceState(outState);
+    }
 
-  @Override protected void onPause() {
-    super.onPause();
-    CookieManager.getInstance().flush();
-  }
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+
+        if (requestCode != FILE_CHOOSER || fileCallback == null) return;
+
+        Uri[] result = null;
+
+        if (resultCode == RESULT_OK && data != null) {
+            if (data.getClipData() != null) {
+                int count = data.getClipData().getItemCount();
+                result = new Uri[count];
+                for (int i = 0; i < count; i++) {
+                    result[i] = data.getClipData().getItemAt(i).getUri();
+                }
+            } else if (data.getData() != null) {
+                result = new Uri[]{data.getData()};
+            }
+        }
+
+        fileCallback.onReceiveValue(result);
+        fileCallback = null;
+    }
+
+    @Override
+    public void onBackPressed() {
+        if (web != null && web.canGoBack()) {
+            web.goBack();
+        } else {
+            super.onBackPressed();
+        }
+    }
+
+    @Override
+    protected void onPause() {
+        CookieManager.getInstance().flush();
+        super.onPause();
+    }
 }
