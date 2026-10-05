@@ -1,0 +1,5 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" package="com.nzbl.pocket.test">
+  <uses-sdk android:minSdkVersion="26" android:targetSdkVersion="35" />
+  <application android:label="随手存验收" />
+  <instrumentation android:name="com.nzbl.pocket.Acceptance" android:targetPackage="com.nzbl.pocket" />
+</manifest>
