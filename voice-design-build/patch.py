@@ -1,6 +1,7 @@
 from pathlib import Path
+import sys
 
-root = Path(__file__).resolve().parents[1]
+root = Path(sys.argv[1]).resolve() if len(sys.argv) > 1 else Path(__file__).resolve().parents[1]
 main = root / "app/src/main/java/com/qwen/tts/android/MainActivity.kt"
 gradle = root / "app/build.gradle.kts"
 
