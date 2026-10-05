@@ -171,7 +171,7 @@ public class MainActivity extends Activity implements NativeMessageAdapter.Callb
   private View buildHeader(){
     LinearLayout header=new LinearLayout(this);
     header.setOrientation(LinearLayout.VERTICAL);
-    header.setPadding(dp(18),dp(11),dp(14),dp(9));
+    header.setPadding(dp(20),dp(10),dp(16),dp(8));
     header.setBackground(makeColor(Color.argb(212,250,250,251),0));
 
     LinearLayout row=new LinearLayout(this);
@@ -183,18 +183,18 @@ public class MainActivity extends Activity implements NativeMessageAdapter.Callb
     TextView title=new TextView(this);
     title.setText("我的两台手机");
     title.setTextColor(Color.rgb(30,31,34));
-    title.setTextSize(24);
-    title.setTypeface(android.graphics.Typeface.create("sans-serif",android.graphics.Typeface.BOLD));
+    title.setTextSize(21.5f);
+    title.setTypeface(android.graphics.Typeface.create("sans-serif-medium",android.graphics.Typeface.NORMAL));
     titleBox.addView(title,new LinearLayout.LayoutParams(-2,-2));
 
     status=new TextView(this);
     status.setText("● 自动同步");
-    status.setTextSize(11.5f);
+    status.setTextSize(11f);
     status.setTextColor(Color.rgb(76,133,106));
-    status.setPadding(dp(7),dp(4),dp(8),dp(4));
-    status.setBackground(makeColor(Color.argb(18,78,142,108),dp(999)));
+    status.setPadding(0,dp(3),0,0);
+    status.setBackgroundColor(Color.TRANSPARENT);
     LinearLayout.LayoutParams slp=new LinearLayout.LayoutParams(-2,-2);
-    slp.topMargin=dp(5);
+    slp.topMargin=dp(2);
     titleBox.addView(status,slp);
 
     row.addView(titleBox,new LinearLayout.LayoutParams(0,-2,1f));
@@ -264,18 +264,18 @@ public class MainActivity extends Activity implements NativeMessageAdapter.Callb
 
   private View buildComposer(){
     FrameLayout wrap=new FrameLayout(this);
-    wrap.setPadding(dp(11),dp(7),dp(11),Math.max(dp(8),navInset()));
+    wrap.setPadding(dp(12),dp(6),dp(12),Math.max(dp(8),navInset()));
 
     LinearLayout bar=new LinearLayout(this);
     bar.setGravity(Gravity.BOTTOM);
-    bar.setPadding(dp(6),dp(5),dp(6),dp(5));
+    bar.setPadding(dp(5),dp(4),dp(5),dp(4));
     bar.setBackground(makeColor(Color.argb(220,252,252,253),dp(24)));
-    bar.setElevation(dp(3));
+    bar.setElevation(dp(2));
 
     ImageButton attach=iconButton(R.drawable.ic_plus);
     attach.setBackground(makeColor(Color.argb(20,80,88,100),dp(99)));
     attach.setOnClickListener(v->pickFiles());
-    bar.addView(attach,new LinearLayout.LayoutParams(dp(38),dp(38)));
+    bar.addView(attach,new LinearLayout.LayoutParams(dp(36),dp(36)));
 
     input=new EditText(this);
     input.setTextSize(15);
@@ -295,7 +295,7 @@ public class MainActivity extends Activity implements NativeMessageAdapter.Callb
     send.setColorFilter(Color.WHITE);
     send.setBackground(makeGradient(new int[]{Color.rgb(117,136,238),Color.rgb(134,119,233)},GradientDrawable.Orientation.TL_BR,dp(99)));
     send.setOnClickListener(v->sendText());
-    bar.addView(send,new LinearLayout.LayoutParams(dp(38),dp(38)));
+    bar.addView(send,new LinearLayout.LayoutParams(dp(36),dp(36)));
 
     wrap.addView(bar,new FrameLayout.LayoutParams(-1,-2,Gravity.BOTTOM));
     return wrap;
@@ -305,14 +305,14 @@ public class MainActivity extends Activity implements NativeMessageAdapter.Callb
     ImageButton b=new ImageButton(this);
     b.setImageResource(drawable);
     b.setColorFilter(Color.rgb(73,79,87));
-    b.setPadding(dp(9),dp(9),dp(9),dp(9));
+    b.setPadding(dp(7),dp(7),dp(7),dp(7));
     b.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
-    b.setBackground(makeColor(Color.argb(150,255,255,255),dp(99)));
-    b.setElevation(dp(1));
+    b.setBackgroundColor(Color.TRANSPARENT);
+    b.setElevation(0);
     return b;
   }
 
-  private LinearLayout.LayoutParams buttonLp(){ return new LinearLayout.LayoutParams(dp(36),dp(36)); }
+  private LinearLayout.LayoutParams buttonLp(){ return new LinearLayout.LayoutParams(dp(32),dp(32)); }
 
   private TextView smallAction(String text){
     TextView v=new TextView(this);
