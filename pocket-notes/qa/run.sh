@@ -2,13 +2,21 @@
 set -euo pipefail
 cd pocket-notes
 mkdir -p out/qa
-adb install -r build/previous/out/Suishoucun.apk
-adb install -r out/Suishoucun-tests.apk
+adb root
+adb wait-for-device
+adb shell wm dismiss-keyguard
+for qa_attempt in {1..20}; do
+  if adb shell mkdir -p /sdcard/Download; then break; fi
+  if [ "$qa_attempt" -eq 20 ]; then exit 1; fi
+  sleep 1
+done
+adb install --no-incremental -r build/previous/out/Suishoucun.apk
+adb install --no-incremental -r out/Suishoucun-tests.apk
 adb shell settings put secure show_ime_with_hard_keyboard 1
 adb push out/reference-fixture.png /sdcard/Download/reference-fixture.png
 adb shell am broadcast -a android.intent.action.MEDIA_SCANNER_SCAN_FILE -d file:///sdcard/Download/reference-fixture.png
 adb shell am instrument -w -e stage legacy com.nzbl.pocket.test/com.nzbl.pocket.CategoryUpgrade | tee out/upgrade-seed.txt
-adb install -r out/Suishoucun.apk
+adb install --no-incremental -r out/Suishoucun.apk
 adb shell am instrument -w -e stage updated com.nzbl.pocket.test/com.nzbl.pocket.CategoryUpgrade | tee out/upgrade-acceptance.txt
 adb pull /sdcard/Android/data/com.nzbl.pocket/files/qa/ out/upgrade-qa/
 python3 - <<'PY'
