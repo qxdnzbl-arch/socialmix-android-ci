@@ -9,7 +9,7 @@ permissions:
   actions: read
 jobs:
   native-acceptance:
-    runs-on: macos-15-intel
+    runs-on: ubuntu-22.04
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
@@ -48,13 +48,13 @@ jobs:
         run: sudo chmod 666 /dev/kvm
       - uses: reactivecircus/android-emulator-runner@v2
         with:
-          api-level: 30
-          emulator-boot-timeout: 180
+          api-level: 35
+          emulator-boot-timeout: 300
           arch: x86_64
           target: default
           profile: pixel_5
           disable-animations: true
-          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none -cores 2
           script: bash pocket-notes/qa/run.sh
       - name: Archive installation file and actual screenshots
         if: always()
