@@ -1,0 +1,82 @@
+name: VoiceForge Runtime Smoke
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - voiceforge-offline
+    paths:
+      - ".github/workflows/voiceforge-runtime-smoke.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  voice-design-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build the same native Qwen runtime used by Android
+        run: |
+          set -euxo pipefail
+          git clone --depth 1 --recurse-submodules https://github.com/Danmoreng/qwen3-tts.cpp.git runtime
+          cmake -S runtime -B runtime/build -DCMAKE_BUILD_TYPE=Release
+          cmake --build runtime/build -j2 --target qwen3-tts-cli
+
+      - name: Download high-quality VoiceDesign weights
+        run: |
+          set -euxo pipefail
+          mkdir -p runtime/models
+          curl -L --fail --retry 4 --retry-delay 3 \
+            "https://huggingface.co/cstr/qwen3-tts-1.7b-voicedesign-GGUF/resolve/main/qwen3-tts-12hz-1.7b-voicedesign-q8_0.gguf?download=true" \
+            -o runtime/models/qwen3-tts-12hz-1.7b-voicedesign-q8_0.gguf
+          curl -L --fail --retry 4 --retry-delay 3 \
+            "https://huggingface.co/cstr/qwen3-tts-tokenizer-12hz-GGUF/resolve/main/qwen3-tts-tokenizer-12hz.gguf?download=true" \
+            -o runtime/models/qwen3-tts-tokenizer-12hz.gguf
+          test $(stat -c%s runtime/models/qwen3-tts-12hz-1.7b-voicedesign-q8_0.gguf) -gt 1900000000
+          test $(stat -c%s runtime/models/qwen3-tts-tokenizer-12hz.gguf) -gt 340000000
+
+      - name: Generate a real VoiceDesign WAV
+        working-directory: runtime
+        env:
+          QWEN3_TTS_LOW_MEM: "1"
+        run: |
+          set -euxo pipefail
+          ./build/qwen3-tts-cli \
+            -m models \
+            --model-name qwen3-tts-12hz-1.7b-voicedesign-q8_0.gguf \
+            --instruct "20多岁的年轻女性。声音清澈、温柔、自然，不甜腻、不夹、不像播音或配音演员。轻微真实呼吸感，自然停顿，年轻但知性，情绪细腻，有生命力。" \
+            -t "风吹过树梢，阳光落在桌角。今天的声音听起来很轻，也很清楚。" \
+            --temperature 0.9 \
+            --top-k 50 \
+            --top-p 1.0 \
+            --seed 42 \
+            --max-tokens 160 \
+            -o voiceforge-smoke.wav
+
+      - name: Validate generated audio
+        run: |
+          set -euxo pipefail
+          python3 - <<'PY'
+          import wave
+          from pathlib import Path
+          p=Path("runtime/voiceforge-smoke.wav")
+          assert p.exists() and p.stat().st_size > 10000, p.stat().st_size if p.exists() else "missing"
+          with wave.open(str(p), "rb") as w:
+              assert w.getnchannels() == 1
+              assert w.getframerate() == 24000
+              assert w.getnframes() > 12000
+              print({"channels":w.getnchannels(),"rate":w.getframerate(),"frames":w.getnframes(),"seconds":w.getnframes()/w.getframerate(),"bytes":p.stat().st_size})
+          PY
+          sha256sum runtime/voiceforge-smoke.wav > runtime/voiceforge-smoke.sha256
+
+      - name: Upload real generated WAV
+        uses: actions/upload-artifact@v4
+        with:
+          name: VoiceForge-runtime-smoke
+          path: |
+            runtime/voiceforge-smoke.wav
+            runtime/voiceforge-smoke.sha256
+          retention-days: 7
