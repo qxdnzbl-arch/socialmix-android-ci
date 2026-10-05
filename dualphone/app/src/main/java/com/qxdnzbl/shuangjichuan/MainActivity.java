@@ -27,7 +27,7 @@ import java.util.concurrent.*;
 public class MainActivity extends Activity {
   private static final int PICK=7070, PERMS=7071, PICK_BG=7072, WEB_FILE=7073;
   private static final String UI_FILE="ui-current.html";
-  private static final int BUNDLED_UI_VERSION=12;
+  private static final int BUNDLED_UI_VERSION=13;
   private static final String SECRET="6686986c94d4a4d34fd705665b962491078a94688d3f730b568d36a2c526c470";
 
   private final ExecutorService io=Executors.newCachedThreadPool();
