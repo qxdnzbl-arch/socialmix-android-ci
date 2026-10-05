@@ -22,10 +22,16 @@ jobs:
         run: |
           set -eux
           UI=dualphone/app/src/main/assets/ui.html
-          ! grep -q "setInterval(()=>render(false),350)" "$UI"
-          grep -q "scheduleNativeRefresh" "$UI"
-          grep -q "15000" "$UI"
-          grep -q "touch-action:pan-y" "$UI"
+          python3 - <<'PY'
+          from pathlib import Path
+          s=Path("dualphone/app/src/main/assets/ui.html").read_text()
+          assert "setInterval(" not in s
+          assert "window.nativeRefresh" in s and "requestAnimationFrame" in s
+          assert "messages.find(" not in s
+          assert "new Map(messages.map" in s
+          assert "touch-action:pan-y" in s
+          print("static-performance-guards=ok")
+          PY
       - name: Build mocked 400-message page
         run: |
           python3 - <<'PY'
