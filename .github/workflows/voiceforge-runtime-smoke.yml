@@ -21,7 +21,10 @@ jobs:
       - name: Build the same native Qwen runtime used by Android
         run: |
           set -euxo pipefail
-          git clone --depth 1 --recurse-submodules https://github.com/Danmoreng/qwen3-tts.cpp.git runtime
+          git clone --depth 1 https://github.com/Danmoreng/qwen3-tts.cpp.git runtime
+          git -C runtime fetch --depth 1 origin 4562731dc612cb87b4cd1eedac275a17d1078773
+          git -C runtime checkout --detach 4562731dc612cb87b4cd1eedac275a17d1078773
+          git -C runtime submodule update --init --recursive
           cmake -S runtime -B runtime/build -DCMAKE_BUILD_TYPE=Release
           cmake --build runtime/build -j2 --target qwen3-tts-cli
 
@@ -30,13 +33,13 @@ jobs:
           set -euxo pipefail
           mkdir -p runtime/models
           curl -L --fail --retry 4 --retry-delay 3 \
-            "https://huggingface.co/cstr/qwen3-tts-1.7b-voicedesign-GGUF/resolve/main/qwen3-tts-12hz-1.7b-voicedesign-q8_0.gguf?download=true" \
-            -o runtime/models/qwen3-tts-12hz-1.7b-voicedesign-q8_0.gguf
+            "https://huggingface.co/Serveurperso/Qwen3-TTS-GGUF/resolve/main/qwen-talker-1.7b-voicedesign-Q8_0.gguf?download=true" \
+            -o runtime/models/qwen-talker-1.7b-voicedesign-Q8_0.gguf
           curl -L --fail --retry 4 --retry-delay 3 \
-            "https://huggingface.co/cstr/qwen3-tts-tokenizer-12hz-GGUF/resolve/main/qwen3-tts-tokenizer-12hz.gguf?download=true" \
-            -o runtime/models/qwen3-tts-tokenizer-12hz.gguf
-          test $(stat -c%s runtime/models/qwen3-tts-12hz-1.7b-voicedesign-q8_0.gguf) -gt 1900000000
-          test $(stat -c%s runtime/models/qwen3-tts-tokenizer-12hz.gguf) -gt 340000000
+            "https://huggingface.co/Serveurperso/Qwen3-TTS-GGUF/resolve/main/qwen-tokenizer-12hz-BF16.gguf?download=true" \
+            -o runtime/models/qwen-tokenizer-12hz-BF16.gguf
+          test $(stat -c%s runtime/models/qwen-talker-1.7b-voicedesign-Q8_0.gguf) -gt 2000000000
+          test $(stat -c%s runtime/models/qwen3-tts-tokenizer-12hz.gguf) -gt 350000000
 
       - name: Generate a real VoiceDesign WAV
         working-directory: runtime
@@ -46,7 +49,7 @@ jobs:
           set -euxo pipefail
           ./build/qwen3-tts-cli \
             -m models \
-            --model-name qwen3-tts-12hz-1.7b-voicedesign-q8_0.gguf \
+            --model-name qwen-talker-1.7b-voicedesign-Q8_0.gguf \
             --instruct "20多岁的年轻女性。声音清澈、温柔、自然，不甜腻、不夹、不像播音或配音演员。轻微真实呼吸感，自然停顿，年轻但知性，情绪细腻，有生命力。" \
             -t "风吹过树梢，阳光落在桌角。今天的声音听起来很轻，也很清楚。" \
             --temperature 0.9 \

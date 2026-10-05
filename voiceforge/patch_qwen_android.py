@@ -14,25 +14,25 @@ src = main.read_text(encoding="utf-8")
 #    and F16 tokenizer/codec. Runtime remains fully on-device after first download.
 model_block = r'''private object QwenModel {
     private const val talkerUrl =
-        "https://huggingface.co/cstr/qwen3-tts-1.7b-voicedesign-GGUF/resolve/main/qwen3-tts-12hz-1.7b-voicedesign-q8_0.gguf?download=true"
+        "https://huggingface.co/Serveurperso/Qwen3-TTS-GGUF/resolve/main/qwen-talker-1.7b-voicedesign-Q8_0.gguf?download=true"
     private const val tokenizerUrl =
-        "https://huggingface.co/cstr/qwen3-tts-tokenizer-12hz-GGUF/resolve/main/qwen3-tts-tokenizer-12hz.gguf?download=true"
+        "https://huggingface.co/Serveurperso/Qwen3-TTS-GGUF/resolve/main/qwen-tokenizer-12hz-BF16.gguf?download=true"
 
     val defaultVariant = ModelVariant(
         id = "voice_design_q8",
         label = "VoiceDesign Q8",
         displayName = "VoiceForge · 1.7B VoiceDesign",
-        talkerName = "qwen3-tts-12hz-1.7b-voicedesign-q8_0.gguf",
+        talkerName = "qwen-talker-1.7b-voicedesign-Q8_0.gguf",
         files = listOf(
             ModelFile(
-                name = "qwen3-tts-tokenizer-12hz.gguf",
+                name = "qwen-tokenizer-12hz-BF16.gguf",
                 url = tokenizerUrl,
                 sizeBytes = 350_000_000L,
             ),
             ModelFile(
-                name = "qwen3-tts-12hz-1.7b-voicedesign-q8_0.gguf",
+                name = "qwen-talker-1.7b-voicedesign-Q8_0.gguf",
                 url = talkerUrl,
-                sizeBytes = 1_900_000_000L,
+                sizeBytes = 2_000_000_000L,
             ),
         ),
     )
@@ -214,8 +214,8 @@ final = main.read_text(encoding="utf-8")
 required = [
     'val instruction: String',
     'instruction = _uiState.value.instruction.trim()',
-    'qwen3-tts-12hz-1.7b-voicedesign-q8_0.gguf',
-    'qwen3-tts-tokenizer-12hz.gguf',
+    'qwen-talker-1.7b-voicedesign-Q8_0.gguf',
+    'qwen-tokenizer-12hz-BF16.gguf',
     'Text("声音描述")',
     '"生成并试听"',
 ]
