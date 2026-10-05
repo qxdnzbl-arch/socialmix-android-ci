@@ -27,9 +27,6 @@ jobs:
         run: |
           set -euxo pipefail
           git clone --depth 1 --recurse-submodules https://github.com/Danmoreng/qwen3-tts-android.git work
-          git -C work/external/qwen3-tts.cpp fetch --depth 1 origin main
-          git -C work/external/qwen3-tts.cpp checkout --detach FETCH_HEAD
-          git -C work/external/qwen3-tts.cpp submodule update --init --recursive
 
       - name: Apply VoiceForge product patch
         run: |
