@@ -6,6 +6,8 @@ import android.content.*;
 import android.content.pm.PackageManager;
 import android.database.Cursor;
 import android.graphics.Color;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 import android.net.Uri;
 import android.os.*;
 import android.provider.MediaStore;
@@ -23,15 +25,16 @@ import java.util.*;
 import java.util.concurrent.*;
 
 public class MainActivity extends Activity {
-  private static final int PICK=7070, PERMS=7071;
+  private static final int PICK=7070, PERMS=7071, PICK_BG=7072, WEB_FILE=7073;
   private static final String UI_FILE="ui-current.html";
-  private static final int BUNDLED_UI_VERSION=5;
+  private static final int BUNDLED_UI_VERSION=12;
   private static final String SECRET="6686986c94d4a4d34fd705665b962491078a94688d3f730b568d36a2c526c470";
 
   private final ExecutorService io=Executors.newCachedThreadPool();
   private SharedPreferences prefs;
   private TransferDb db;
   private WebView web;
+  private ValueCallback<Uri[]> webFileCallback;
 
   private final BroadcastReceiver receiver=new BroadcastReceiver(){
     @Override public void onReceive(Context c,Intent i){
@@ -80,7 +83,19 @@ public class MainActivity extends Activity {
     s.setCacheMode(WebSettings.LOAD_NO_CACHE);
     web.setBackgroundColor(Color.WHITE);
     web.addJavascriptInterface(new Bridge(),"Android");
-    web.setWebChromeClient(new WebChromeClient());
+    web.setWebChromeClient(new WebChromeClient(){
+      @Override public boolean onShowFileChooser(WebView view,ValueCallback<Uri[]> callback,FileChooserParams params){
+        if(webFileCallback!=null) webFileCallback.onReceiveValue(null);
+        webFileCallback=callback;
+        try{
+          startActivityForResult(params.createIntent(),WEB_FILE);
+          return true;
+        }catch(Exception e){
+          webFileCallback=null;
+          return false;
+        }
+      }
+    });
     setContentView(web);
 
     ensureLocalUi();
@@ -307,6 +322,28 @@ public class MainActivity extends Activity {
       });
     }
 
+    @JavascriptInterface public void pickBackground(){
+      runOnUiThread(()->{
+        Intent i=new Intent(Intent.ACTION_OPEN_DOCUMENT);
+        i.setType("image/*");
+        i.addCategory(Intent.CATEGORY_OPENABLE);
+        startActivityForResult(i,PICK_BG);
+      });
+    }
+
+    @JavascriptInterface public long getBackgroundVersion(){
+      File f=new File(getFilesDir(),"chat-background.jpg");
+      return f.isFile()?f.lastModified():0L;
+    }
+
+    @JavascriptInterface public void clearBackground(){
+      io.execute(()->{
+        File f=new File(getFilesDir(),"chat-background.jpg");
+        if(f.exists()) f.delete();
+        runOnUiThread(()->web.evaluateJavascript("window.nativeBackgroundChanged&&window.nativeBackgroundChanged()",null));
+      });
+    }
+
     @JavascriptInterface public void reportUi(String m){
       Log.i("DualPhoneUi",m==null?"":m);
     }
@@ -318,6 +355,29 @@ public class MainActivity extends Activity {
 
   @Override protected void onActivityResult(int requestCode,int resultCode,Intent data){
     super.onActivityResult(requestCode,resultCode,data);
+
+    if(requestCode==WEB_FILE){
+      ValueCallback<Uri[]> cb=webFileCallback;
+      webFileCallback=null;
+      if(cb!=null) cb.onReceiveValue(WebChromeClient.FileChooserParams.parseResult(resultCode,data));
+      return;
+    }
+
+    if(requestCode==PICK_BG){
+      if(resultCode==RESULT_OK&&data!=null&&data.getData()!=null){
+        Uri uri=data.getData();
+        io.execute(()->{
+          try{
+            saveChatBackground(uri);
+            runOnUiThread(()->web.evaluateJavascript("window.nativeBackgroundChanged&&window.nativeBackgroundChanged()",null));
+          }catch(Exception e){
+            runOnUiThread(()->Toast.makeText(this,"背景图片读取失败",Toast.LENGTH_SHORT).show());
+          }
+        });
+      }
+      return;
+    }
+
     if(requestCode!=PICK||resultCode!=RESULT_OK||data==null) return;
 
     ArrayList<Uri> uris=new ArrayList<>();
@@ -337,6 +397,34 @@ public class MainActivity extends Activity {
       notifyWeb();
       TransferService.wake(this);
     });
+  }
+
+  private void saveChatBackground(Uri uri)throws Exception{
+    BitmapFactory.Options bounds=new BitmapFactory.Options();
+    bounds.inJustDecodeBounds=true;
+    try(InputStream in=getContentResolver().openInputStream(uri)){ BitmapFactory.decodeStream(in,null,bounds); }
+    int max=Math.max(bounds.outWidth,bounds.outHeight);
+    int sample=1;
+    while(max/sample>1800) sample*=2;
+    BitmapFactory.Options opts=new BitmapFactory.Options();
+    opts.inSampleSize=sample;
+    Bitmap bmp;
+    try(InputStream in=getContentResolver().openInputStream(uri)){ bmp=BitmapFactory.decodeStream(in,null,opts); }
+    if(bmp==null) throw new IOException("decode failed");
+    int w=bmp.getWidth(),h=bmp.getHeight();
+    float scale=Math.min(1f,1800f/Math.max(w,h));
+    Bitmap outBmp=bmp;
+    if(scale<1f) outBmp=Bitmap.createScaledBitmap(bmp,Math.round(w*scale),Math.round(h*scale),true);
+    File dst=new File(getFilesDir(),"chat-background.jpg");
+    File tmp=new File(getFilesDir(),"chat-background.tmp");
+    try(FileOutputStream out=new FileOutputStream(tmp)){
+      if(!outBmp.compress(Bitmap.CompressFormat.JPEG,88,out)) throw new IOException("compress failed");
+      out.getFD().sync();
+    }
+    if(dst.exists()&&!dst.delete()) throw new IOException("replace failed");
+    if(!tmp.renameTo(dst)) throw new IOException("rename failed");
+    if(outBmp!=bmp) outBmp.recycle();
+    bmp.recycle();
   }
 
   private void queueFile(Uri u)throws Exception{
