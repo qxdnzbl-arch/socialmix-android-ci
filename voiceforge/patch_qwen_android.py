@@ -217,7 +217,7 @@ required = [
     'qwen3-tts-12hz-1.7b-voicedesign-q8_0.gguf',
     'qwen3-tts-tokenizer-12hz.gguf',
     'Text("声音描述")',
-    'Text("生成并试听")',
+    '"生成并试听"',
 ]
 missing = [x for x in required if x not in final]
 if missing:
