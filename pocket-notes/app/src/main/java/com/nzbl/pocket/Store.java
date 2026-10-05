@@ -77,7 +77,7 @@ public final class Store {
         try {
             byte[] data=ready?json().toString(2).getBytes("UTF-8"):read(new FileInputStream(file.getBaseFile()),16*1024*1024);
             z.putNextEntry(new ZipEntry("collection.json"));z.write(data);z.closeEntry();
-            File[] fs=photos.listFiles();if(fs!=null)for(File f:fs){if(f.isFile()){z.putNextEntry(new ZipEntry("photos/"+f.getName()));copy(new FileInputStream(f),z,64*1024*1024);z.closeEntry();}}
+            HashSet<String> needed=new HashSet<>();for(Note n:notes)needed.addAll(n.images);if(draft!=null)needed.addAll(draft.images);if(!ready){File[] all=photos.listFiles();if(all!=null)for(File f:all)if(f.isFile())needed.add(f.getName());}for(String name:needed){File f=new File(photos,name);if(!f.isFile())throw new IOException("记录图片缺失");z.putNextEntry(new ZipEntry("photos/"+name));copy(new FileInputStream(f),z,64*1024*1024);z.closeEntry();}
         }finally{z.close();}
     }
     public int importZip(InputStream input) throws Exception {
