@@ -1,0 +1,100 @@
+name: Dual Phone UI Performance Regression
+
+on:
+  push:
+    branches: [dual-phone-transfer-build]
+    paths:
+      - 'dualphone/ci/run-ui-perf.txt'
+      - '.github/workflows/dual-phone-ui-perf.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: dual-phone-ui-perf
+  cancel-in-progress: true
+
+jobs:
+  perf:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - name: Static performance guards
+        run: |
+          set -eux
+          UI=dualphone/app/src/main/assets/ui.html
+          ! grep -q "setInterval(()=>render(false),350)" "$UI"
+          grep -q "scheduleNativeRefresh" "$UI"
+          grep -q "15000" "$UI"
+          grep -q "touch-action:pan-y" "$UI"
+      - name: Build mocked 400-message page
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('dualphone/app/src/main/assets/ui.html')
+          s=p.read_text()
+          msgs=[]
+          for i in range(400):
+              msgs.append({
+                  "id":f"m{i}",
+                  "mine": i%2==0,
+                  "kind":"text",
+                  "text":("第%d条消息 " % i)+("这是一段用于滚动性能验收的较长文字。"*5),
+                  "fileName":"",
+                  "fileSize":0,
+                  "status":"sent",
+                  "createdAt":i
+              })
+          import json
+          mock=f"""<script>
+          window.__getStateCalls=0;
+          window.__mockState={json.dumps({"messages":msgs,"linkState":"nearby","uiVersion":9},ensure_ascii=False)};
+          window.Android={{
+            getState(){{window.__getStateCalls++;return JSON.stringify(window.__mockState)}},
+            reportUi(){{}},reportLayout(){{}},pickFiles(){{}},saveFile(){{}},sendText(){{}}
+          }};
+          </script>"""
+          s=s.replace('<script>',mock+'<script>',1)
+          test="""<script>
+          setTimeout(()=>{
+            const box=document.getElementById('messages');
+            const rows=document.querySelectorAll('.row').length;
+            box.scrollTop=Math.max(500,box.scrollHeight/2);
+            const before=box.scrollTop;
+            window.nativeRefresh();
+            setTimeout(()=>{
+              const box2=document.getElementById('messages');
+              const after=box2.scrollTop;
+              document.getElementById('searchToggle').click();
+              const input=document.getElementById('searchInput');
+              input.value='第250条消息';
+              input.dispatchEvent(new Event('input',{bubbles:true}));
+              setTimeout(()=>{
+                const count=document.getElementById('searchCount')?.textContent||'';
+                const calls=window.__getStateCalls;
+                const ok=(rows===400 && calls<=2 && before>0 && after>0 && count!=='0/0');
+                document.documentElement.dataset.perfOk=ok?'1':'0';
+                document.documentElement.dataset.calls=String(calls);
+                document.documentElement.dataset.rows=String(rows);
+                document.documentElement.dataset.scrollBefore=String(Math.round(before));
+                document.documentElement.dataset.scrollAfter=String(Math.round(after));
+                document.documentElement.dataset.search=count;
+              },250);
+            },150);
+          },600);
+          </script>"""
+          s=s.replace('</body>',test+'</body>')
+          Path('/tmp/dualphone-perf.html').write_text(s)
+          PY
+      - name: Headless Chromium regression
+        run: |
+          set -eux
+          CHROME=$(command -v google-chrome || command -v chromium || command -v chromium-browser)
+          "$CHROME" --headless --no-sandbox --disable-gpu --allow-file-access-from-files --virtual-time-budget=2500 --dump-dom file:///tmp/dualphone-perf.html > /tmp/perf-dom.txt
+          grep -q 'data-perf-ok="1"' /tmp/perf-dom.txt
+          grep -o 'data-calls="[^"]*"\|data-rows="[^"]*"\|data-scroll-before="[^"]*"\|data-scroll-after="[^"]*"\|data-search="[^"]*"' /tmp/perf-dom.txt > /tmp/perf-summary.txt
+          cat /tmp/perf-summary.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dual-phone-ui-v9-perf
+          path: /tmp/perf-summary.txt
+          if-no-files-found: error
