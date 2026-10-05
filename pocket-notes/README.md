@@ -11,3 +11,5 @@ Android 8.0 及以上。纯 Java 原生界面，没有外部依赖。数据保�
 使用 Android SDK 35 与 Build Tools 35.0.0，运行 `bash build.sh`。安装包在 `out/Suishoucun.apk`。更新必须沿用 `build/pocket-signing.jks`，不能重新生成签名。
 
 测试通过独立 instrumentation APK 执行；发行 APK 不包含测试代码和测试数据。
+
+分类验收包含两条真实 Android 流程：先在已交付的 1.0 APK 保存图文、草稿与自定义分类，再覆盖安装 1.1 检查保留情况；另从全新数据检查空白启动、分类创建、重命名、删除、图片、键盘和备份。
