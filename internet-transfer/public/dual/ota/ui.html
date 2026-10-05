@@ -6,64 +6,197 @@
 const app=document.getElementById('app');
 const toast=document.getElementById('toast');
 const ctx=document.getElementById('contextMenu');
-let last='',currentState=null,searchOpen=false,searchQuery='',searchIndex=0,searchMatches=[];
+
+let state={messages:[],linkState:'searching',uiVersion:0};
+let searchOpen=false,searchQuery='',searchIndex=0,searchMatches=[];
 let longPressTimer=null,longPressFired=false,pressStartX=0,pressStartY=0;
+let refreshTimer=null,pendingRefresh=false,userScrolling=false,scrollIdleTimer=null;
+let stickToBottom=true;
 
 const SEARCH_SVG='<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.2" stroke="currentColor" stroke-width="2.1"/><path d="M15.2 15.2L20 20" stroke="currentColor" stroke-width="2.1" stroke-linecap="round"/></svg>';
+
 function esc(s){return String(s??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]))}
 function size(n){n=Number(n)||0;if(n<1024)return n+' B';if(n<1048576)return(n/1024).toFixed(1)+' KB';return(n/1048576).toFixed(1)+' MB'}
-function get(){try{return JSON.parse(Android.getState())}catch(e){return{messages:[]}}}
-function refreshFromNative(){const s=get();currentState=s;render(false,s)}
+function nativeState(){try{return JSON.parse(Android.getState())}catch(e){return{messages:[],linkState:'searching',uiVersion:0}}}
 function showToast(t){toast.textContent=t;toast.classList.add('show');clearTimeout(showToast._t);showToast._t=setTimeout(()=>toast.classList.remove('show'),1200)}
 function highlight(text,q){const raw=String(text??''),needle=String(q??'').trim();if(!needle)return esc(raw);const low=raw.toLocaleLowerCase(),find=needle.toLocaleLowerCase();let out='',pos=0,i;while((i=low.indexOf(find,pos))!==-1){out+=esc(raw.slice(pos,i))+'<mark>'+esc(raw.slice(i,i+needle.length))+'</mark>';pos=i+needle.length}return out+esc(raw.slice(pos))}
 function searchable(m){return m.kind==='text'?String(m.text||''):String(m.fileName||'')}
 function statusInfo(s){if(s.linkState==='nearby'||s.linkState==='relay')return['已连接',''];if(s.linkState==='permission')return['需要附近设备权限','warn'];if(s.linkState==='connecting')return['自动连接中',''];return['自动同步','']}
 function copyText(text){const ta=document.createElement('textarea');ta.value=text;ta.setAttribute('readonly','');ta.style.position='fixed';ta.style.opacity='0';ta.style.pointerEvents='none';document.body.appendChild(ta);ta.select();ta.setSelectionRange(0,ta.value.length);let ok=false;try{ok=document.execCommand('copy')}catch(e){}ta.remove();showToast(ok?'已复制':'复制失败')}
 function hideContext(){ctx.hidden=true;ctx.innerHTML=''}
-function openSearch(){hideContext();searchOpen=true;searchQuery='';searchIndex=0;render(true,currentState);setTimeout(()=>document.getElementById('searchInput')?.focus(),30)}
-function showContext(row,m,x,y){hideContext();const actions=[];if(m.kind==='text')actions.push(['复制',()=>copyText(m.text||'')]);else actions.push(['复制文件名',()=>copyText(m.fileName||'')]);actions.push(['搜索',openSearch]);if(m.kind==='file'&&!m.mine)actions.unshift(['保存',()=>{Android.saveFile(m.id);showToast('正在保存')}]);actions.forEach(([label,fn])=>{const b=document.createElement('button');b.textContent=label;b.onclick=e=>{e.stopPropagation();hideContext();fn()};ctx.appendChild(b)});ctx.hidden=false;const vw=window.innerWidth,vh=window.innerHeight;const r=ctx.getBoundingClientRect();let left=Math.max(r.width/2+10,Math.min(vw-r.width/2-10,x));let top=Math.max(r.height+12,Math.min(vh-70,y-8));ctx.style.left=left+'px';ctx.style.top=top+'px'}
-function bindLongPress(row,m){const start=e=>{if(e.touches&&e.touches.length!==1)return;const p=e.touches?e.touches[0]:e;pressStartX=p.clientX;pressStartY=p.clientY;longPressFired=false;clearTimeout(longPressTimer);longPressTimer=setTimeout(()=>{longPressFired=true;showContext(row,m,pressStartX,pressStartY)},430)};const move=e=>{const p=e.touches?e.touches[0]:e;if(Math.abs(p.clientX-pressStartX)>12||Math.abs(p.clientY-pressStartY)>12)clearTimeout(longPressTimer)};const end=()=>clearTimeout(longPressTimer);row.addEventListener('touchstart',start,{passive:true});row.addEventListener('touchmove',move,{passive:true});row.addEventListener('touchend',end,{passive:true});row.addEventListener('touchcancel',end,{passive:true});row.addEventListener('contextmenu',e=>e.preventDefault());}
+function openSearch(){hideContext();searchOpen=true;searchQuery='';searchIndex=0;render(true);setTimeout(()=>document.getElementById('searchInput')?.focus(),30)}
 
-function render(force=false,stateOverride=null){
- const s=stateOverride||currentState||get();currentState=s;const js=JSON.stringify(s);if(!force&&js===last)return;last=js;
- const oldBox=document.getElementById('messages');const oldScroll=oldBox?{top:oldBox.scrollTop,atBottom:(oldBox.scrollHeight-oldBox.scrollTop-oldBox.clientHeight)<90}:null;const oldInput=document.getElementById('message');const draft=oldInput?oldInput.value:'';const inputFocused=oldInput&&document.activeElement===oldInput;
- const q=searchQuery.trim(),messages=s.messages||[];
- searchMatches=q?messages.filter(m=>searchable(m).toLocaleLowerCase().includes(q.toLocaleLowerCase())).map(m=>m.id):[];
- if(searchIndex>=searchMatches.length)searchIndex=Math.max(0,searchMatches.length-1);
- const msgs=messages.map(m=>{const matched=q&&searchMatches.includes(m.id),active=matched&&searchMatches[searchIndex]===m.id;const body=m.kind==='text'?'<div class="message-text">'+highlight(m.text,q)+'</div>':'<div class="file file-name">📎 '+highlight(m.fileName||'文件',q)+'</div><div class="meta">'+size(m.fileSize)+'</div>'+(m.mine?'':'<div class="save">点一下保存到下载</div>');return '<div class="row '+(m.mine?'mine ':'')+(matched?'match ':'')+(active?'active-match ':'')+(m.kind==='file'?'file-row ':'')+'" data-id="'+esc(m.id)+'"><div class="bubble">'+body+(m.mine?'<div class="state">'+(m.status==='sent'?'已送达':'等待自动发送')+'</div>':'')+'</div></div>'}).join('');
- const [st,stClass]=statusInfo(s);
- const search='<div class="searchbar" '+(searchOpen?'':'hidden')+'><div class="searchbox">'+SEARCH_SVG+'<input id="searchInput" class="searchinput" placeholder="搜索消息或文件名" value="'+esc(searchQuery)+'"></div><span id="searchCount" class="searchcount">'+(q?(searchMatches.length?(searchIndex+1)+'/'+searchMatches.length:'0/0'):'')+'</span><button id="searchPrev" class="searchnav" aria-label="上一个">↑</button><button id="searchNext" class="searchnav" aria-label="下一个">↓</button><button id="searchClose" class="searchclose" aria-label="关闭">×</button></div>';
- app.innerHTML='<div class="chat"><div class="head"><div class="headtop"><strong>我的两台手机</strong><button id="searchToggle" class="iconbtn" aria-label="搜索">'+SEARCH_SVG+'</button></div><div class="status '+stClass+'"><span class="dot"></span><span>'+st+'</span></div>'+search+'</div><div id="messages" class="messages">'+(msgs||'<div class="empty">直接发就行<br>不用配对，不用切网络。</div>')+'</div><div id="composer" class="composer"><button id="attach" class="attach">+</button><textarea id="message" class="input" rows="1" placeholder="输入消息"></textarea><button id="send" class="send">发送</button></div></div>';
- wire(s,messages,oldScroll,draft,inputFocused);Android.reportUi('screen=chat messages='+messages.length+' ui='+s.uiVersion+' search='+searchMatches.length);reportGeometry();
+function showContext(row,m,x,y){
+  hideContext();
+  const actions=[];
+  if(m.kind==='text')actions.push(['复制',()=>copyText(m.text||'')]);
+  else actions.push(['复制文件名',()=>copyText(m.fileName||'')]);
+  actions.push(['搜索',openSearch]);
+  if(m.kind==='file'&&!m.mine)actions.unshift(['保存',()=>{Android.saveFile(m.id);showToast('正在保存')}]);
+  actions.forEach(([label,fn])=>{
+    const b=document.createElement('button');
+    b.textContent=label;
+    b.onclick=e=>{e.stopPropagation();hideContext();fn()};
+    ctx.appendChild(b);
+  });
+  ctx.hidden=false;
+  const vw=window.innerWidth,vh=window.innerHeight;
+  const r=ctx.getBoundingClientRect();
+  const left=Math.max(r.width/2+10,Math.min(vw-r.width/2-10,x));
+  const top=Math.max(r.height+12,Math.min(vh-70,y-8));
+  ctx.style.left=left+'px';
+  ctx.style.top=top+'px';
 }
-function wire(s,messages,oldScroll,draft,inputFocused){
- const msg=document.getElementById('message');
- if(draft){msg.value=draft;growInput(msg)}
- if(inputFocused){setTimeout(()=>{msg.focus();msg.setSelectionRange(msg.value.length,msg.value.length)},0)}
- document.getElementById('send').onclick=send;
- document.getElementById('attach').onclick=()=>Android.pickFiles();
- msg.addEventListener('input',()=>growInput(msg));
- msg.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();send()}});
- document.querySelectorAll('.row').forEach(row=>{const m=messages.find(x=>x.id===row.dataset.id);if(!m)return;bindLongPress(row,m);if(m.kind==='file'&&!m.mine)row.onclick=()=>{if(longPressFired){longPressFired=false;return}Android.saveFile(m.id)}});
- document.getElementById('searchToggle').onclick=openSearch;
- if(searchOpen){
-   const si=document.getElementById('searchInput');
-   si.oninput=e=>{searchQuery=e.target.value;searchIndex=0;clearTimeout(si._t);si._t=setTimeout(()=>{render(true,currentState);setTimeout(()=>{const i=document.getElementById('searchInput');if(i){i.focus();i.setSelectionRange(i.value.length,i.value.length)}jumpToCurrent()},0)},90)};
-   si.onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();stepSearch(e.shiftKey?-1:1)}else if(e.key==='Escape'){searchOpen=false;searchQuery='';searchIndex=0;render(true,currentState)}};
-   document.getElementById('searchPrev').onclick=()=>stepSearch(-1);
-   document.getElementById('searchNext').onclick=()=>stepSearch(1);
-   document.getElementById('searchClose').onclick=()=>{searchOpen=false;searchQuery='';searchIndex=0;render(true,currentState)};
- }
- const box=document.getElementById('messages');
- box.addEventListener('scroll',()=>{if(!ctx.hidden)hideContext()},{passive:true});
- if(searchOpen&&searchQuery.trim()) jumpToCurrent();
- else if(oldScroll&&!oldScroll.atBottom) box.scrollTop=oldScroll.top;
- else box.scrollTop=box.scrollHeight;
+
+function render(force=false){
+  const oldBox=document.getElementById('messages');
+  const oldScroll=oldBox?oldBox.scrollTop:0;
+  const oldHeight=oldBox?oldBox.scrollHeight:0;
+  const oldClient=oldBox?oldBox.clientHeight:0;
+  const wasNearBottom=!oldBox||(oldHeight-oldScroll-oldClient<96);
+
+  const q=searchQuery.trim();
+  const messages=state.messages||[];
+  searchMatches=q
+    ? messages.filter(m=>searchable(m).toLocaleLowerCase().includes(q.toLocaleLowerCase())).map(m=>m.id)
+    : [];
+  if(searchIndex>=searchMatches.length)searchIndex=Math.max(0,searchMatches.length-1);
+  const matchSet=new Set(searchMatches);
+
+  const msgs=messages.map(m=>{
+    const matched=q&&matchSet.has(m.id);
+    const active=matched&&searchMatches[searchIndex]===m.id;
+    const body=m.kind==='text'
+      ? '<div class="message-text">'+highlight(m.text,q)+'</div>'
+      : '<div class="file file-name">📎 '+highlight(m.fileName||'文件',q)+'</div><div class="meta">'+size(m.fileSize)+'</div>'+(m.mine?'':'<div class="save">点一下保存到下载</div>');
+    return '<div class="row '+(m.mine?'mine ':'')+(matched?'match ':'')+(active?'active-match ':'')+(m.kind==='file'?'file-row ':'')+'" data-id="'+esc(m.id)+'"><div class="bubble">'+body+(m.mine?'<div class="state">'+(m.status==='sent'?'已送达':'等待自动发送')+'</div>':'')+'</div></div>';
+  }).join('');
+
+  const [st,stClass]=statusInfo(state);
+  const search='<div class="searchbar" '+(searchOpen?'':'hidden')+'><div class="searchbox">'+SEARCH_SVG+'<input id="searchInput" class="searchinput" placeholder="搜索消息或文件名" value="'+esc(searchQuery)+'"></div><span id="searchCount" class="searchcount">'+(q?(searchMatches.length?(searchIndex+1)+'/'+searchMatches.length:'0/0'):'')+'</span><button id="searchPrev" class="searchnav" aria-label="上一个">↑</button><button id="searchNext" class="searchnav" aria-label="下一个">↓</button><button id="searchClose" class="searchclose" aria-label="关闭">×</button></div>';
+
+  app.innerHTML='<div class="chat"><div class="head"><div class="headtop"><strong>我的两台手机</strong><button id="searchToggle" class="iconbtn" aria-label="搜索">'+SEARCH_SVG+'</button></div><div class="status '+stClass+'"><span class="dot"></span><span>'+st+'</span></div>'+search+'</div><div id="messages" class="messages">'+(msgs||'<div class="empty">直接发就行<br>不用配对，不用切网络。</div>')+'</div><div id="composer" class="composer"><button id="attach" class="attach">+</button><textarea id="message" class="input" rows="1" placeholder="输入消息"></textarea><button id="send" class="send">发送</button></div></div>';
+
+  wire(messages);
+
+  const box=document.getElementById('messages');
+  if(searchOpen&&q){
+    jumpToCurrent();
+  }else if(stickToBottom||wasNearBottom){
+    box.scrollTop=box.scrollHeight;
+  }else{
+    box.scrollTop=Math.min(oldScroll,Math.max(0,box.scrollHeight-box.clientHeight));
+  }
+  stickToBottom=false;
+  Android.reportUi('screen=chat messages='+messages.length+' ui='+state.uiVersion+' search='+searchMatches.length);
+  reportGeometry();
 }
-function stepSearch(dir){if(!searchMatches.length){showToast('没有找到');return}searchIndex=(searchIndex+dir+searchMatches.length)%searchMatches.length;render(true,currentState);jumpToCurrent()}
-function jumpToCurrent(){if(!searchMatches.length)return;const id=searchMatches[searchIndex];const row=[...document.querySelectorAll('.row')].find(x=>x.dataset.id===id);row?.scrollIntoView({block:'center',behavior:'smooth'})}
+
+function wire(messages){
+  const byId=new Map(messages.map(m=>[m.id,m]));
+  const msg=document.getElementById('message');
+  const box=document.getElementById('messages');
+
+  document.getElementById('send').onclick=send;
+  document.getElementById('attach').onclick=()=>Android.pickFiles();
+  msg.addEventListener('input',()=>growInput(msg));
+  msg.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();send()}});
+
+  box.addEventListener('scroll',()=>{
+    userScrolling=true;
+    clearTimeout(scrollIdleTimer);
+    scrollIdleTimer=setTimeout(()=>{
+      userScrolling=false;
+      if(pendingRefresh){pendingRefresh=false;scheduleNativeRefresh(20)}
+    },180);
+  },{passive:true});
+
+  const pressStart=e=>{
+    const row=e.target.closest('.row');
+    if(!row||!box.contains(row))return;
+    const m=byId.get(row.dataset.id);
+    if(!m)return;
+    if(e.touches&&e.touches.length!==1)return;
+    const p=e.touches?e.touches[0]:e;
+    pressStartX=p.clientX;pressStartY=p.clientY;longPressFired=false;
+    clearTimeout(longPressTimer);
+    longPressTimer=setTimeout(()=>{longPressFired=true;showContext(row,m,pressStartX,pressStartY)},430);
+  };
+  const pressMove=e=>{
+    const p=e.touches?e.touches[0]:e;
+    if(Math.abs(p.clientX-pressStartX)>12||Math.abs(p.clientY-pressStartY)>12)clearTimeout(longPressTimer);
+  };
+  const pressEnd=()=>clearTimeout(longPressTimer);
+
+  box.addEventListener('touchstart',pressStart,{passive:true});
+  box.addEventListener('touchmove',pressMove,{passive:true});
+  box.addEventListener('touchend',pressEnd,{passive:true});
+  box.addEventListener('touchcancel',pressEnd,{passive:true});
+  box.addEventListener('contextmenu',e=>e.preventDefault());
+  box.addEventListener('click',e=>{
+    const row=e.target.closest('.row');
+    if(!row||!box.contains(row))return;
+    const m=byId.get(row.dataset.id);
+    if(!m||m.kind!=='file'||m.mine)return;
+    if(longPressFired){longPressFired=false;return}
+    Android.saveFile(m.id);
+  });
+
+  document.getElementById('searchToggle').onclick=openSearch;
+  if(searchOpen){
+    const si=document.getElementById('searchInput');
+    si.oninput=e=>{
+      searchQuery=e.target.value;
+      searchIndex=0;
+      render(true);
+      setTimeout(()=>{
+        const i=document.getElementById('searchInput');
+        if(i){i.focus();i.setSelectionRange(i.value.length,i.value.length)}
+        jumpToCurrent();
+      },0);
+    };
+    si.onkeydown=e=>{
+      if(e.key==='Enter'){e.preventDefault();stepSearch(e.shiftKey?-1:1)}
+      else if(e.key==='Escape'){searchOpen=false;searchQuery='';searchIndex=0;render(true)}
+    };
+    document.getElementById('searchPrev').onclick=()=>stepSearch(-1);
+    document.getElementById('searchNext').onclick=()=>stepSearch(1);
+    document.getElementById('searchClose').onclick=()=>{searchOpen=false;searchQuery='';searchIndex=0;render(true)};
+  }
+}
+
+function refreshFromNative(){
+  state=nativeState();
+  render(false);
+}
+function scheduleNativeRefresh(delay=70){
+  if(userScrolling){pendingRefresh=true;return}
+  if(refreshTimer)return;
+  refreshTimer=setTimeout(()=>{
+    refreshTimer=null;
+    state=nativeState();
+    render(false);
+  },delay);
+}
+function stepSearch(dir){if(!searchMatches.length){showToast('没有找到');return}searchIndex=(searchIndex+dir+searchMatches.length)%searchMatches.length;render(true);jumpToCurrent()}
+function jumpToCurrent(){if(!searchMatches.length)return;const id=searchMatches[searchIndex];const row=[...document.querySelectorAll('.row')].find(x=>x.dataset.id===id);row?.scrollIntoView({block:'center',behavior:'auto'})}
 function growInput(e){e.style.height='auto';e.style.height=Math.min(e.scrollHeight,112)+'px'}
-function send(){hideContext();const e=document.getElementById('message'),t=e.value.trim();if(!t)return;e.value='';e.style.height='';Android.sendText(t);setTimeout(refreshFromNative,60)}
+function send(){hideContext();const e=document.getElementById('message'),t=e.value.trim();if(!t)return;stickToBottom=true;e.value='';e.style.height='';Android.sendText(t)}
 function reportGeometry(){const c=document.getElementById('composer');if(!c)return;const vv=window.visualViewport;Android.reportLayout(vv?vv.height:window.innerHeight,c.getBoundingClientRect().bottom)}
-document.addEventListener('touchstart',e=>{if(!ctx.hidden&&!ctx.contains(e.target)&&!e.target.closest('.row'))hideContext()},{passive:true});let refreshQueued=false;window.nativeRefresh=()=>{if(refreshQueued)return;refreshQueued=true;requestAnimationFrame(()=>{refreshQueued=false;refreshFromNative()})};if(window.visualViewport){visualViewport.addEventListener('resize',()=>{document.getElementById('app').style.height=visualViewport.height+'px';setTimeout(reportGeometry,80)})}currentState=get();render(true,currentState);setInterval(()=>{if(document.visibilityState==='visible')refreshFromNative()},12000);
+
+document.addEventListener('touchstart',e=>{if(!ctx.hidden&&!ctx.contains(e.target)&&!e.target.closest('.row'))hideContext()},{passive:true});
+window.nativeRefresh=()=>scheduleNativeRefresh(35);
+window.addEventListener('focus',()=>scheduleNativeRefresh(0));
+document.addEventListener('visibilitychange',()=>{if(!document.hidden)scheduleNativeRefresh(0)});
+if(window.visualViewport){
+  visualViewport.addEventListener('resize',()=>{
+    document.getElementById('app').style.height=visualViewport.height+'px';
+    setTimeout(reportGeometry,60);
+  });
+}
+
+state=nativeState();
+render(true);
+// Very low-frequency safety refresh only; the normal path is native event-driven refresh.
+setInterval(()=>{if(!document.hidden&&!userScrolling)scheduleNativeRefresh(0)},15000);
 </script></body></html>
