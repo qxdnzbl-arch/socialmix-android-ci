@@ -27,6 +27,7 @@ public class MainActivity extends Activity {
     Runnable draftTask;
     int scrollPosition=0;
     ScrollView homeScroll;
+    ListView homeList;
     public int dp(float n){return Math.round(n*getResources().getDisplayMetrics().density);}
     @Override public void onCreate(Bundle saved){
         super.onCreate(saved);getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
@@ -73,13 +74,13 @@ public class MainActivity extends Activity {
         LinearLayout search=row();search.setPadding(dp(15),0,dp(8),0);search.setBackground(bg(WHITE,18,LINE));TextView lens=text("",16,MUTED,false);lens.setCompoundDrawablesWithIntrinsicBounds(new Glyph("search",MUTED,21),null,null,null);search.addView(lens,lp(28,48));
         searchInput=new EditText(this);searchInput.setTextSize(16);searchInput.setTextColor(INK);searchInput.setHintTextColor(MUTED);searchInput.setHint("搜索文字、标题");searchInput.setSingleLine(true);searchInput.setBackgroundColor(Color.TRANSPARENT);searchInput.setPadding(dp(4),0,dp(6),0);searchInput.setContentDescription("搜索记录");searchInput.setText(query);search.addView(searchInput,new LinearLayout.LayoutParams(0,dp(50),1));search.addView(icon("close","清空搜索",()->searchInput.setText("")),lp(40,46));LinearLayout.LayoutParams sl=lp(-1,52);sl.setMargins(dp(20),dp(12),dp(20),dp(14));root.addView(search,sl);
         HorizontalScrollView tabs=new HorizontalScrollView(this);tabs.setHorizontalScrollBarEnabled(false);LinearLayout chips=row();chips.setPadding(dp(20),0,dp(12),dp(4));addFilter(chips,"all","全部");addFilter(chips,"pinned","常用");for(Store.Category c:store.categories)addFilter(chips,c.id,c.name);tabs.addView(chips);root.addView(tabs,lp(-1,48));
-        list=column();list.setPadding(dp(20),dp(14),dp(20),dp(16));homeScroll=scroller(list);renderList();homeScroll.post(()->homeScroll.scrollTo(0,scrollPosition));
+        list=column();list.setPadding(dp(20),dp(14),dp(20),dp(4));homeList=new ListView(this);homeList.setDivider(null);homeList.setVerticalScrollBarEnabled(false);homeList.setBackgroundColor(BG);homeList.setClipToPadding(false);homeList.addHeaderView(list,null,false);root.addView(homeList,new LinearLayout.LayoutParams(-1,0,1));renderList();homeList.post(()->homeList.setSelection(scrollPosition));
         LinearLayout footer=row();footer.setPadding(dp(20),dp(10),dp(20),dp(12));TextView categories=button("分类",false,this::categoriesDialog);footer.addView(categories,lp(76,54));TextView add=button("＋  记一条",true,()->newNote(null));LinearLayout.LayoutParams ap=new LinearLayout.LayoutParams(0,dp(54),1);ap.leftMargin=dp(12);footer.addView(add,ap);root.addView(footer);
         searchInput.addTextChangedListener(new TextWatcher(){public void beforeTextChanged(CharSequence s,int a,int c,int f){}public void onTextChanged(CharSequence s,int a,int b,int c){query=s.toString();renderList();}public void afterTextChanged(Editable e){}});
     }
     void addFilter(LinearLayout chips,String id,String label){boolean active=filter.equals(id);TextView t=text(label,15,active?WHITE:MUTED,active);t.setGravity(Gravity.CENTER);t.setPadding(dp(17),dp(10),dp(17),dp(10));t.setBackground(ripple(active?ACCENT:0,14,0));t.setOnClickListener(v->{filter=id;scrollPosition=0;hideKeyboard();home();});LinearLayout.LayoutParams p=lp(-2,42);p.rightMargin=dp(6);chips.addView(t,p);}
     void renderList(){
-        if(list==null||!"home".equals(screen))return;list.removeAllViews();
+        if(list==null||!"home".equals(screen))return;homeList.setAdapter(null);list.removeAllViews();
         if(store.draft!=null&&store.draft.hasContent()&&query.isEmpty()){
             TextView d=button("继续上次没写完的记录",false,()->editor(store.draft.copy()));d.setTextColor(ACCENT);list.addView(d,lp(-1,-2));gap(list,14);
         }
@@ -94,7 +95,7 @@ public class MainActivity extends Activity {
             if(query.isEmpty()){empty.addView(button("记理发要求",false,()->newNote(Store.HAIR)));gap(empty,10);empty.addView(button("存一段提示词",false,()->newNote(Store.PROMPT)));}else empty.addView(button("清空搜索",false,()->searchInput.setText("")));
             list.addView(empty,lp(-1,-2));return;
         }
-        for(Store.Note n:found){list.addView(noteCard(n),lp(-1,-2));gap(list,12);}
+        homeList.setAdapter(new BaseAdapter(){public int getCount(){return found.size();}public Object getItem(int p){return found.get(p);}public long getItemId(int p){return p;}public View getView(int p,View recycled,ViewGroup parent){LinearLayout wrap=column();wrap.setPadding(dp(20),0,dp(20),dp(12));wrap.addView(noteCard(found.get(p)),lp(-1,-2));return wrap;}});
     }
     int categoryColor(String id){if(Store.HAIR.equals(id))return 0xff9d642c;if(Store.PROMPT.equals(id))return 0xff5568a1;if(Store.DAILY.equals(id))return ACCENT;return ACCENT;}
     int categoryTint(String id){if(Store.HAIR.equals(id))return 0xfffcf1e4;if(Store.PROMPT.equals(id))return 0xffeef0fb;return 0xffe6f2f3;}
@@ -106,7 +107,7 @@ public class MainActivity extends Activity {
         if(!n.images.isEmpty()){gap(c,13);LinearLayout images=row();for(int i=0;i<Math.min(n.images.size(),3);i++){ImageView image=thumbnail(n.images.get(i),300);image.setScaleType(ImageView.ScaleType.CENTER_CROP);LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(0,dp(92),1);if(i>0)p.leftMargin=dp(7);images.addView(image,p);}c.addView(images);}
         gap(c,14);LinearLayout bottom=row();String date=new SimpleDateFormat("M月d日",Locale.CHINA).format(new Date(n.updated));bottom.addView(text(date+(n.images.isEmpty()?"":"  ·  "+n.images.size()+" 张图"),13,MUTED,false),new LinearLayout.LayoutParams(0,-2,1));
         TextView copy=text("复制文字",14,ACCENT,true);copy.setGravity(Gravity.CENTER);copy.setMinHeight(dp(38));copy.setPadding(dp(10),0,dp(10),0);copy.setBackground(ripple(categoryTint(Store.DAILY),10,0));copy.setOnClickListener(v->copy(n));bottom.addView(copy);c.addView(bottom);
-        c.setOnClickListener(v->{scrollPosition=homeScroll.getScrollY();hideKeyboard();detail(n,false);});return c;
+        c.setOnClickListener(v->{scrollPosition=homeList.getFirstVisiblePosition();hideKeyboard();detail(n,false);});return c;
     }
     void copy(Store.Note n){String value=n.body.trim().isEmpty()?n.title:n.body;if(value.isEmpty()){toast("这条记录只有图片");return;}((android.content.ClipboardManager)getSystemService(CLIPBOARD_SERVICE)).setPrimaryClip(ClipData.newPlainText(n.heading(),value));if(Build.VERSION.SDK_INT<33)toast("已复制");}
     void newNote(String category){

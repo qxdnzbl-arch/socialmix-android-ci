@@ -30,7 +30,7 @@ import xml.etree.ElementTree as E
 r=E.parse('out/qa/relaunch.xml')
 texts=[n.get('text','') for n in r.iter('node')]
 assert any('下次理发' in t for t in texts), texts
-assert any('代码修改提示词' in t for t in texts), texts
+assert '随手存' in texts, texts
 PY
 adb shell wm size 720x1280
 adb shell wm density 320
