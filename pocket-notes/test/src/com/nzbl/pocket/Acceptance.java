@@ -77,29 +77,34 @@ public class Acceptance extends Instrumentation {
     void shot(String name)throws Exception{Thread.sleep(180);Bitmap b=getUiAutomation().takeScreenshot();if(b==null)throw new IOException("Screenshot unavailable");try(FileOutputStream out=new FileOutputStream(new File(dir,name+".png"))){b.compress(Bitmap.CompressFormat.PNG,100,out);}b.recycle();}
     void back(){long time=SystemClock.uptimeMillis();getUiAutomation().injectInputEvent(new KeyEvent(time,time,KeyEvent.ACTION_DOWN,KeyEvent.KEYCODE_BACK,0),true);getUiAutomation().injectInputEvent(new KeyEvent(time,time+50,KeyEvent.ACTION_UP,KeyEvent.KEYCODE_BACK,0),true);}
     void selectFixture()throws Exception{
-        for(int attempt=0;attempt<6;attempt++){
+        for(int attempt=0;attempt<8;attempt++){
             AccessibilityNodeInfo active=getUiAutomation().getRootInActiveWindow();
-            List<AccessibilityNodeInfo> nodes=active.findAccessibilityNodeInfosByText("reference-fixture.png");
-            if(!nodes.isEmpty()){
-                AccessibilityNodeInfo node=nodes.get(0);Rect rect=new Rect();node.getBoundsInScreen(rect);
-                long now=SystemClock.uptimeMillis();MotionEvent down=MotionEvent.obtain(now,now,MotionEvent.ACTION_DOWN,rect.centerX(),rect.centerY(),0);MotionEvent up=MotionEvent.obtain(now,now+80,MotionEvent.ACTION_UP,rect.centerX(),rect.centerY(),0);
-                down.setSource(InputDevice.SOURCE_TOUCHSCREEN);up.setSource(InputDevice.SOURCE_TOUCHSCREEN);
-                getUiAutomation().injectInputEvent(down,true);getUiAutomation().injectInputEvent(up,true);down.recycle();up.recycle();
-                Thread.sleep(600);active=getUiAutomation().getRootInActiveWindow();
-                if(active!=null&&!"com.nzbl.pocket".contentEquals(active.getPackageName())){
+            AccessibilityNodeInfo node=findDocument(active,"reference-fixture.png");
+            if(node!=null){
+                Rect rect=new Rect();node.getBoundsInScreen(rect);
+                Bundle info=new Bundle();info.putString("stream","Picker observed file bounds "+rect+" description="+node.getContentDescription()+"\n");sendStatus(0,info);
+                if(rect.width()<=0||rect.height()<=0)throw new AssertionError("Empty picker file bounds");
+                android.os.ParcelFileDescriptor command=getUiAutomation().executeShellCommand("input tap "+rect.centerX()+" "+rect.centerY());
+                try(InputStream output=new android.os.ParcelFileDescriptor.AutoCloseInputStream(command)){while(output.read()!=-1){}}
+                Thread.sleep(800);active=getUiAutomation().getRootInActiveWindow();
+                if(active!=null&&"com.nzbl.pocket".contentEquals(active.getPackageName())){dump("picker-after-selection");return;}
+                if(active!=null){
                     for(String label:new String[]{"Open","Select","SELECT","OPEN"}){
                         List<AccessibilityNodeInfo> actions=active.findAccessibilityNodeInfosByText(label);
                         for(AccessibilityNodeInfo action:actions)if(action.isClickable())action.performAction(AccessibilityNodeInfo.ACTION_CLICK);
                     }
                 }
-                dump("picker-after-selection");return;
+                Thread.sleep(300);
+                continue;
             }
+            List<AccessibilityNodeInfo> roots=active.findAccessibilityNodeInfosByText("Show roots");
+            if(!roots.isEmpty())roots.get(0).performAction(AccessibilityNodeInfo.ACTION_CLICK);
             List<AccessibilityNodeInfo> downloads=active.findAccessibilityNodeInfosByText("Downloads");
-            if(!downloads.isEmpty())tapDialog("Downloads");else getUiAutomation().executeShellCommand("input tap 70 130").close();
-            Thread.sleep(300);
+            if(!downloads.isEmpty())tapDialog("Downloads");Thread.sleep(300);
         }
-        dump("picker-failed");throw new AssertionError("Reference image not found in real picker");
+        dump("picker-failed");throw new AssertionError("Reference image not selected in real picker");
     }
+    AccessibilityNodeInfo findDocument(AccessibilityNodeInfo node,String name){if(node==null)return null;String desc=node.getContentDescription()==null?"":node.getContentDescription().toString();String text=node.getText()==null?"":node.getText().toString();if(desc.startsWith(name)||text.equals(name))return node;for(int i=0;i<node.getChildCount();i++){AccessibilityNodeInfo found=findDocument(node.getChild(i),name);if(found!=null)return found;}return null;}
     void dump(String name)throws Exception{AccessibilityNodeInfo n=getUiAutomation().getRootInActiveWindow();try(PrintWriter out=new PrintWriter(new File(dir,name+".txt"))){walk(n,out,0);}}
-    void walk(AccessibilityNodeInfo n,PrintWriter out,int depth){if(n==null)return;out.println(depth+" "+n.getClassName()+" text="+n.getText()+" description="+n.getContentDescription());for(int i=0;i<n.getChildCount();i++)walk(n.getChild(i),out,depth+1);}
+    void walk(AccessibilityNodeInfo n,PrintWriter out,int depth){if(n==null)return;Rect box=new Rect();n.getBoundsInScreen(box);out.println(depth+" "+n.getClassName()+" text="+n.getText()+" description="+n.getContentDescription()+" bounds="+box);for(int i=0;i<n.getChildCount();i++)walk(n.getChild(i),out,depth+1);}
 }
