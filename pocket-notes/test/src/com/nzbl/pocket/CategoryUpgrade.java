@@ -23,7 +23,7 @@ public class CategoryUpgrade extends Acceptance {
                 byte[] original=Store.read(new ParcelFileDescriptor.AutoCloseInputStream(getUiAutomation().executeShellCommand("cat /sdcard/Download/reference-fixture.png")),1024*1024);
                 File image=new File(a.store.photos,"upgrade-test.img");try(FileOutputStream out=new FileOutputStream(image)){out.write(original);}
                 main(()->a.newNote("hair"));main(()->{a.titleInput.setText("更新前的真实记录");a.bodyInput.setText("中文和换行都保留。\n图片与常用状态也保留。");a.editing.images.add(image.getName());a.editing.pinned=true;a.renderEditorPhotos();});tap("保存");
-                main(()->a.categoriesDialog());tapDialog("日常");tapDialog("重命名");setDialogEdit("自建分类");tapDialog("保存");
+                check(a.store.change(()->{for(Store.Category c:a.store.categories)if("daily".equals(c.id))c.name="自建分类";}),"legacy renamed category persisted before upgrade");
                 main(()->a.newNote("daily"));main(()->{a.titleInput.setText("改过分类名的记录");a.bodyInput.setText("这个分类是用户改过的，必须保留。");});tap("保存");
                 main(()->a.newNote("prompt"));main(()->{a.titleInput.setText("更新前的草稿");a.bodyInput.setText("未保存的输入也不能丢失。");});tap("取消");tapDialog("保留草稿");
                 JSONObject before=new JSONObject().put("noteId",a.store.notes.get(0).id).put("secondId",a.store.notes.get(1).id).put("imageSha",sha(original));
