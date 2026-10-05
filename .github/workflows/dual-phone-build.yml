@@ -160,15 +160,7 @@ jobs:
             adb shell input tap 360 2180
             sleep 2
             adb logcat -d -s DualPhoneNative:I '*:S' > deliverable/keyboard.log
-            python3 - <<'PY'
-            import re
-            s=open('deliverable/keyboard.log',errors='ignore').read()
-            m=re.findall(r'visible=(\d+) inputBottom=(\d+)',s)
-            assert m,s
-            v,b=map(int,m[-1])
-            assert v<2100,(v,b)
-            assert b<=v+40,(v,b)
-            PY
+            python3 -c "import re; s=open('deliverable/keyboard.log',errors='ignore').read(); m=re.findall(r'visible=(\\d+) inputBottom=(\\d+)',s); assert m,s; v,b=map(int,m[-1]); assert v<2100,(v,b); assert b<=v+40,(v,b)"
             sh -c 'for i in $(seq 1 8); do adb logcat -d -s DualPhoneNative:I "*:S" > deliverable/send.log 2>/dev/null || true; grep -q "messages=1" deliverable/send.log && exit 0; sleep 1; done; exit 1'
             adb exec-out screencap -p > deliverable/02-native-keyboard.png
 
