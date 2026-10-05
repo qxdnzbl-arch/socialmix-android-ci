@@ -57,8 +57,8 @@ jobs:
       - name: Live relay end-to-end text and file test
         run: |
           python3 - <<'PY'
-          import base64, hashlib, threading, time, urllib.request
-          secret="6686986c94d4a4d34fd705665b962491078a94688d3f730b568d36a2c526c470"
+          import base64, hashlib, threading, time, urllib.request, secrets
+          secret=secrets.token_hex(32)
           room=hashlib.sha256(secret.encode()).hexdigest()[:32]
           bases=[
             "https://oppo-iphone-transfer-qr.onrender.com",
