@@ -157,8 +157,7 @@ jobs:
             grep -q "消息" deliverable/native.xml
             adb exec-out screencap -p > deliverable/01-native-chat.png
 
-            TAP=$(python3 -c "import re; s=open('deliverable/native.xml',errors='ignore').read(); m=re.search(r'class=\\\"android.widget.EditText\\\"[^>]*bounds=\\\"\\[(\\d+),(\\d+)\\]\\[(\\d+),(\\d+)\\]\\\"',s); assert m,s; x1,y1,x2,y2=map(int,m.groups()); print((x1+x2)//2,(y1+y2)//2)")
-            adb shell input tap $TAP
+            adb shell input tap $(python3 -c "import re; s=open('deliverable/native.xml',errors='ignore').read(); m=re.search(r'class=\\\"android.widget.EditText\\\"[^>]*bounds=\\\"\\[(\\d+),(\\d+)\\]\\[(\\d+),(\\d+)\\]\\\"',s); assert m,s; x1,y1,x2,y2=map(int,m.groups()); print((x1+x2)//2,(y1+y2)//2)")
             sleep 2
             adb logcat -d -s DualPhoneNative:I '*:S' > deliverable/keyboard.log
             python3 -c "import re; s=open('deliverable/keyboard.log',errors='ignore').read(); m=re.findall(r'visible=(\\d+) inputBottom=(\\d+)',s); assert m,s; v,b=map(int,m[-1]); assert v<2100,(v,b); assert b<=v+40,(v,b)"
