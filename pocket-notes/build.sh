@@ -9,6 +9,7 @@ mkdir -p build/classes build/dex build/test-classes build/test-dex out
 "$build_tools/aapt2" compile --dir app/src/main/res -o build/resources.zip
 "$build_tools/aapt2" link -o build/base.apk -I "$sdk_jar" --manifest app/src/main/AndroidManifest.xml --java build/generated build/resources.zip
 javac -encoding UTF-8 -source 8 -target 8 -bootclasspath "$sdk_jar" -d build/classes $(find app/src/main/java -name '*.java')
+jar cf build/main-classes.jar -C build/classes .
 "$build_tools/d8" --min-api 26 --lib "$sdk_jar" --output build/dex $(find build/classes -name '*.class')
 cp build/base.apk build/unsigned.apk
 (cd build/dex && zip -q ../unsigned.apk classes.dex)
@@ -20,7 +21,7 @@ fi
 "$build_tools/apksigner" verify --verbose out/Suishoucun.apk
 if [ -d test/src ]; then
   javac -encoding UTF-8 -source 8 -target 8 -bootclasspath "$sdk_jar" -classpath build/classes -d build/test-classes $(find test/src -name '*.java')
-  "$build_tools/d8" --min-api 26 --lib "$sdk_jar" --classpath build/classes --output build/test-dex $(find build/test-classes -name '*.class')
+  "$build_tools/d8" --min-api 26 --lib "$sdk_jar" --classpath build/main-classes.jar --output build/test-dex $(find build/test-classes -name '*.class')
   "$build_tools/aapt2" link -o build/test-base.apk -I "$sdk_jar" --manifest test/AndroidManifest.xml
   cp build/test-base.apk build/test-unsigned.apk
   (cd build/test-dex && zip -q ../test-unsigned.apk classes.dex)
