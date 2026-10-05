@@ -198,6 +198,24 @@ src = src.replace('"Missing"', '"未下载"')
 
 main.write_text(src, encoding="utf-8")
 
+# Android NDK 28 uses the C++ AttachCurrentThread(JNIEnv**, ...) overload.
+# Upstream's desktop-compatible void** form does not compile for Android.
+jni = root / "external/qwen3-tts.cpp/src/qwen3_tts_jni.cpp"
+jni_src = jni.read_text(encoding="utf-8")
+jni_old = """                void* attached_env = nullptr;
+                if (state->vm->AttachCurrentThread(&attached_env, nullptr) != JNI_OK) {
+                    return;
+                }
+                env = static_cast<JNIEnv*>(attached_env);"""
+jni_new = """                JNIEnv* attached_env = nullptr;
+                if (state->vm->AttachCurrentThread(&attached_env, nullptr) != JNI_OK) {
+                    return;
+                }
+                env = attached_env;"""
+assert jni_old in jni_src, "Android JNI AttachCurrentThread source pattern not found"
+jni_src = jni_src.replace(jni_old, jni_new, 1)
+jni.write_text(jni_src, encoding="utf-8")
+
 # Rename the installed app/package without touching upstream source outside the generated worktree.
 g = gradle.read_text(encoding="utf-8")
 g = g.replace('namespace = "com.qwen.tts.android"', 'namespace = "com.qwen.tts.android"')
