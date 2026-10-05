@@ -43,7 +43,7 @@ done
 
 passed=0
 for i in $(seq 1 90); do
-  adb -s emulator-5556 logcat -d -s DualPhoneUi:I "*:S" >/tmp/receiver.log 2>/dev/null || true
+  adb -s emulator-5556 logcat -d -s DualPhoneNative:I "*:S" >/tmp/receiver.log 2>/dev/null || true
   if grep -q "messages=2" /tmp/receiver.log; then passed=1; break; fi
   sleep 1
 done
