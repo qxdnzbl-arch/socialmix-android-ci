@@ -85,8 +85,8 @@ public class MainActivity extends Activity {
 
     ensureLocalUi();
     loadLocalUi();
-    TransferService.start(this);
     requestNearbyPermissions();
+    if(hasNearbyPermissions()) TransferService.start(this);
     checkForUiUpdate();
   }
 
@@ -112,9 +112,32 @@ public class MainActivity extends Activity {
     return (getApplicationInfo().flags & android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE)!=0;
   }
 
+  @Override protected void onResume(){
+    super.onResume();
+    if(hasNearbyPermissions()) TransferService.wake(this);
+  }
+
+  private boolean hasNearbyPermissions(){
+    if(Build.VERSION.SDK_INT>=33){
+      return checkSelfPermission(Manifest.permission.BLUETOOTH_ADVERTISE)==PackageManager.PERMISSION_GRANTED
+        && checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT)==PackageManager.PERMISSION_GRANTED
+        && checkSelfPermission(Manifest.permission.BLUETOOTH_SCAN)==PackageManager.PERMISSION_GRANTED
+        && checkSelfPermission(Manifest.permission.NEARBY_WIFI_DEVICES)==PackageManager.PERMISSION_GRANTED;
+    }
+    if(Build.VERSION.SDK_INT>=31){
+      return checkSelfPermission(Manifest.permission.BLUETOOTH_ADVERTISE)==PackageManager.PERMISSION_GRANTED
+        && checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT)==PackageManager.PERMISSION_GRANTED
+        && checkSelfPermission(Manifest.permission.BLUETOOTH_SCAN)==PackageManager.PERMISSION_GRANTED
+        && checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION)==PackageManager.PERMISSION_GRANTED;
+    }
+    if(Build.VERSION.SDK_INT>=29)
+      return checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION)==PackageManager.PERMISSION_GRANTED;
+    return checkSelfPermission(Manifest.permission.ACCESS_COARSE_LOCATION)==PackageManager.PERMISSION_GRANTED;
+  }
+
   private void requestNearbyPermissions(){
     ArrayList<String> need=new ArrayList<>();
-    if(Build.VERSION.SDK_INT>=32){
+    if(Build.VERSION.SDK_INT>=33){
       addIfMissing(need,Manifest.permission.BLUETOOTH_ADVERTISE);
       addIfMissing(need,Manifest.permission.BLUETOOTH_CONNECT);
       addIfMissing(need,Manifest.permission.BLUETOOTH_SCAN);
@@ -123,6 +146,7 @@ public class MainActivity extends Activity {
       addIfMissing(need,Manifest.permission.BLUETOOTH_ADVERTISE);
       addIfMissing(need,Manifest.permission.BLUETOOTH_CONNECT);
       addIfMissing(need,Manifest.permission.BLUETOOTH_SCAN);
+      addIfMissing(need,Manifest.permission.ACCESS_FINE_LOCATION);
     }else if(Build.VERSION.SDK_INT>=29){
       addIfMissing(need,Manifest.permission.ACCESS_FINE_LOCATION);
     }else{
@@ -137,7 +161,11 @@ public class MainActivity extends Activity {
 
   @Override public void onRequestPermissionsResult(int requestCode,String[] permissions,int[] grantResults){
     super.onRequestPermissionsResult(requestCode,permissions,grantResults);
-    if(requestCode==PERMS) TransferService.wake(this);
+    if(requestCode==PERMS && hasNearbyPermissions()){
+      stopService(new Intent(this,TransferService.class));
+      getWindow().getDecorView().postDelayed(()->TransferService.start(this),180);
+      notifyWeb();
+    }
   }
 
   private void ensureLocalUi(){
@@ -231,6 +259,7 @@ public class MainActivity extends Activity {
       try{
         root.put("setupNeeded",false);
         root.put("uiVersion",prefs.getInt("ui_version",BUNDLED_UI_VERSION));
+        root.put("linkState",prefs.getString("link_state","searching"));
         JSONArray a=new JSONArray();
         for(TransferDb.Msg m:db.all()){
           JSONObject x=new JSONObject();

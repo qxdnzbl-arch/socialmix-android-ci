@@ -15,9 +15,12 @@ jobs:
         with: { distribution: temurin, java-version: '17' }
       - uses: gradle/actions/setup-gradle@v4
         with: { gradle-version: '8.11.1' }
-      - name: Build debug
+      - name: Restore signing key
         working-directory: dualphone
-        run: gradle --no-daemon :app:assembleDebug
+        run: base64 -d keystore.b64 > app/shuangjichuan-release.jks
+      - name: Build debug and signed release
+        working-directory: dualphone
+        run: gradle --no-daemon :app:assembleDebug :app:assembleRelease
       - name: Enable KVM
         run: if [ -e /dev/kvm ]; then sudo chmod 666 /dev/kvm; fi
       - name: Two-emulator Nearby P2P
@@ -30,3 +33,17 @@ jobs:
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none
           script: bash dualphone/ci/nearby_two_device.sh
+
+      - name: Prepare accepted APK
+        run: |
+          mkdir -p accepted
+          cp dualphone/app/build/outputs/apk/release/app-release.apk accepted/ShuangJiChuan_v5_1_PermissionFix.apk
+          cp nearby-receiver.png accepted/nearby-receiver.png
+          sha256sum accepted/ShuangJiChuan_v5_1_PermissionFix.apk > accepted/SHA256.txt
+      - name: Upload accepted APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: shuangjichuan-v5-1-permission-fix
+          path: accepted/
+          if-no-files-found: error
+          retention-days: 14

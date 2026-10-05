@@ -19,11 +19,6 @@ done
 for dev in emulator-5554 emulator-5556; do
   adb -s "$dev" install -r "$APK"
   adb -s "$dev" shell pm clear "$PKG"
-  adb -s "$dev" shell pm grant "$PKG" android.permission.BLUETOOTH_ADVERTISE || true
-  adb -s "$dev" shell pm grant "$PKG" android.permission.BLUETOOTH_CONNECT || true
-  adb -s "$dev" shell pm grant "$PKG" android.permission.BLUETOOTH_SCAN || true
-  adb -s "$dev" shell pm grant "$PKG" android.permission.ACCESS_FINE_LOCATION || true
-  adb -s "$dev" shell pm grant "$PKG" android.permission.ACCESS_COARSE_LOCATION || true
   adb -s "$dev" shell svc data disable || true
   adb -s "$dev" shell svc wifi enable || true
   adb -s "$dev" shell settings put secure location_mode 3 || true
@@ -34,8 +29,17 @@ for dev in emulator-5554 emulator-5556; do
 done
 
 adb -s emulator-5556 shell am start -n "$ACT" --ez ciNearbyOnly true
-sleep 3
 adb -s emulator-5554 shell am start -n "$ACT" --ez ciNearbyOnly true --ez ciSend true --ez ciSendFile true
+sleep 2
+
+# Reproduce real flow: permissions are granted only after both apps/services are already alive.
+for dev in emulator-5554 emulator-5556; do
+  adb -s "$dev" shell pm grant "$PKG" android.permission.BLUETOOTH_ADVERTISE || true
+  adb -s "$dev" shell pm grant "$PKG" android.permission.BLUETOOTH_CONNECT || true
+  adb -s "$dev" shell pm grant "$PKG" android.permission.BLUETOOTH_SCAN || true
+  adb -s "$dev" shell pm grant "$PKG" android.permission.ACCESS_FINE_LOCATION || true
+  adb -s "$dev" shell am start -n "$ACT" --ez ciNearbyOnly true
+done
 
 passed=0
 for i in $(seq 1 90); do

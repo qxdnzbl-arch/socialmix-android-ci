@@ -43,6 +43,7 @@ public class TransferService extends Service {
 
   private volatile boolean running=true;
   private volatile boolean nearbyStarted=false;
+  private volatile long nearbyStartedAt=0L;
   private TransferDb db;
   private ConnectionsClient nearby;
   private String deviceId;
@@ -85,6 +86,7 @@ public class TransferService extends Service {
     }
 
     timer.scheduleWithFixedDelay(this::flushPending,250,500,TimeUnit.MILLISECONDS);
+    timer.scheduleWithFixedDelay(this::tryStartNearby,3,5,TimeUnit.SECONDS);
   }
 
   public static void start(Context c){
@@ -123,8 +125,15 @@ public class TransferService extends Service {
     sendBroadcast(new Intent(ACTION_CHANGED).setPackage(getPackageName()));
   }
 
+  private synchronized void setLinkState(String state){
+    SharedPreferences p=getSharedPreferences("dual",MODE_PRIVATE);
+    if(state.equals(p.getString("link_state",""))) return;
+    p.edit().putString("link_state",state).apply();
+    changed();
+  }
+
   private boolean hasNearbyPermissions(){
-    if(Build.VERSION.SDK_INT>=32){
+    if(Build.VERSION.SDK_INT>=33){
       return checkSelfPermission(Manifest.permission.BLUETOOTH_ADVERTISE)==PackageManager.PERMISSION_GRANTED
         && checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT)==PackageManager.PERMISSION_GRANTED
         && checkSelfPermission(Manifest.permission.BLUETOOTH_SCAN)==PackageManager.PERMISSION_GRANTED
@@ -133,7 +142,8 @@ public class TransferService extends Service {
     if(Build.VERSION.SDK_INT>=31){
       return checkSelfPermission(Manifest.permission.BLUETOOTH_ADVERTISE)==PackageManager.PERMISSION_GRANTED
         && checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT)==PackageManager.PERMISSION_GRANTED
-        && checkSelfPermission(Manifest.permission.BLUETOOTH_SCAN)==PackageManager.PERMISSION_GRANTED;
+        && checkSelfPermission(Manifest.permission.BLUETOOTH_SCAN)==PackageManager.PERMISSION_GRANTED
+        && checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION)==PackageManager.PERMISSION_GRANTED;
     }
     if(Build.VERSION.SDK_INT>=29){
       return checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION)==PackageManager.PERMISSION_GRANTED;
@@ -142,9 +152,21 @@ public class TransferService extends Service {
   }
 
   private synchronized void tryStartNearby(){
-    if(nearbyStarted||!hasNearbyPermissions()) return;
-
+    if(!hasNearbyPermissions()){
+      setLinkState("permission");
+      return;
+    }
+    long now=System.currentTimeMillis();
+    if(nearbyStarted){
+      if(!endpoints.isEmpty()) return;
+      if(now-nearbyStartedAt<15000) return;
+      try{nearby.stopAdvertising();nearby.stopDiscovery();}catch(Exception ignored){}
+      nearbyStarted=false;
+      requested.clear();
+    }
     nearbyStarted=true;
+    nearbyStartedAt=now;
+    setLinkState("searching");
     Strategy strategy=Strategy.P2P_POINT_TO_POINT;
 
     nearby.startAdvertising(
@@ -154,6 +176,7 @@ public class TransferService extends Service {
       new AdvertisingOptions.Builder().setStrategy(strategy).build()
     ).addOnFailureListener(e->{
       nearbyStarted=false;
+      setLinkState("searching");
       Log.w("DualNearby","advertise "+e);
     });
 
@@ -163,16 +186,22 @@ public class TransferService extends Service {
       new DiscoveryOptions.Builder().setStrategy(strategy).build()
     ).addOnFailureListener(e->{
       nearbyStarted=false;
+      setLinkState("searching");
       Log.w("DualNearby","discover "+e);
     });
   }
 
   private final EndpointDiscoveryCallback discovery=new EndpointDiscoveryCallback(){
     @Override public void onEndpointFound(String endpointId,DiscoveredEndpointInfo info){
-      Log.i("DualNearby","found "+endpointId);
-      if(requested.add(endpointId)){
-        nearby.requestConnection(deviceId,endpointId,lifecycle)
-          .addOnFailureListener(e->requested.remove(endpointId));
+      String peerName=info.getEndpointName()==null?"":info.getEndpointName();
+      Log.i("DualNearby","found "+endpointId+" peer="+peerName);
+      if(deviceId.compareTo(peerName)<0){
+        requestPeer(endpointId);
+      }else{
+        io.execute(()->{
+          try{Thread.sleep(1800);}catch(InterruptedException ignored){}
+          if(running&&!endpoints.contains(endpointId)) requestPeer(endpointId);
+        });
       }
     }
 
@@ -181,8 +210,19 @@ public class TransferService extends Service {
     }
   };
 
+  private void requestPeer(String endpointId){
+    if(!requested.add(endpointId)) return;
+    setLinkState("connecting");
+    nearby.requestConnection(deviceId,endpointId,lifecycle)
+      .addOnFailureListener(e->{
+        requested.remove(endpointId);
+        setLinkState("searching");
+      });
+  }
+
   private final ConnectionLifecycleCallback lifecycle=new ConnectionLifecycleCallback(){
     @Override public void onConnectionInitiated(String endpointId,ConnectionInfo info){
+      setLinkState("connecting");
       nearby.acceptConnection(endpointId,payloads)
         .addOnFailureListener(e->requested.remove(endpointId));
     }
@@ -191,6 +231,7 @@ public class TransferService extends Service {
       if(resolution.getStatus().isSuccess()){
         Log.i("DualNearby","connected "+endpointId);
         endpoints.add(endpointId);
+        setLinkState("nearby");
         io.execute(TransferService.this::flushPending);
       }else{
         requested.remove(endpointId);
@@ -202,6 +243,9 @@ public class TransferService extends Service {
       requested.remove(endpointId);
       outgoing.clear();
       inFlight.clear();
+      nearbyStarted=false;
+      setLinkState("searching");
+      io.execute(TransferService.this::tryStartNearby);
     }
   };
 
