@@ -1,0 +1,125 @@
+name: Pocket Android Real Acceptance
+
+on:
+  push:
+    branches: [pocket-fix-ci]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-real-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: pocket-fix-ci
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+      - name: Build APK from source
+        run: gradle --no-daemon :pocketapp:assembleDebug --stacktrace
+      - name: Enable KVM
+        run: |
+          if [ -e /dev/kvm ]; then sudo chmod 666 /dev/kvm; fi
+      - name: Real Android install launch and interaction
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          target: google_apis
+          profile: pixel_6
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none
+          script: |
+            set -euo pipefail
+            APK=pocketapp/build/outputs/apk/debug/pocketapp-debug.apk
+            adb uninstall com.nzbl.pocket.clean || true
+            adb logcat -c
+            adb install "$APK"
+            adb shell am start -W -n com.nzbl.pocket.clean/.MainActivity
+            sleep 3
+            adb shell pidof com.nzbl.pocket.clean
+
+            mkdir -p deliverable
+            adb exec-out screencap -p > deliverable/01-home.png
+            adb shell uiautomator dump /sdcard/home.xml >/dev/null
+            adb pull /sdcard/home.xml deliverable/home.xml >/dev/null
+
+            python3 - <<'PY'
+            import re, xml.etree.ElementTree as ET
+            root=ET.parse('deliverable/home.xml').getroot()
+            texts=[n.attrib.get('text','') for n in root.iter('node')]
+            joined='\n'.join(texts)
+            required=['随手存','把需要的，先收好。','记一条','新建分类']
+            for s in required:
+                assert any(s in t for t in texts), (s,texts)
+            forbidden=['理发','提示词','日常','记理发要求','存一段提示词','给理发师看']
+            for s in forbidden:
+                assert s not in joined, (s,joined)
+            def center_for(substr):
+                for n in root.iter('node'):
+                    if substr in n.attrib.get('text',''):
+                        m=re.match(r'\[(\d+),(\d+)\]\[(\d+),(\d+)\]',n.attrib.get('bounds',''))
+                        if m:
+                            x1,y1,x2,y2=map(int,m.groups()); return (x1+x2)//2,(y1+y2)//2
+                raise AssertionError('node not found '+substr)
+            print(*center_for('记一条'))
+            PY
+            read X Y < <(python3 - <<'PY'
+            import re, xml.etree.ElementTree as ET
+            root=ET.parse('deliverable/home.xml').getroot()
+            for n in root.iter('node'):
+                if '记一条' in n.attrib.get('text',''):
+                    m=re.match(r'\[(\d+),(\d+)\]\[(\d+),(\d+)\]',n.attrib['bounds'])
+                    x1,y1,x2,y2=map(int,m.groups()); print((x1+x2)//2,(y1+y2)//2); break
+            PY
+            )
+            adb shell input tap "$X" "$Y"
+            sleep 1
+            adb shell uiautomator dump /sdcard/editor.xml >/dev/null
+            adb pull /sdcard/editor.xml deliverable/editor.xml >/dev/null
+            grep -q '新记录' deliverable/editor.xml
+            grep -q '保存' deliverable/editor.xml
+            grep -q '添加图片' deliverable/editor.xml
+            adb exec-out screencap -p > deliverable/02-editor.png
+            adb shell input keyevent 4
+            sleep 1
+
+            adb shell uiautomator dump /sdcard/home2.xml >/dev/null
+            adb pull /sdcard/home2.xml deliverable/home2.xml >/dev/null
+            read CX CY < <(python3 - <<'PY'
+            import re, xml.etree.ElementTree as ET
+            root=ET.parse('deliverable/home2.xml').getroot()
+            for n in root.iter('node'):
+                if '新建分类' in n.attrib.get('text',''):
+                    m=re.match(r'\[(\d+),(\d+)\]\[(\d+),(\d+)\]',n.attrib['bounds'])
+                    x1,y1,x2,y2=map(int,m.groups()); print((x1+x2)//2,(y1+y2)//2); break
+            PY
+            )
+            adb shell input tap "$CX" "$CY"
+            sleep 1
+            adb shell uiautomator dump /sdcard/category.xml >/dev/null
+            adb pull /sdcard/category.xml deliverable/category.xml >/dev/null
+            grep -q '分类名称' deliverable/category.xml
+            adb exec-out screencap -p > deliverable/03-category.png
+
+            if adb logcat -d | grep -E 'FATAL EXCEPTION|Process: com.nzbl.pocket.clean' > deliverable/fatal.txt; then
+              cat deliverable/fatal.txt
+              exit 1
+            fi
+            cp "$APK" deliverable/随手存_真实验收版.apk
+            sha256sum deliverable/随手存_真实验收版.apk > deliverable/SHA256.txt
+      - name: Upload only accepted result
+        uses: actions/upload-artifact@v4
+        with:
+          name: Pocket-Real-Accepted
+          path: deliverable/
+          if-no-files-found: error
+          retention-days: 14
