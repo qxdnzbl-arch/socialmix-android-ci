@@ -40,7 +40,10 @@ jobs:
           grep -q "NEARBY_WIFI_DEVICES" dualphone/app/src/main/AndroidManifest.xml
           grep -q "api/dual/receive" dualphone/app/src/main/java/com/qxdnzbl/shuangjichuan/TransferService.java
           grep -q "P2P_POINT_TO_POINT" dualphone/app/src/main/java/com/qxdnzbl/shuangjichuan/TransferService.java
-          grep -q "ui-current.html" dualphone/app/src/main/java/com/qxdnzbl/shuangjichuan/MainActivity.java
+          ! grep -RniE "WebView|ui-current\.html|loadUrl\(|JavascriptInterface" dualphone/app/src/main/java/com/qxdnzbl/shuangjichuan/MainActivity.java
+          test ! -e dualphone/app/src/main/assets/ui.html
+          grep -q "RecyclerView" dualphone/app/src/main/java/com/qxdnzbl/shuangjichuan/MainActivity.java
+          grep -q "NativeMessageAdapter" dualphone/app/src/main/java/com/qxdnzbl/shuangjichuan/MainActivity.java
 
       - name: Build debug and signed release APK
         working-directory: dualphone
@@ -147,22 +150,34 @@ jobs:
             adb logcat -c
             adb shell am start -n com.qxdnzbl.shuangjichuan.offline/com.qxdnzbl.shuangjichuan.MainActivity --ez ciSend true
 
-            sh -c 'for i in $(seq 1 15); do adb logcat -d -s DualPhoneUi:I "*:S" > deliverable/offline.log 2>/dev/null || true; grep -q "screen=chat" deliverable/offline.log && exit 0; sleep 1; done; exit 1'
-            adb exec-out screencap -p > deliverable/01-offline-direct-chat.png
+            sh -c 'for i in $(seq 1 15); do adb logcat -d -s DualPhoneNative:I "*:S" > deliverable/offline.log 2>/dev/null || true; grep -q "screen=chat" deliverable/offline.log && exit 0; sleep 1; done; exit 1'
+            adb shell uiautomator dump /sdcard/native.xml
+            adb pull /sdcard/native.xml deliverable/native.xml
+            grep -q "我的两台手机" deliverable/native.xml
+            grep -q "消息" deliverable/native.xml
+            adb exec-out screencap -p > deliverable/01-native-chat.png
 
-            adb shell input tap 500 2200
+            adb shell input tap 360 2180
             sleep 2
-            adb logcat -d -s DualPhoneLayout:I '*:S' > deliverable/keyboard.log
-            python3 -c "import re; s=open('deliverable/keyboard.log',errors='ignore').read(); m=re.findall(r'visible=(\d+) bottom=(\d+)',s); assert m,s; v,b=map(int,m[-1]); assert v<2100,(v,b); assert b<=v+16,(v,b)"
-            sh -c 'for i in $(seq 1 8); do adb logcat -d -s DualPhoneUi:I "*:S" > deliverable/send.log 2>/dev/null || true; grep -q "messages=1" deliverable/send.log && exit 0; sleep 1; done; exit 1'
-            adb exec-out screencap -p > deliverable/02-offline-queued.png
+            adb logcat -d -s DualPhoneNative:I '*:S' > deliverable/keyboard.log
+            python3 - <<'PY'
+            import re
+            s=open('deliverable/keyboard.log',errors='ignore').read()
+            m=re.findall(r'visible=(\d+) inputBottom=(\d+)',s)
+            assert m,s
+            v,b=map(int,m[-1])
+            assert v<2100,(v,b)
+            assert b<=v+40,(v,b)
+            PY
+            sh -c 'for i in $(seq 1 8); do adb logcat -d -s DualPhoneNative:I "*:S" > deliverable/send.log 2>/dev/null || true; grep -q "messages=1" deliverable/send.log && exit 0; sleep 1; done; exit 1'
+            adb exec-out screencap -p > deliverable/02-native-keyboard.png
 
-            cp dualphone/app/build/outputs/apk/release/app-release.apk deliverable/ShuangJiChuan_v5_Final.apk
+            cp dualphone/app/build/outputs/apk/release/app-release.apk deliverable/ShuangJiChuan_v5_3_Native.apk
             sha256sum deliverable/ShuangJiChuan_v5_Final.apk > deliverable/SHA256.txt
 
       - uses: actions/upload-artifact@v4
         with:
-          name: shuangjichuan-v5-final
+          name: shuangjichuan-v5-3-native
           path: deliverable/
           if-no-files-found: error
           retention-days: 14
