@@ -48,7 +48,8 @@ jobs:
         run: sudo chmod 666 /dev/kvm
       - uses: reactivecircus/android-emulator-runner@v2
         with:
-          api-level: 35
+          api-level: 30
+          emulator-boot-timeout: 180
           arch: x86_64
           target: default
           profile: pixel_5
