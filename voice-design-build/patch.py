@@ -1,6 +1,6 @@
 from pathlib import Path
 
-root = Path(__file__).resolve().parents[2]
+root = Path(__file__).resolve().parents[1]
 main = root / "app/src/main/java/com/qwen/tts/android/MainActivity.kt"
 gradle = root / "app/build.gradle.kts"
 
