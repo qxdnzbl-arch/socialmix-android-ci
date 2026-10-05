@@ -95,9 +95,25 @@ jobs:
           grep -o 'data-perf-ok="[^"]*"\|data-calls="[^"]*"\|data-rows="[^"]*"\|data-scrollable="[^"]*"\|data-scrolled="[^"]*"\|data-search="[^"]*"' /tmp/perf-dom.txt > /tmp/perf-summary.txt || true
           cat /tmp/perf-summary.txt
           grep -q 'data-perf-ok="1"' /tmp/perf-dom.txt
+      - name: Visual screenshots
+        run: |
+          set -eux
+          CHROME=$(command -v google-chrome || command -v chromium || command -v chromium-browser)
+          "$CHROME" --headless --no-sandbox --disable-gpu --window-size=691,1536 --hide-scrollbars --allow-file-access-from-files --virtual-time-budget=2500 --screenshot=/tmp/chat-default.png file:///tmp/dualphone-perf.html
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('/tmp/dualphone-perf.html')
+          s=p.read_text()
+          s=s.replace('</body>', '<script>setTimeout(()=>document.getElementById("backgroundToggle")?.click(),600)</script></body>')
+          Path('/tmp/dualphone-sheet.html').write_text(s)
+          PY
+          "$CHROME" --headless --no-sandbox --disable-gpu --window-size=691,1536 --hide-scrollbars --allow-file-access-from-files --virtual-time-budget=2500 --screenshot=/tmp/chat-background-sheet.png file:///tmp/dualphone-sheet.html
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: dual-phone-ui-v9-perf
-          path: /tmp/perf-summary.txt
+          name: dual-phone-ui-v12-review
+          path: |
+            /tmp/perf-summary.txt
+            /tmp/chat-default.png
+            /tmp/chat-background-sheet.png
           if-no-files-found: error
