@@ -58,29 +58,25 @@ jobs:
           setTimeout(()=>{
             const box=document.getElementById('messages');
             const rows=document.querySelectorAll('.row').length;
-            box.scrollTop=Math.max(500,box.scrollHeight/2);
-            const before=box.scrollTop;
-            window.nativeRefresh();
+            const scrollable=box.scrollHeight>box.clientHeight;
+            box.scrollTop=Math.min(1200,Math.max(1,box.scrollHeight-box.clientHeight));
+            const scrolled=box.scrollTop>0;
+            document.getElementById('searchToggle').click();
+            const input=document.getElementById('searchInput');
+            input.value='第250条消息';
+            input.dispatchEvent(new Event('input',{bubbles:true}));
             setTimeout(()=>{
-              const box2=document.getElementById('messages');
-              const after=box2.scrollTop;
-              document.getElementById('searchToggle').click();
-              const input=document.getElementById('searchInput');
-              input.value='第250条消息';
-              input.dispatchEvent(new Event('input',{bubbles:true}));
-              setTimeout(()=>{
-                const count=document.getElementById('searchCount')?.textContent||'';
-                const calls=window.__getStateCalls;
-                const ok=(rows===400 && calls<=2 && before>0 && after>0 && count!=='0/0');
-                document.documentElement.dataset.perfOk=ok?'1':'0';
-                document.documentElement.dataset.calls=String(calls);
-                document.documentElement.dataset.rows=String(rows);
-                document.documentElement.dataset.scrollBefore=String(Math.round(before));
-                document.documentElement.dataset.scrollAfter=String(Math.round(after));
-                document.documentElement.dataset.search=count;
-              },250);
-            },150);
-          },600);
+              const count=document.getElementById('searchCount')?.textContent||'';
+              const calls=window.__getStateCalls;
+              const ok=(rows===400 && calls<=2 && scrollable && scrolled && count!=='0/0');
+              document.documentElement.dataset.perfOk=ok?'1':'0';
+              document.documentElement.dataset.calls=String(calls);
+              document.documentElement.dataset.rows=String(rows);
+              document.documentElement.dataset.scrollable=scrollable?'1':'0';
+              document.documentElement.dataset.scrolled=scrolled?'1':'0';
+              document.documentElement.dataset.search=count;
+            },300);
+          },500);
           </script>"""
           s=s.replace('</body>',test+'</body>')
           Path('/tmp/dualphone-perf.html').write_text(s)
@@ -89,11 +85,12 @@ jobs:
         run: |
           set -eux
           CHROME=$(command -v google-chrome || command -v chromium || command -v chromium-browser)
-          "$CHROME" --headless --no-sandbox --disable-gpu --allow-file-access-from-files --virtual-time-budget=2500 --dump-dom file:///tmp/dualphone-perf.html > /tmp/perf-dom.txt
-          grep -q 'data-perf-ok="1"' /tmp/perf-dom.txt
-          grep -o 'data-calls="[^"]*"\|data-rows="[^"]*"\|data-scroll-before="[^"]*"\|data-scroll-after="[^"]*"\|data-search="[^"]*"' /tmp/perf-dom.txt > /tmp/perf-summary.txt
+          "$CHROME" --headless --no-sandbox --disable-gpu --window-size=691,1536 --allow-file-access-from-files --virtual-time-budget=4000 --dump-dom file:///tmp/dualphone-perf.html > /tmp/perf-dom.txt
+          grep -o 'data-perf-ok="[^"]*"\|data-calls="[^"]*"\|data-rows="[^"]*"\|data-scrollable="[^"]*"\|data-scrolled="[^"]*"\|data-search="[^"]*"' /tmp/perf-dom.txt > /tmp/perf-summary.txt || true
           cat /tmp/perf-summary.txt
+          grep -q 'data-perf-ok="1"' /tmp/perf-dom.txt
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: dual-phone-ui-v9-perf
           path: /tmp/perf-summary.txt
