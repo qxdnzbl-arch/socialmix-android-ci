@@ -8,7 +8,7 @@ import java.util.*;
 import java.util.zip.*;
 
 public final class Store {
-    public static final String HAIR="hair", PROMPT="prompt", DAILY="daily";
+    public static final String UNFILED="";
     public final Context context;
     public final File photos;
     public final AtomicFile file;
@@ -23,7 +23,7 @@ public final class Store {
         public JSONObject json() throws JSONException {return new JSONObject().put("id",id).put("name",name);}
     }
     public static class Note {
-        public String id=UUID.randomUUID().toString(), category=HAIR,title="",body="";
+        public String id=UUID.randomUUID().toString(), category=UNFILED,title="",body="";
         public long updated=System.currentTimeMillis();
         public boolean pinned=false,deleted=false;
         public ArrayList<String> images=new ArrayList<>();
@@ -45,20 +45,25 @@ public final class Store {
         context=c;photos=new File(c.getFilesDir(),"photos");photos.mkdirs();file=new AtomicFile(new File(c.getFilesDir(),"collection.json"));
         if(file.getBaseFile().exists()||new File(file.getBaseFile()+".bak").exists()){
             try{parse(new JSONObject(new String(read(file.openRead(),16*1024*1024),"UTF-8")));}catch(Exception e){ready=false;loadError="记录未能读取。原文件已保留，请先导出备份。";}
-        }else{categories.add(new Category(HAIR,"理发"));categories.add(new Category(PROMPT,"提示词"));categories.add(new Category(DAILY,"日常"));}
+        }
     }
     public JSONObject json() throws JSONException {
         JSONArray cs=new JSONArray(),ns=new JSONArray();for(Category c:categories)cs.put(c.json());for(Note n:notes)ns.put(n.json());
-        return new JSONObject().put("format","suishoucun").put("version",1).put("categories",cs).put("notes",ns).put("draft",draft==null?JSONObject.NULL:draft.json());
+        return new JSONObject().put("format","suishoucun").put("version",1).put("categoryMode","custom").put("categories",cs).put("notes",ns).put("draft",draft==null?JSONObject.NULL:draft.json());
     }
     public void parse(JSONObject j) throws JSONException {
         if(!"suishoucun".equals(j.getString("format"))||j.getInt("version")!=1)throw new JSONException("备份版本不匹配");
         ArrayList<Category> cs=new ArrayList<>();ArrayList<Note> ns=new ArrayList<>();HashSet<String> ids=new HashSet<>();
         JSONArray a=j.getJSONArray("categories"),b=j.getJSONArray("notes");
-        for(int i=0;i<a.length();i++){JSONObject v=a.getJSONObject(i);String id=v.getString("id"),name=v.getString("name").trim();if(name.isEmpty()||!ids.add(id))throw new JSONException("分类数据无效");cs.add(new Category(id,name));}
-        if(cs.isEmpty())throw new JSONException("分类数据为空");
-        HashSet<String> noteIds=new HashSet<>();for(int i=0;i<b.length();i++){Note n=Note.from(b.getJSONObject(i));if(!ids.contains(n.category)||!noteIds.add(n.id))throw new JSONException("记录数据无效");ns.add(n);}
-        Note d=j.isNull("draft")?null:Note.from(j.getJSONObject("draft"));if(d!=null&&!ids.contains(d.category))throw new JSONException("草稿分类无效");
+        for(int i=0;i<a.length();i++){JSONObject v=a.getJSONObject(i);String id=v.getString("id"),name=v.getString("name").trim();if(id.isEmpty()||name.isEmpty()||!ids.add(id))throw new JSONException("分类数据无效");cs.add(new Category(id,name));}
+        HashSet<String> noteIds=new HashSet<>();for(int i=0;i<b.length();i++){Note n=Note.from(b.getJSONObject(i));if((!UNFILED.equals(n.category)&&!ids.contains(n.category))||!noteIds.add(n.id))throw new JSONException("记录数据无效");ns.add(n);}
+        Note d=j.isNull("draft")?null:Note.from(j.getJSONObject("draft"));if(d!=null&&!UNFILED.equals(d.category)&&!ids.contains(d.category))throw new JSONException("草稿分类无效");
+        if(!"custom".equals(j.optString("categoryMode"))){
+            HashSet<String> removed=new HashSet<>();
+            Iterator<Category> it=cs.iterator();while(it.hasNext()){Category c=it.next();if(("hair".equals(c.id)&&"理发".equals(c.name))||("prompt".equals(c.id)&&"提示词".equals(c.name))||("daily".equals(c.id)&&"日常".equals(c.name))){removed.add(c.id);it.remove();}}
+            for(Note n:ns)if(removed.contains(n.category))n.category=UNFILED;
+            if(d!=null&&removed.contains(d.category))d.category=UNFILED;
+        }
         categories.clear();categories.addAll(cs);notes.clear();notes.addAll(ns);draft=d;
     }
     public void save() throws Exception {
@@ -71,7 +76,7 @@ public final class Store {
         try{action.run();save();return true;}catch(Exception e){try{parse(old);}catch(Exception ignored){}return false;}
     }
     public Note find(String id){for(Note n:notes)if(n.id.equals(id))return n;return null;}
-    public String categoryName(String id){for(Category c:categories)if(c.id.equals(id))return c.name;return "日常";}
+    public String categoryName(String id){for(Category c:categories)if(c.id.equals(id))return c.name;return "未分类";}
     public void exportZip(OutputStream output) throws Exception {
         ZipOutputStream z=new ZipOutputStream(output);
         try {
@@ -90,7 +95,7 @@ public final class Store {
             HashMap<String,String> imageMap=new HashMap<>();ArrayList<File> added=new ArrayList<>();
             ArrayList<Note> check=new ArrayList<>(staged.notes);if(staged.draft!=null)check.add(staged.draft);
             for(Note n:check)for(String name:n.images){File f=new File(temp,name);if(!f.isFile())throw new IOException("备份缺少图片");}
-            HashMap<String,String> cats=new HashMap<>();JSONObject old=json();int count=0;
+            HashMap<String,String> cats=new HashMap<>();cats.put(UNFILED,UNFILED);JSONObject old=json();int count=0;
             try{
                 for(Category c:staged.categories){String id=null;for(Category mine:categories)if(mine.name.equals(c.name)){id=mine.id;break;}if(id==null){id=UUID.randomUUID().toString();categories.add(new Category(id,c.name));}cats.put(c.id,id);}
                 for(Note n:staged.notes){Note existing=find(n.id);if(existing!=null&&existing.updated>=n.updated)continue;for(int i=0;i<n.images.size();i++){String name=n.images.get(i);String mapped=imageMap.get(name);if(mapped==null){mapped=UUID.randomUUID()+".img";File target=new File(photos,mapped);copy(new FileInputStream(new File(temp,name)),new FileOutputStream(target),64*1024*1024);added.add(target);imageMap.put(name,mapped);}n.images.set(i,mapped);}n.category=cats.get(n.category);if(existing!=null)notes.remove(existing);notes.add(n);count++;}

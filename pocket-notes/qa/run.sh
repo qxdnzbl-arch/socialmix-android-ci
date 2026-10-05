@@ -2,11 +2,26 @@
 set -euo pipefail
 cd pocket-notes
 mkdir -p out/qa
-adb install -r out/Suishoucun.apk
+adb install -r build/previous/out/Suishoucun.apk
 adb install -r out/Suishoucun-tests.apk
 adb shell settings put secure show_ime_with_hard_keyboard 1
 adb push out/reference-fixture.png /sdcard/Download/reference-fixture.png
 adb shell am broadcast -a android.intent.action.MEDIA_SCANNER_SCAN_FILE -d file:///sdcard/Download/reference-fixture.png
+adb shell am instrument -w -e stage legacy com.nzbl.pocket.test/com.nzbl.pocket.CategoryUpgrade | tee out/upgrade-seed.txt
+adb install -r out/Suishoucun.apk
+adb shell am instrument -w -e stage updated com.nzbl.pocket.test/com.nzbl.pocket.CategoryUpgrade | tee out/upgrade-acceptance.txt
+adb pull /sdcard/Android/data/com.nzbl.pocket/files/qa/ out/upgrade-qa/
+python3 - <<'PY'
+from pathlib import Path
+import json
+for name in ['upgrade-seed.json','upgrade-acceptance.json']:
+ p=list(Path('out/upgrade-qa').rglob(name))
+ assert len(p)==1, 'Missing upgrade result: '+name
+ r=json.loads(p[0].read_text())
+ assert r['passed'] is True
+ print(name, len(r['checks']))
+PY
+adb shell pm clear com.nzbl.pocket
 adb shell am instrument -w com.nzbl.pocket.test/com.nzbl.pocket.Acceptance | tee out/instrumentation.txt
 adb pull /sdcard/Android/data/com.nzbl.pocket/files/qa/ out/qa/
 python3 - <<'PY'
@@ -37,8 +52,6 @@ adb shell wm density 320
 adb shell am force-stop com.nzbl.pocket
 adb shell am start -n com.nzbl.pocket/.MainActivity
 sleep 1
-adb shell screencap -p /sdcard/small-screen.png
-adb pull /sdcard/small-screen.png out/qa/small-screen.png
 adb shell uiautomator dump /sdcard/small.xml
 adb pull /sdcard/small.xml out/qa/small-screen.xml
 python3 - <<'PY'
@@ -52,6 +65,8 @@ for title in ['分类','＋  记一条']:
  assert 0<=box[0]<box[2]<=720 and 0<=box[1]<box[3]<=1280, (title,box)
 print('SMALL SCREEN BOUNDS PASSED')
 PY
+adb shell screencap -p /sdcard/small-screen.png
+adb pull /sdcard/small-screen.png out/qa/small-screen.png
 adb shell wm size reset
 adb shell wm density reset
 adb logcat -d -s AndroidRuntime:E > out/qa/crash-log.txt

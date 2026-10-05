@@ -6,6 +6,7 @@ on:
   workflow_dispatch:
 permissions:
   contents: read
+  actions: read
 jobs:
   native-acceptance:
     runs-on: ubuntu-latest
@@ -28,6 +29,15 @@ jobs:
         with:
           path: pocket-notes/build/pocket-signing.jks
           key: suishoucun-signing-v1
+      - name: Retrieve delivered release for update preservation test
+        uses: actions/download-artifact@v4
+        with:
+          name: Suishoucun-Android
+          run-id: 37325204455
+          github-token: ${{ github.token }}
+          path: pocket-notes/build/previous
+      - name: Ensure original signing key
+        run: cp pocket-notes/build/previous/build/pocket-signing.jks pocket-notes/build/pocket-signing.jks
       - name: Build native app and acceptance instrumentation
         run: |
           bash pocket-notes/build.sh
