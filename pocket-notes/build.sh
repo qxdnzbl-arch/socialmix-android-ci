@@ -28,4 +28,9 @@ if [ -d test/src ]; then
   "$build_tools/zipalign" -f 4 build/test-unsigned.apk build/test-aligned.apk
   "$build_tools/apksigner" sign --ks build/pocket-signing.jks --ks-pass pass:pocket-build --out out/Suishoucun-tests.apk build/test-aligned.apk
 fi
-sha256sum out/Suishoucun.apk > out/SHA256.txt
+python3 - <<'PY' > out/SHA256.txt
+from pathlib import Path
+import hashlib
+apk = Path('out/Suishoucun.apk')
+print(hashlib.sha256(apk.read_bytes()).hexdigest() + '  ' + str(apk))
+PY

@@ -9,8 +9,8 @@ permissions:
   actions: read
 jobs:
   native-acceptance:
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
+    runs-on: macos-15-intel
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
@@ -44,6 +44,7 @@ jobs:
           cd pocket-notes
           python3 qa/fixture.py
       - name: Enable accelerated Android
+        if: runner.os == 'Linux'
         run: sudo chmod 666 /dev/kvm
       - uses: reactivecircus/android-emulator-runner@v2
         with:
