@@ -174,6 +174,7 @@ jobs:
             sha256sum deliverable/ShuangJiChuan_v5_Final.apk > deliverable/SHA256.txt
 
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: shuangjichuan-v5-3-native
           path: deliverable/
