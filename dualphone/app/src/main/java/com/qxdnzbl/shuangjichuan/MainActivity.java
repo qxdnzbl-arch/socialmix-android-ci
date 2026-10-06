@@ -681,7 +681,7 @@ public class MainActivity extends Activity implements NativeMessageAdapter.Callb
     File f=new File(getFilesDir(),"chat-background.jpg");
     if(f.isFile())box.addView(settingRow("清除背景","恢复默认界面","清除",v->{clearBackground();d.dismiss();}));
 
-    box.addView(settingRow("应用更新", "当前版本 "+BuildConfig.VERSION_NAME, "检查更新", v->{d.dismiss();updater.check(true);}));
+    box.addView(settingRow("应用更新", "当前版本 "+BuildConfig.VERSION_NAME.replace("-native","").replace("-preview",""), "检查更新", v->{d.dismiss();updater.check(true);}));
 
     d.setContentView(box);
     Window w=d.getWindow();

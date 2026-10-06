@@ -1,4 +1,4 @@
-import base64,socket,urllib.request,subprocess,pathlib,time,json,xml.etree.ElementTree as ET,re,sqlite3,sys,os,shutil,hashlib
+import shlex,base64,socket,urllib.request,subprocess,pathlib,time,json,xml.etree.ElementTree as ET,re,sqlite3,sys,os,shutil,hashlib
 ADB=shutil.which('adb') or '/tmp/dualphone-sdk/platform-tools/adb'; PKG='com.qxdnzbl.shuangjichuan.offline';COMP=PKG+'/com.qxdnzbl.shuangjichuan.MainActivity'
 PROJECT=pathlib.Path(__file__).resolve().parents[1];ROOT=PROJECT.parent;OUT=PROJECT/'acceptance';OUT.mkdir(exist_ok=True)
 BASELINE=pathlib.Path(os.environ['BASELINE_APK'])
@@ -162,7 +162,7 @@ def core():
  tap(node(t,desc='图片：fixture-photo.png'));time.sleep(.5);t,_=ui('photo-viewer');record('native_photo_viewer_opens',optional(t,desc='图片预览') is not None and optional(t,text='保存到下载') is not None)
  screen('photo-viewer');shell('input','tap','500','750');shell('input','tap','500','750');shell('input','swipe','700','850','430','650','300');t,_=ui('photo-zoom');record('photo_zoom_pan_remains_responsive',optional(t,desc='关闭图片') is not None)
  tap(node(t,text='保存到下载'));time.sleep(.6)
- paths=shell('find','/sdcard/Download','-type','f','-name','fixture-photo*').splitlines();record('photo_save_keeps_original_bytes',len(paths)>=2 and any(adb('exec-out','cat',p)==photo for p in paths if p!='/sdcard/Download/fixture-photo.png'))
+ paths=shell('find','/sdcard/Download','-type','f','-name','fixture-photo*').splitlines();record('photo_save_keeps_original_bytes',len(paths)>=2 and any(adb('exec-out','cat',shlex.quote(p))==photo for p in paths if p!='/sdcard/Download/fixture-photo.png'))
  t,_=ui('photo-save');tap(node(t,desc='关闭图片'));t,_=ui('photo-close');record('viewer_returns_to_chat',optional(t,text='我的两台手机') is not None)
  # Real file picker selection must enqueue and land at latest, even from history.
  for i in range(3):shell('input','swipe','270','400','270','1100','150')
@@ -185,15 +185,23 @@ def core():
  record('background_controls_removed',optional(t,text='选择照片') is not None and not any(n.get('class')=='android.widget.SeekBar' or n.get('text') in ('模糊','柔化','背景只保存在这台手机，没有预设背景。') for n in t.iter('node')))
  record('update_entry_visible',optional(t,text='检查更新') is not None);screen('background-dialog')
  tap(node(t,text='清除'));time.sleep(.5);t,_=ui('background-cleared');record('clear_background_returns',optional(t,text='我的两台手机') is not None)
- tap(node(t,desc='聊天背景'));t,_=ui('cancel-check-settings');tap(node(t,text='检查更新'));time.sleep(.4);t,_=ui('cancel-check');tap(node(t,text='取消'));t,_=ui('cancel-check-return');record('stalled_update_check_can_cancel_back_to_chat',optional(t,text='我的两台手机') is not None)
+ for attempt in range(3):
+  tap(node(t,desc='聊天背景'));t,_=ui('cancel-check-settings');tap(node(t,text='检查更新'));time.sleep(.2);t,_=ui('cancel-check')
+  if optional(t,text='取消') is not None:tap(node(t,text='取消'));break
+  t,_=ui('cancel-retry-chat')
+ else:raise AssertionError('Unable to open cancellable update check')
+ t,_=ui('cancel-check-return');record('stalled_update_check_can_cancel_back_to_chat',optional(t,text='我的两台手机') is not None)
  # Add human-readable demo messages to the test device only, for actual release screenshots.
  insert('demo-1','现在消息终于能跟到最下面了。',mine=True)
  insert('demo-2','收到。图片可以直接点开看。')
- insert('demo-file',None,mine=True,kind='file',name='周末计划.pdf',path='/data/data/'+PKG+'/files/incoming/fixture.bin',size=286720)
+ plan=OUT/'weekend-plan.txt';plan.write_text('周末计划\n听音乐，休息，看一部喜欢的电影。\n',encoding='utf-8')
+ planpath='/data/data/'+PKG+'/files/incoming/weekend-plan.txt';adb('push',str(plan),planpath);shell('chown',uid+':'+uid,planpath);shell('restorecon',planpath)
+ insert('demo-file',None,mine=True,kind='file',name='周末计划.txt',path=planpath,size=plan.stat().st_size)
  insert('demo-3','这个深灰实底先试试看。\n输入栏也有清楚的边界了。',mine=True)
  t,_=ui('demo-before-update');screen('chat-before-update')
  log=adb('logcat','-d').decode(errors='replace');(OUT/'core-logcat.txt').write_text(log)
  record('no_anr_or_fatal',bool(shell('pidof',PKG).strip()) and re.search(r'ANR in '+re.escape(PKG)+r'|FATAL EXCEPTION',log) is None)
+ tap(edit(t));shell('input','text','Unsent_Update_Draft');shell('input','keyevent','4');time.sleep(.4)
  record('core_acceptance_complete')
  (OUT/'core-result.json').write_text(json.dumps({'passed':True,'checks':len(checks)},indent=2))
 
@@ -213,7 +221,10 @@ def wait_ui(name,predicate,seconds=45):
  raise AssertionError('UI did not reach '+name)
 
 def update():
- allow_update_hosts();t,_=ui('before-update');tap(node(t,desc='聊天背景'));t,_=ui('update-settings');tap(node(t,text='检查更新'));time.sleep(.6);t=wait_ui('update-offer',lambda t:any(n.get('text','').startswith('有新版本') for n in t.iter('node')))
+ allow_update_hosts();shell('input','keyevent','3');time.sleep(.5);shell('am','force-stop',PKG);shell('am','start','-W','-n',COMP)
+ t=wait_ui('automatic-update-offer',lambda t:any(n.get('text','').startswith('有新版本') for n in t.iter('node')))
+ record('automatic_live_update_check',True);tap(node(t,text='稍后'));t,_=ui('update-deferred');record('update_can_be_deferred',optional(t,text='我的两台手机') is not None)
+ tap(node(t,desc='聊天背景'));t,_=ui('update-settings');tap(node(t,text='检查更新'));time.sleep(.6);t=wait_ui('update-offer',lambda t:any(n.get('text','').startswith('有新版本') for n in t.iter('node')))
  record('live_update_offer',any(n.get('text','').startswith('有新版本') for n in t.iter('node')))
  before=database('before-in-app-update').execute('SELECT COUNT(*) FROM messages').fetchone()[0]
  tap(node(t,text='更新'));time.sleep(.6);t=wait_ui('update-downloaded',lambda t:optional(t,text='去允许') is not None or optional(t,text='Update') is not None or optional(t,text='Install') is not None);screen('update-downloaded')
@@ -232,13 +243,19 @@ def update():
  details=shell('dumpsys','package',PKG);record('in_app_update_installs_final_release',('versionCode='+str(expected)+' ') in details)
  after=database('after-in-app-update').execute('SELECT COUNT(*) FROM messages').fetchone()[0];record('in_app_update_keeps_all_history',before==after,before=before,after=after)
  record('updated_app_opens_at_latest',optional(t,text='这个深灰实底先试试看。\n输入栏也有清楚的边界了。') is not None)
- screen('chat-final');tap(edit(t));shell('input','text','Update_Draft');shell('input','keyevent','4');time.sleep(.5);t,_=ui('updated-input');record('final_cursor_exit_and_draft_preserved',edit(t).get('focused')=='false' and edit(t).get('text')=='Update_Draft')
+ record('in_app_update_keeps_unsent_draft',edit(t).get('text')=='Unsent_Update_Draft')
+ record('in_app_update_keeps_photo_bytes',adb('exec-out','cat','/data/data/'+PKG+'/files/incoming/fixture-photo.png')==(OUT/'fixture-photo.png').read_bytes())
+ tap(edit(t));shell('input','keyevent','KEYCODE_MOVE_END');shell('input','keyevent',*['67']*len('Unsent_Update_Draft'));shell('input','text','Update_Draft');shell('input','keyevent','4');time.sleep(.5);t,_=ui('updated-input');record('final_cursor_exit_and_draft_preserved',edit(t).get('focused')=='false' and edit(t).get('text')=='Update_Draft')
  tap(node(t,desc='发送'));time.sleep(.5);t,_=ui('updated-send');record('final_send_goes_to_latest',optional(t,text='Update_Draft') is not None)
  tap(node(t,desc='聊天背景'));t,_=ui('updated-settings');tap(node(t,text='检查更新'));time.sleep(3);t,_=ui('no-new-update');record('current_release_does_not_offer_same_version',not any(n.get('text','').startswith('有新版本') for n in t.iter('node')))
  log=adb('logcat','-d').decode(errors='replace');(OUT/'final-logcat.txt').write_text(log)
  record('download_verified_before_install','verified_version='+str(expected) in log and 'installer_opened' in log)
  record('manual_check_really_confirms_latest','up_to_date='+str(expected) in log)
  record('final_release_alive_no_anr',bool(shell('pidof',PKG).strip()) and re.search(r'ANR in '+re.escape(PKG)+r'|FATAL EXCEPTION',log) is None)
+ # Final screenshot contains only a few test messages. The actual app ships empty and preserves the user's data.
+ sql="DELETE FROM messages WHERE id NOT LIKE 'demo-%'";encoded=base64.b64encode(sql.encode()).decode()
+ shell('env','CLASSPATH=/data/local/tmp/fixture.dex','app_process','/system/bin','FixtureSql','/data/data/'+PKG+'/databases/shuangjichuan.db',encoded);shell('am','broadcast','-a','com.qxdnzbl.shuangjichuan.CHANGED','-p',PKG);time.sleep(.5)
+ t,_=ui('chat-final');screen('chat-final')
  record('all_acceptance_complete')
 
 try:

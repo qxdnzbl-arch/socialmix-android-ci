@@ -29,7 +29,7 @@ final class AppUpdater {
   private final AtomicBoolean busy=new AtomicBoolean();
   private final SharedPreferences prefs;
   private volatile boolean closed;
-  private boolean awaitingPermission;
+  private boolean awaitingPermission,manualWaiting,downloading;
   private AlertDialog activeDialog;
   private volatile boolean cancelled;
   private volatile HttpURLConnection activeConnection;
@@ -50,7 +50,13 @@ final class AppUpdater {
     if(now-prefs.getLong("last_check",0L)>6*60*60*1000L)check(false);
   }
   void check(boolean manual){
-    if(closed||!busy.compareAndSet(false,true)){if(manual)toast("正在检查或下载更新");return;}
+    if(closed)return;
+    if(!busy.compareAndSet(false,true)){
+      if(manual&&!downloading){manualWaiting=true;if(progress==null||!progress.isShowing())showProgress("检查更新","正在检查");}
+      else if(manual)toast("正在下载更新");
+      return;
+    }
+    manualWaiting=manual;downloading=false;
     cancelled=false;
     if(manual)showProgress("检查更新","正在检查");
     io.execute(()->{
@@ -58,15 +64,15 @@ final class AppUpdater {
       try{meta=loadMeta();}catch(Exception e){failure=e;}
       final JSONObject result=meta;final Exception error=failure;
       main.post(()->{
-        busy.set(false);dismissProgress();if(!alive()||cancelled)return;
-        if(error!=null){Log.i("DualPhoneUpdate","check_unavailable");if(manual)toast("暂时无法检查更新，请稍后重试");return;}
+        boolean notify=manual||manualWaiting;manualWaiting=false;busy.set(false);dismissProgress();if(!alive()||cancelled)return;
+        if(error!=null){Log.i("DualPhoneUpdate","check_unavailable");if(notify)toast("暂时无法检查更新，请稍后重试");return;}
         prefs.edit().putLong("last_check",System.currentTimeMillis()).apply();
         int version=result.optInt("versionCode",0);
-        if(version<=BuildConfig.VERSION_CODE){if(manual)toast("已是最新版本");Log.i("DualPhoneUpdate","up_to_date="+BuildConfig.VERSION_CODE);return;}
-        if(!manual&&version==prefs.getInt("offered_version",0)&&System.currentTimeMillis()-prefs.getLong("offered_at",0L)<24*60*60*1000L)return;
+        if(version<=BuildConfig.VERSION_CODE){if(notify)toast("已是最新版本");Log.i("DualPhoneUpdate","up_to_date="+BuildConfig.VERSION_CODE);return;}
+        if(!notify&&version==prefs.getInt("offered_version",0)&&System.currentTimeMillis()-prefs.getLong("offered_at",0L)<24*60*60*1000L)return;
         prefs.edit().putInt("offered_version",version).putLong("offered_at",System.currentTimeMillis()).apply();
         String notes=result.optString("notes","");
-        AlertDialog d=new AlertDialog.Builder(activity).setTitle("有新版本 "+result.optString("versionName"))
+        AlertDialog d=new AlertDialog.Builder(activity).setTitle("有新版本 "+result.optString("versionName").replace("-native", ""))
           .setMessage(notes.isEmpty()?"可在这里下载并更新，聊天和文件会保留。":notes)
           .setNegativeButton("稍后",null).setPositiveButton("更新",(x,w)->download(result)).create();show(d);
       });
@@ -108,6 +114,7 @@ final class AppUpdater {
   }
   private void download(JSONObject meta){
     if(!busy.compareAndSet(false,true))return;
+    downloading=true;
     showProgress("应用更新","正在下载 0%");
     io.execute(()->{
       File dir=new File(activity.getCacheDir(),"updates");dir.mkdirs();
@@ -132,7 +139,7 @@ final class AppUpdater {
       }catch(Exception e){failure=e;part.delete();apk.delete();}
       final Exception error=failure;
       main.post(()->{
-        busy.set(false);dismissProgress();if(!alive()||cancelled)return;
+        downloading=false;busy.set(false);dismissProgress();if(!alive()||cancelled)return;
         if(error!=null){Log.i("DualPhoneUpdate","download_rejected "+error.getClass().getSimpleName());toast("更新未完成，请稍后重试");return;}
         pending=apk;pendingMeta=meta;requestInstall();
       });
