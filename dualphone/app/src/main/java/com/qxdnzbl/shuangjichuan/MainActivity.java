@@ -140,6 +140,19 @@ public class MainActivity extends Activity implements NativeMessageAdapter.Callb
     LinearLayout page=new LinearLayout(this);
     page.setOrientation(LinearLayout.VERTICAL);
     root.addView(page,new FrameLayout.LayoutParams(-1,-1));
+    page.setOnApplyWindowInsetsListener((v,insets)->{
+      int top=0,bottom=0;
+      if(Build.VERSION.SDK_INT>=30){
+        android.graphics.Insets bars=insets.getInsets(WindowInsets.Type.systemBars());
+        top=bars.top; bottom=bars.bottom;
+      }else{
+        top=insets.getSystemWindowInsetTop();
+        bottom=insets.getSystemWindowInsetBottom();
+      }
+      v.setPadding(0,top,0,bottom);
+      return insets;
+    });
+    page.requestApplyInsets();
 
     page.addView(buildHeader(),new LinearLayout.LayoutParams(-1,-2));
 
