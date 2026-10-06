@@ -95,11 +95,12 @@ public class MainActivity extends Activity {
     boolean commit(Runnable r){if(store.change(r))return true;error("保存失败，原记录仍保留。请检查手机剩余空间后再试。");return false;}
 
     void mainHeader(String mode){
-        LinearLayout switcher=row();switcher.setPadding(dp(20),dp(8),dp(12),dp(4));
-        boolean homeActive="home".equals(mode),albumActive="album".equals(mode);
-        TextView notes=text("记录",homeActive?18:17,homeActive?ACCENT:MUTED,homeActive);notes.setGravity(Gravity.CENTER);notes.setPadding(dp(13),dp(8),dp(13),dp(8));notes.setContentDescription("切换到记录");notes.setOnClickListener(v->{if(!"home".equals(screen))home();});switcher.addView(notes,lp(-2,44));
-        TextView album=text("相册",albumActive?18:17,albumActive?ACCENT:MUTED,albumActive);album.setGravity(Gravity.CENTER);album.setPadding(dp(13),dp(8),dp(13),dp(8));album.setContentDescription("切换到相册");album.setOnClickListener(v->{if(!"album".equals(screen))album();});switcher.addView(album,lp(-2,44));
-        switcher.addView(new View(this),new LinearLayout.LayoutParams(0,1,1));switcher.addView(icon("more","更多",this::more),lp(48,44));root.addView(switcher,lp(-1,56));
+        LinearLayout header=row();header.setPadding(dp(22),dp(18),dp(12),dp(6));
+        LinearLayout names=column();names.addView(text("随手存",30,INK,true));header.addView(names,new LinearLayout.LayoutParams(0,-2,1));header.addView(icon("more","更多",this::more),lp(48,48));root.addView(header);
+        LinearLayout switcher=row();switcher.setPadding(dp(20),0,dp(20),dp(4));
+        TextView notes=text("记录",15,"home".equals(mode)?ACCENT:MUTED,"home".equals(mode));notes.setGravity(Gravity.CENTER);notes.setPadding(dp(13),dp(8),dp(13),dp(8));notes.setContentDescription("切换到记录");notes.setOnClickListener(v->{if(!"home".equals(screen))home();});switcher.addView(notes,lp(-2,40));
+        TextView album=text("相册",15,"album".equals(mode)?ACCENT:MUTED,"album".equals(mode));album.setGravity(Gravity.CENTER);album.setPadding(dp(13),dp(8),dp(13),dp(8));album.setContentDescription("切换到相册");album.setOnClickListener(v->{if(!"album".equals(screen))album();});switcher.addView(album,lp(-2,40));
+        root.addView(switcher,lp(-1,42));
     }
     void normalizeFilter(){if(!filter.equals("all")){boolean exists=false;for(Store.Category c:store.categories)if(c.id.equals(filter))exists=true;if(!exists)filter="all";}}
     void home(){
