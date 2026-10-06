@@ -213,10 +213,14 @@ def core():
 
 def allow_update_hosts():
  # Keep all other external HTTPS blocked: the user's private relay room is never contacted.
+ addresses={}
  for host in ['api.github.com','github.com','release-assets.githubusercontent.com','objects.githubusercontent.com','github-releases.githubusercontent.com']:
-  try:
-   for addr in sorted({r[4][0] for r in socket.getaddrinfo(host,443,socket.AF_INET)}):shell('iptables','-I','OUTPUT','1','-p','tcp','-d',addr,'--dport','443','-j','ACCEPT')
-  except OSError:pass
+  resolved=shell('env','CLASSPATH=/data/local/tmp/fixture.dex','app_process','/system/bin','FixtureSql','dns',host).splitlines()
+  ips=sorted({addr.strip() for addr in resolved if re.fullmatch(r'[0-9a-fA-F:.]+',addr.strip()) and ('.' in addr or ':' in addr)})
+  if not ips:raise AssertionError('Device DNS returned no update host addresses: '+host)
+  addresses[host]=ips
+  for addr in ips:shell('ip6tables' if ':' in addr else 'iptables','-I','OUTPUT','1','-p','tcp','-d',addr,'--dport','443','-j','ACCEPT')
+ record('github_update_hosts_allowed_by_device_dns',True,addresses=addresses)
 
 def wait_ui(name,predicate,seconds=45):
  deadline=time.monotonic()+seconds
