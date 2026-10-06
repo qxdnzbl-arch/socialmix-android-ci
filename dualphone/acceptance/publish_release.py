@@ -1,5 +1,5 @@
 """Publish only the APK whose native core acceptance has succeeded."""
-import pathlib,json,hashlib,os,urllib.request,urllib.error,sys
+import pathlib,json,hashlib,os,urllib.request,urllib.error,sys,time
 ROOT=pathlib.Path(__file__).resolve().parents[1];OUT=ROOT/'acceptance';REPO='qxdnzbl-arch/socialmix-android-ci';BASE='https://api.github.com/repos/'+REPO;TOKEN=os.environ['GH_TOKEN']
 def api(path,method='GET',data=None,raw=False):
  url=path if path.startswith('https://') else BASE+path
@@ -12,6 +12,19 @@ def find(tag):
  except urllib.error.HTTPError as e:
   if e.code==404:return None
   raise
+def public_read(url):
+ # Public asset visibility can lag the successful draft-to-public API response.
+ deadline=time.monotonic()+90;attempt=0
+ while True:
+  attempt+=1
+  fresh=url+('&' if '?' in url else '?')+'release-check='+str(time.time_ns())
+  request=urllib.request.Request(fresh,headers={'User-Agent':'DualPhone-release-ci','Cache-Control':'no-cache'})
+  try:
+   with urllib.request.urlopen(request,timeout=30) as response:return response.read()
+  except (urllib.error.URLError,TimeoutError) as error:
+   if isinstance(error,urllib.error.HTTPError) and error.code not in (404,429,500,502,503,504):raise
+   if time.monotonic()>=deadline:raise
+   print('Waiting for public release download, attempt '+str(attempt),flush=True);time.sleep(min(attempt*2,10))
 if len(sys.argv)>1 and sys.argv[1]=='rollback':
  previous=json.loads((OUT/'previous-channel.json').read_text());channel=find('dualphone-latest')
  if channel is not None:
@@ -34,7 +47,7 @@ else:api(release['upload_url'].split('{')[0]+'?name='+asset_name,'POST',apk.read
 if release.get('draft'):release=api('/releases/'+str(release['id']),'PATCH',{'draft':False,'make_latest':'false'})
 meta={'packageName':'com.qxdnzbl.shuangjichuan.offline','versionCode':version,'versionName':name,'sha256':sha,'apkUrl':'https://github.com/'+REPO+'/releases/download/'+tag+'/'+asset_name,'notes':'深灰实底界面；图片点开查看和保存；发送后跟到最新消息；退出输入光标消失；内置更新。'}
 # Validate the real public download, without forwarding a token to asset hosts.
-with urllib.request.urlopen(meta['apkUrl'],timeout=60) as response:download=response.read()
+download=public_read(meta['apkUrl'])
 if hashlib.sha256(download).hexdigest()!=sha:raise RuntimeError('Public APK bytes mismatch')
 channel=find('dualphone-latest')
 (OUT/'previous-channel.json').write_text(json.dumps(json.loads(channel.get('body','{}')) if channel else None,ensure_ascii=False))
@@ -49,5 +62,7 @@ for a in channel.get('assets',[]):
 api(channel['upload_url'].split('{')[0]+'?name=update.json','POST',json.dumps(meta,ensure_ascii=False).encode(),True)
 current=json.loads(api('/releases/tags/dualphone-latest')['body'])
 if current!=meta:raise RuntimeError('Published channel mismatch')
+public=json.loads(public_read(BASE+'/releases/tags/dualphone-latest'))
+if json.loads(public['body'])!=meta:raise RuntimeError('Public update channel mismatch')
 (OUT/'published-update.json').write_text(json.dumps(meta,ensure_ascii=False,indent=2))
 print(json.dumps({'published_version':version,'sha256':sha,'download_verified':True},ensure_ascii=False),flush=True)
