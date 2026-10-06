@@ -86,10 +86,14 @@ public class NativeMessageAdapter extends RecyclerView.Adapter<NativeMessageAdap
       h.bubble.addView(body,new LinearLayout.LayoutParams(-2,-2));
     }else{
       LinearLayout title=new LinearLayout(c);title.setGravity(Gravity.CENTER_VERTICAL);
-      TextView clip=new TextView(c);clip.setText("⌁");clip.setTextSize(21);clip.setGravity(Gravity.CENTER);
-      clip.setTextColor(m.mine?0xE6FFFFFF:Color.rgb(104,126,224));
-      clip.setBackground(makeColor(m.mine?0x1FFFFFFF:0x12687EE0,dp(11)));
-      title.addView(clip,new LinearLayout.LayoutParams(dp(34),dp(34)));
+      FrameLayout iconBox=new FrameLayout(c);
+      iconBox.setBackground(makeColor(m.mine?0x1FFFFFFF:0x12687EE0,dp(11)));
+      ImageView clip=new ImageView(c);
+      clip.setImageResource(R.drawable.ic_attachment);
+      clip.setColorFilter(m.mine?0xE6FFFFFF:Color.rgb(104,126,224));
+      clip.setPadding(dp(8),dp(8),dp(8),dp(8));
+      iconBox.addView(clip,new FrameLayout.LayoutParams(-1,-1));
+      title.addView(iconBox,new LinearLayout.LayoutParams(dp(34),dp(34)));
 
       TextView label=textView(14.5f,m.mine?Color.WHITE:Color.rgb(34,36,40));
       label.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);

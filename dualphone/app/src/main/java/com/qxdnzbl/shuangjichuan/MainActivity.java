@@ -57,7 +57,19 @@ public class MainActivity extends Activity implements NativeMessageAdapter.Callb
     super.onCreate(state);
     getWindow().setStatusBarColor(Color.rgb(249,249,251));
     getWindow().setNavigationBarColor(Color.rgb(247,248,251));
-    getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR);
+    if(Build.VERSION.SDK_INT>=30){
+      WindowInsetsController wc=getWindow().getInsetsController();
+      if(wc!=null) wc.setSystemBarsAppearance(
+        WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS|WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS,
+        WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS|WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS
+      );
+    }else if(Build.VERSION.SDK_INT>=26){
+      getWindow().getDecorView().setSystemUiVisibility(
+        View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR|View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR
+      );
+    }else{
+      getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR);
+    }
     getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
 
     prefs=getSharedPreferences("dual",MODE_PRIVATE);
