@@ -61,7 +61,9 @@ r=E.parse('out/qa/relaunch.xml')
 texts=[n.get('text','') for n in r.iter('node')]
 descs=[n.get('content-desc','') for n in r.iter('node')]
 assert any(d.startswith('记录卡片：') for d in descs), (texts,descs)
-assert '随手存' in texts, texts
+assert '随手存' not in texts, texts
+assert '记录' in texts and '相册' in texts, texts
+assert '打开搜索' in descs, descs
 assert '☆' not in texts and '★' not in texts, texts
 PY
 adb shell wm size 720x1280
