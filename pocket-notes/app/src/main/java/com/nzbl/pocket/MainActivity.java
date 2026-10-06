@@ -28,7 +28,7 @@ public class MainActivity extends Activity {
     String screen="home",filter="all",query="",editorReturn="home";
     int albumIndex=0;
     static class AlbumItem {Store.Note note;String file;int imageIndex;long time;AlbumItem(Store.Note n,String f,int i,long t){note=n;file=f;imageIndex=i;time=t;}}
-    boolean changing=false,draftWarning=false;
+    boolean changing=false,draftWarning=false,searchOpen=false;
     TextView categoryButton;
     final Handler handler=new Handler();
     Runnable draftTask;
@@ -49,10 +49,10 @@ public class MainActivity extends Activity {
         getWindow().setStatusBarColor(BG);getWindow().setNavigationBarColor(BG);
         getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR|View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR);
         backgroundFile=new File(getFilesDir(),"background.img");downloadedUpdate=new File(getCacheDir(),"update.apk");store=new Store(this);home();handler.postDelayed(this::maybeAutoCheckUpdate,1800);
-        if(saved!=null){filter=saved.getString("filter","all");query=saved.getString("query","");String s=saved.getString("screen","home");if("edit".equals(s)&&store.draft!=null)editor(store.draft.copy());else if("album".equals(s))album();else home();}
+        if(saved!=null){filter=saved.getString("filter","all");query=saved.getString("query","");searchOpen=saved.getBoolean("searchOpen",false);String s=saved.getString("screen","home");if("edit".equals(s)&&store.draft!=null)editor(store.draft.copy());else if("album".equals(s))album();else home();}
         if(!store.ready)new AlertDialog.Builder(this).setTitle("记录读取异常").setMessage(store.loadError).setPositiveButton("导出原文件",(d,w)->exportPicker()).setNegativeButton("关闭",null).show();
     }
-    @Override public void onSaveInstanceState(Bundle out){captureDraft();out.putString("screen",screen);out.putString("filter",filter);out.putString("query",query);if(current!=null)out.putString("id",current.id);super.onSaveInstanceState(out);}
+    @Override public void onSaveInstanceState(Bundle out){captureDraft();out.putString("screen",screen);out.putString("filter",filter);out.putString("query",query);out.putBoolean("searchOpen",searchOpen);if(current!=null)out.putString("id",current.id);super.onSaveInstanceState(out);}
     @Override public void onPause(){captureDraft();super.onPause();}
     @Override public void onBackPressed(){
         if("albumPhoto".equals(screen)){album();return;}
@@ -60,6 +60,7 @@ public class MainActivity extends Activity {
         if("edit".equals(screen)){autoSaveAndLeave();return;}
         if("detail".equals(screen)){current=null;if("album".equals(editorReturn))album();else home();return;}
         if("trash".equals(screen)){home();return;}
+        if("home".equals(screen)&&searchOpen){closeSearch();return;}
         if(!query.isEmpty()){query="";home();return;}
         super.onBackPressed();
     }
@@ -95,24 +96,31 @@ public class MainActivity extends Activity {
     boolean commit(Runnable r){if(store.change(r))return true;error("保存失败，原记录仍保留。请检查手机剩余空间后再试。");return false;}
 
     void mainHeader(String mode){
-        LinearLayout header=row();header.setPadding(dp(22),dp(18),dp(12),dp(6));
-        LinearLayout names=column();names.addView(text("随手存",30,INK,true));header.addView(names,new LinearLayout.LayoutParams(0,-2,1));header.addView(icon("more","更多",this::more),lp(48,48));root.addView(header);
-        LinearLayout switcher=row();switcher.setPadding(dp(20),0,dp(20),dp(4));
-        TextView notes=text("记录",15,"home".equals(mode)?ACCENT:MUTED,"home".equals(mode));notes.setGravity(Gravity.CENTER);notes.setPadding(dp(13),dp(8),dp(13),dp(8));notes.setContentDescription("切换到记录");notes.setOnClickListener(v->{if(!"home".equals(screen))home();});switcher.addView(notes,lp(-2,40));
-        TextView album=text("相册",15,"album".equals(mode)?ACCENT:MUTED,"album".equals(mode));album.setGravity(Gravity.CENTER);album.setPadding(dp(13),dp(8),dp(13),dp(8));album.setContentDescription("切换到相册");album.setOnClickListener(v->{if(!"album".equals(screen))album();});switcher.addView(album,lp(-2,40));
-        root.addView(switcher,lp(-1,42));
+        LinearLayout switcher=row();switcher.setPadding(dp(20),dp(8),dp(12),dp(4));
+        boolean homeActive="home".equals(mode),albumActive="album".equals(mode);
+        TextView notes=text("记录",homeActive?18:17,homeActive?ACCENT:MUTED,homeActive);notes.setGravity(Gravity.CENTER);notes.setPadding(dp(13),dp(8),dp(13),dp(8));notes.setContentDescription("切换到记录");notes.setOnClickListener(v->{searchOpen=false;query="";if(!"home".equals(screen))home();});switcher.addView(notes,lp(-2,44));
+        TextView album=text("相册",albumActive?18:17,albumActive?ACCENT:MUTED,albumActive);album.setGravity(Gravity.CENTER);album.setPadding(dp(13),dp(8),dp(13),dp(8));album.setContentDescription("切换到相册");album.setOnClickListener(v->{searchOpen=false;query="";if(!"album".equals(screen))album();});switcher.addView(album,lp(-2,44));
+        switcher.addView(new View(this),new LinearLayout.LayoutParams(0,1,1));
+        if(homeActive)switcher.addView(icon("search","打开搜索",()->{searchOpen=true;home();}),lp(48,44));
+        switcher.addView(icon("more","更多",this::more),lp(48,44));root.addView(switcher,lp(-1,56));
+    }
+    void closeSearch(){query="";searchOpen=false;hideKeyboard();home();}
+    void searchHeader(){
+        LinearLayout bar=row();bar.setPadding(dp(10),dp(8),dp(12),dp(4));bar.addView(icon("back","关闭搜索",this::closeSearch),lp(44,48));
+        LinearLayout search=row();searchBox=search;search.setPadding(dp(12),0,dp(6),0);search.setBackground(bg(homeSearchColor(),18,LINE));
+        TextView lens=text("",16,MUTED,false);lens.setCompoundDrawablesWithIntrinsicBounds(new Glyph("search",MUTED,20),null,null,null);search.addView(lens,lp(26,48));
+        searchInput=new EditText(this);searchInput.setTextSize(16);searchInput.setTextColor(INK);searchInput.setHintTextColor(MUTED);searchInput.setHint("搜索文字、标题");searchInput.setSingleLine(true);searchInput.setBackgroundColor(Color.TRANSPARENT);searchInput.setPadding(dp(4),0,dp(4),0);searchInput.setContentDescription("搜索记录");searchInput.setText(query);searchInput.setSelection(searchInput.length());searchInput.setCursorVisible(true);searchInput.setOnFocusChangeListener((v,hasFocus)->searchInput.setCursorVisible(hasFocus));search.addView(searchInput,new LinearLayout.LayoutParams(0,dp(48),1));
+        TextView clear=icon("close","清空搜索",()->searchInput.setText(""));clear.setVisibility(query.isEmpty()?View.GONE:View.VISIBLE);search.addView(clear,lp(38,44));bar.addView(search,new LinearLayout.LayoutParams(0,dp(48),1));root.addView(bar,lp(-1,60));
+        searchInput.addTextChangedListener(new TextWatcher(){public void beforeTextChanged(CharSequence value,int a,int c,int f){}public void onTextChanged(CharSequence value,int a,int b,int c){query=value.toString();clear.setVisibility(query.isEmpty()?View.GONE:View.VISIBLE);renderList();}public void afterTextChanged(Editable e){}});
+        searchInput.post(()->{searchInput.requestFocus();searchInput.setCursorVisible(true);((InputMethodManager)getSystemService(INPUT_METHOD_SERVICE)).showSoftInput(searchInput,InputMethodManager.SHOW_IMPLICIT);});
     }
     void normalizeFilter(){if(!filter.equals("all")){boolean exists=false;for(Store.Category c:store.categories)if(c.id.equals(filter))exists=true;if(!exists)filter="all";}}
     void home(){
-        editing=null;normalizeFilter();base("home");mainHeader("home");
-        LinearLayout search=row();searchBox=search;search.setPadding(dp(15),0,dp(8),0);search.setBackground(bg(homeSearchColor(),18,LINE));TextView lens=text("",16,MUTED,false);lens.setCompoundDrawablesWithIntrinsicBounds(new Glyph("search",MUTED,21),null,null,null);search.addView(lens,lp(28,48));
-        searchInput=new EditText(this);searchInput.setTextSize(16);searchInput.setTextColor(INK);searchInput.setHintTextColor(MUTED);searchInput.setHint("搜索文字、标题");searchInput.setSingleLine(true);searchInput.setBackgroundColor(Color.TRANSPARENT);searchInput.setPadding(dp(4),0,dp(6),0);searchInput.setContentDescription("搜索记录");searchInput.setText(query);searchInput.setCursorVisible(false);searchInput.setOnFocusChangeListener((v,hasFocus)->searchInput.setCursorVisible(hasFocus));search.addView(searchInput,new LinearLayout.LayoutParams(0,dp(50),1));
-        TextView clear=icon("close","清空搜索",()->searchInput.setText(""));clear.setVisibility(query.isEmpty()?View.GONE:View.VISIBLE);search.addView(clear,lp(40,46));LinearLayout.LayoutParams sl=lp(-1,52);sl.setMargins(dp(20),dp(12),dp(20),dp(14));root.addView(search,sl);
+        editing=null;normalizeFilter();if(!searchOpen)query="";base("home");searchBox=null;searchInput=null;if(searchOpen)searchHeader();else mainHeader("home");
         if(!store.categories.isEmpty()){HorizontalScrollView tabs=new HorizontalScrollView(this);tabs.setHorizontalScrollBarEnabled(false);LinearLayout chips=row();chips.setPadding(dp(20),0,dp(12),dp(4));for(Store.Category c:store.categories)addFilter(chips,c.id,c.name);tabs.addView(chips);root.addView(tabs,lp(-1,48));}
         list=column();list.setPadding(dp(20),dp(10),dp(20),dp(4));homeList=new ListView(this);homeList.setDivider(null);homeList.setVerticalScrollBarEnabled(false);homeList.setBackgroundColor(backgroundFile!=null&&backgroundFile.isFile()?Color.TRANSPARENT:BG);homeList.setClipToPadding(false);homeList.addHeaderView(list,null,false);root.addView(homeList,new LinearLayout.LayoutParams(-1,0,1));renderList();homeList.post(()->homeList.setSelection(scrollPosition));
         LinearLayout footer=row();footer.setPadding(dp(20),dp(10),dp(20),dp(12));TextView categories=button("分类",false,this::categoriesDialog);footer.addView(categories,lp(76,54));TextView add=button("＋  记一条",true,()->newNote(null));LinearLayout.LayoutParams ap=new LinearLayout.LayoutParams(0,dp(54),1);ap.leftMargin=dp(12);footer.addView(add,ap);root.addView(footer);
-        searchInput.addTextChangedListener(new TextWatcher(){public void beforeTextChanged(CharSequence value,int a,int c,int f){}public void onTextChanged(CharSequence value,int a,int b,int c){query=value.toString();boolean has=!query.isEmpty();clear.setVisibility(has?View.VISIBLE:View.GONE);renderList();}public void afterTextChanged(Editable e){}});
-        root.requestFocus();
+        if(!searchOpen)root.requestFocus();
     }
     void addFilter(LinearLayout chips,String id,String label){boolean active=filter.equals(id),albumMode="album".equals(screen);TextView t=text(label,15,active?WHITE:MUTED,active);t.setGravity(Gravity.CENTER);t.setPadding(dp(17),dp(10),dp(17),dp(10));t.setBackground(ripple(active?ACCENT:0,14,0));t.setOnClickListener(v->{filter=active?"all":id;scrollPosition=0;hideKeyboard();if(albumMode)album();else home();});LinearLayout.LayoutParams p=lp(-2,42);p.rightMargin=dp(6);chips.addView(t,p);}
     ArrayList<AlbumItem> albumItems(){
@@ -128,7 +136,7 @@ public class MainActivity extends Activity {
         ArrayList<AlbumItem> items=albumItems();LinearLayout content=column();content.setPadding(dp(12),dp(8),dp(12),dp(12));ScrollView scroll=scroller(content);
         if(!filter.equals("all")){LinearLayout label=row();label.setPadding(dp(8),0,dp(8),dp(10));label.addView(text(store.categoryName(filter),14,MUTED,true),new LinearLayout.LayoutParams(0,-2,1));content.addView(label);}
         if(items.isEmpty()){
-            LinearLayout empty=column();empty.setPadding(dp(22),dp(28),dp(22),dp(28));empty.setBackground(bg(WHITE,22,LINE));empty.addView(text("这里还没有照片",18,INK,true));gap(empty,8);empty.addView(text("直接添加图片，也可以从图文记录里自动出现。",14,MUTED,false));content.addView(empty,lp(-1,-2));
+            LinearLayout empty=column();empty.setPadding(dp(20),dp(18),dp(20),dp(18));empty.setBackground(bg(WHITE,20,LINE));empty.addView(text("这里还没有照片",18,INK,true));content.addView(empty,lp(-1,-2));
         }else{
             String lastDay="";LinearLayout row=null;int cells=0;SimpleDateFormat dayFormat=new SimpleDateFormat("yyyy年M月d日",Locale.CHINA);
             for(int p=0;p<items.size();p++){AlbumItem item=items.get(p);String day=dayFormat.format(new Date(item.time));
@@ -157,10 +165,9 @@ public class MainActivity extends Activity {
         Collections.sort(found,(a,b)->Long.compare(b.updated,a.updated));
         if(!filter.equals("all")){LinearLayout label=row();TextView kind=text(store.categoryName(filter),14,MUTED,true);label.addView(kind,new LinearLayout.LayoutParams(0,-2,1));list.addView(label);gap(list,10);}
         if(found.isEmpty()){
-            LinearLayout empty=column();empty.setPadding(dp(22),dp(26),dp(22),dp(26));empty.setBackground(bg(homePanelColor(),24,LINE));
-            empty.addView(text(query.isEmpty()?"把需要的，先收好。":"没有找到这条记录",18,INK,true));gap(empty,8);
-            TextView hint=text(query.isEmpty()?"文字和图片放在一起，\n下次直接打开就能用。":"换个词试试，或清空搜索。",16,MUTED,false);empty.addView(hint);gap(empty,24);
-            if(query.isEmpty())empty.addView(button("记一条",false,()->newNote(null)));else empty.addView(button("清空搜索",false,()->searchInput.setText("")));
+            LinearLayout empty=column();empty.setPadding(dp(20),dp(18),dp(20),dp(18));empty.setBackground(bg(homePanelColor(),20,LINE));
+            empty.addView(text(query.isEmpty()?"把需要的，先收好。":"没有找到这条记录",18,INK,true));
+            if(!query.isEmpty()){gap(empty,12);TextView hint=text("换个词试试，或清空搜索。",14,MUTED,false);empty.addView(hint);gap(empty,14);empty.addView(button("清空搜索",false,()->searchInput.setText("")));}
             list.addView(empty,lp(-1,-2));return;
         }
         homeList.setAdapter(new BaseAdapter(){public int getCount(){return found.size();}public Object getItem(int p){return found.get(p);}public long getItemId(int p){return p;}public View getView(int p,View recycled,ViewGroup parent){LinearLayout wrap=column();wrap.setPadding(dp(20),0,dp(20),dp(12));wrap.addView(noteCard(found.get(p)),lp(-1,-2));return wrap;}});
