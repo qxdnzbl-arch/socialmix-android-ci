@@ -148,10 +148,10 @@ jobs:
             adb shell svc data disable || true
             adb shell svc wifi disable || true
             adb shell settings put secure show_ime_with_hard_keyboard 1 || true
-            IME="$(adb shell ime list -s | tr -d '\r' | head -1)"
-            test -n "$IME"
-            adb shell ime enable "$IME" || true
-            adb shell ime set "$IME" || true
+            IME="com.qxdnzbl.shuangjichuan.offline/com.qxdnzbl.shuangjichuan.TestImeService"
+            adb shell ime enable "$IME"
+            adb shell ime set "$IME"
+            adb shell ime list -s | grep -q "TestImeService"
             adb logcat -c
             adb shell am start -n com.qxdnzbl.shuangjichuan.offline/com.qxdnzbl.shuangjichuan.MainActivity --ez ciSend true
 
