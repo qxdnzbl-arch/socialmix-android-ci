@@ -8,6 +8,8 @@ import android.text.style.BackgroundColorSpan;
 import android.view.*;
 import android.widget.*;
 import androidx.recyclerview.widget.RecyclerView;
+import androidx.recyclerview.widget.AsyncListDiffer;
+import androidx.recyclerview.widget.DiffUtil;
 import java.util.*;
 
 public class NativeMessageAdapter extends RecyclerView.Adapter<NativeMessageAdapter.Holder>{
@@ -18,19 +20,45 @@ public class NativeMessageAdapter extends RecyclerView.Adapter<NativeMessageAdap
 
   private final Context c;
   private final Callbacks cb;
-  private final ArrayList<TransferDb.Msg> items=new ArrayList<>();
+  private final AsyncListDiffer<TransferDb.Msg> differ;
   private String query="";
   private String activeId=null;
   private final ArrayList<Integer> matches=new ArrayList<>();
+  private final HashSet<Integer> matchSet=new HashSet<>();
   private final int maxWidth;
+  private int latestMinePosition=-1;
 
   public NativeMessageAdapter(Context c,Callbacks cb){
     this.c=c;this.cb=cb;
-    maxWidth=Math.round(c.getResources().getDisplayMetrics().widthPixels*.78f);
+    maxWidth=Math.round(c.getResources().getDisplayMetrics().widthPixels*.76f);
+    setHasStableIds(true);
+    differ=new AsyncListDiffer<>(this,new DiffUtil.ItemCallback<TransferDb.Msg>(){
+      @Override public boolean areItemsTheSame(TransferDb.Msg a,TransferDb.Msg b){
+        return Objects.equals(a.id,b.id);
+      }
+      @Override public boolean areContentsTheSame(TransferDb.Msg a,TransferDb.Msg b){
+        return a.mine==b.mine
+          && a.fileSize==b.fileSize
+          && a.createdAt==b.createdAt
+          && Objects.equals(a.kind,b.kind)
+          && Objects.equals(a.text,b.text)
+          && Objects.equals(a.fileName,b.fileName)
+          && Objects.equals(a.filePath,b.filePath)
+          && Objects.equals(a.status,b.status);
+      }
+    });
   }
 
   public void setItems(List<TransferDb.Msg> list){
-    items.clear();items.addAll(list);rebuildMatches();notifyDataSetChanged();
+    ArrayList<TransferDb.Msg> copy=new ArrayList<>(list);
+    differ.submitList(copy,()->{
+      latestMinePosition=-1;
+      for(int i=differ.getCurrentList().size()-1;i>=0;i--){
+        if(differ.getCurrentList().get(i).mine){latestMinePosition=i;break;}
+      }
+      rebuildMatches();
+      if(!query.isEmpty())notifyDataSetChanged();
+    });
   }
 
   public void setSearch(String q,String active){
@@ -38,15 +66,21 @@ public class NativeMessageAdapter extends RecyclerView.Adapter<NativeMessageAdap
   }
 
   public List<Integer> getMatchPositions(){return new ArrayList<>(matches);}
-  public String getItemIdAt(int position){return position>=0&&position<items.size()?items.get(position).id:null;}
+  public String getItemIdAt(int position){List<TransferDb.Msg> items=differ.getCurrentList();return position>=0&&position<items.size()?items.get(position).id:null;}
+
+  @Override public long getItemId(int position){
+    String id=getItemIdAt(position);
+    return id==null?RecyclerView.NO_ID:((long)id.hashCode()<<32)^(id.length()*2654435761L);
+  }
 
   private void rebuildMatches(){
-    matches.clear();if(query.isEmpty())return;
+    matches.clear();matchSet.clear();if(query.isEmpty())return;
+    List<TransferDb.Msg> items=differ.getCurrentList();
     String q=query.toLowerCase(Locale.ROOT);
     for(int i=0;i<items.size();i++){
       TransferDb.Msg m=items.get(i);
       String hay="file".equals(m.kind)?String.valueOf(m.fileName):String.valueOf(m.text);
-      if(hay.toLowerCase(Locale.ROOT).contains(q))matches.add(i);
+      if(hay.toLowerCase(Locale.ROOT).contains(q)){matches.add(i);matchSet.add(i);}
     }
   }
 
@@ -64,7 +98,7 @@ public class NativeMessageAdapter extends RecyclerView.Adapter<NativeMessageAdap
   }
 
   @Override public void onBindViewHolder(Holder h,int position){
-    TransferDb.Msg m=items.get(position);
+    TransferDb.Msg m=differ.getCurrentList().get(position);
     h.bubble.removeAllViews();
     h.bubble.setOnClickListener(null);
     h.bubble.setOnLongClickListener(v->{cb.onLongPress(v,m);return true;});
@@ -73,7 +107,7 @@ public class NativeMessageAdapter extends RecyclerView.Adapter<NativeMessageAdap
     lp.gravity=m.mine?Gravity.END:Gravity.START;
     h.bubble.setLayoutParams(lp);
 
-    boolean matched=!query.isEmpty()&&matches.contains(position);
+    boolean matched=!query.isEmpty()&&matchSet.contains(position);
     boolean active=matched&&m.id!=null&&m.id.equals(activeId);
 
     h.bubble.setBackground(bubbleBackground(m.mine,matched,active));
@@ -117,8 +151,8 @@ public class NativeMessageAdapter extends RecyclerView.Adapter<NativeMessageAdap
       }
     }
 
-    if(m.mine){
-      TextView state=textView(10.5f,0xB8FFFFFF);
+    if(m.mine&&position==latestMinePosition){
+      TextView state=textView(10.5f,0xAFFFFFFF);
       state.setText("sent".equals(m.status)?"已送达":"等待发送");
       state.setGravity(Gravity.END);
       LinearLayout.LayoutParams sp=new LinearLayout.LayoutParams(-1,-2);sp.topMargin=dp(5);
@@ -126,7 +160,7 @@ public class NativeMessageAdapter extends RecyclerView.Adapter<NativeMessageAdap
     }
   }
 
-  @Override public int getItemCount(){return items.size();}
+  @Override public int getItemCount(){return differ.getCurrentList().size();}
 
   private CharSequence highlight(String text,String q,boolean mine){
     if(q==null||q.isEmpty())return text;
@@ -140,16 +174,19 @@ public class NativeMessageAdapter extends RecyclerView.Adapter<NativeMessageAdap
   }
 
   private GradientDrawable bubbleBackground(boolean mine,boolean matched,boolean active){
-    GradientDrawable g;
+    GradientDrawable g=new GradientDrawable();
     if(mine){
-      g=new GradientDrawable(GradientDrawable.Orientation.TL_BR,new int[]{Color.rgb(120,138,242),Color.rgb(132,119,233)});
+      g.setColor(Color.rgb(74,122,246));
+      float r=dp(19),tight=dp(6);
+      g.setCornerRadii(new float[]{r,r,r,r,tight,tight,r,r});
     }else{
-      g=makeColor(0xE9FFFFFF,dp(18));
+      g.setColor(0xDCFFFFFF);
+      float r=dp(19),tight=dp(6);
+      g.setCornerRadii(new float[]{r,r,r,r,r,r,tight,tight});
+      g.setStroke(1,0x66FFFFFF);
     }
-    g.setCornerRadius(dp(18));
     if(active)g.setStroke(dp(3),0xDDE09A30);
     else if(matched)g.setStroke(dp(2),0xA8ECB758);
-    else if(!mine)g.setStroke(1,0x55FFFFFF);
     return g;
   }
 

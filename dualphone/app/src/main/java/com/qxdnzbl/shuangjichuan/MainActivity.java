@@ -46,10 +46,19 @@ public class MainActivity extends Activity implements NativeMessageAdapter.Callb
   private PopupWindow contextPopup;
   private Bitmap wallpaperBitmap;
   private long wallpaperVersion=-1L;
+  private final Handler mainHandler=new Handler(Looper.getMainLooper());
+  private boolean reloadQueued=false;
+  private boolean reloadInFlight=false;
+  private boolean reloadInitialPending=false;
+  private int lastLoggedIme=-1;
+  private int lastLoggedInputBottom=-1;
 
   private final BroadcastReceiver receiver=new BroadcastReceiver(){
     @Override public void onReceive(Context c,Intent i){
-      if(TransferService.ACTION_CHANGED.equals(i.getAction())) reloadMessages(false);
+      if(TransferService.ACTION_CHANGED.equals(i.getAction())){
+        updateStatus();
+        scheduleReload(false);
+      }
     }
   };
 
@@ -100,8 +109,8 @@ public class MainActivity extends Activity implements NativeMessageAdapter.Callb
     }
 
     buildNativeUi();
-    applyBackground();
-    reloadMessages(true);
+    loadBackgroundAsync();
+    scheduleReload(true);
     updateStatus();
 
     requestNearbyPermissions();
@@ -123,11 +132,12 @@ public class MainActivity extends Activity implements NativeMessageAdapter.Callb
   @Override protected void onResume(){
     super.onResume();
     if(hasNearbyPermissions()) TransferService.wake(this);
-    reloadMessages(false);
+    scheduleReload(false);
     updateStatus();
   }
 
   @Override protected void onDestroy(){
+    mainHandler.removeCallbacksAndMessages(null);
     io.shutdownNow();
     if(wallpaperBitmap!=null) wallpaperBitmap.recycle();
     super.onDestroy();
@@ -192,7 +202,12 @@ public class MainActivity extends Activity implements NativeMessageAdapter.Callb
       if(Build.VERSION.SDK_INT>=30&&root.getRootWindowInsets()!=null){
         imeBottom=root.getRootWindowInsets().getInsets(WindowInsets.Type.ime()).bottom;
       }
-      android.util.Log.i("DualPhoneNative","screen="+root.getHeight()+" ime="+imeBottom+" inputBottom="+(loc[1]+input.getHeight()));
+      int inputBottom=loc[1]+input.getHeight();
+      if(imeBottom!=lastLoggedIme||Math.abs(inputBottom-lastLoggedInputBottom)>dp(8)){
+        lastLoggedIme=imeBottom;
+        lastLoggedInputBottom=inputBottom;
+        android.util.Log.i("DualPhoneNative","screen="+root.getHeight()+" ime="+imeBottom+" inputBottom="+inputBottom);
+      }
     });
   }
 
@@ -283,7 +298,7 @@ public class MainActivity extends Activity implements NativeMessageAdapter.Callb
       public void onTextChanged(CharSequence s,int st,int before,int count){
         searchCursor=0;
         adapter.setSearch(s==null?"":s.toString(),null);
-        updateSearchUi();
+        updateSearchCountOnly();
       }
       public void afterTextChanged(Editable e){}
     });
@@ -357,23 +372,48 @@ public class MainActivity extends Activity implements NativeMessageAdapter.Callb
     return v;
   }
 
-  private void reloadMessages(boolean initial){
-    runOnUiThread(()->{
-      boolean atBottom=true;
+  private void scheduleReload(boolean initial){
+    reloadInitialPending=reloadInitialPending||initial;
+    if(reloadQueued||reloadInFlight){
+      reloadQueued=true;
+      return;
+    }
+    reloadQueued=true;
+    mainHandler.postDelayed(()->{
+      reloadQueued=false;
+      reloadInFlight=true;
+      final boolean forceInitial=reloadInitialPending;
+      reloadInitialPending=false;
+
+      boolean stickToBottom=true;
       RecyclerView.LayoutManager lm=list==null?null:list.getLayoutManager();
       if(lm instanceof LinearLayoutManager){
         int last=((LinearLayoutManager)lm).findLastVisibleItemPosition();
-        atBottom=last>=Math.max(0,adapter.getItemCount()-3);
+        stickToBottom=last>=Math.max(0,adapter.getItemCount()-3);
       }
-      List<TransferDb.Msg> items=db.all();
-      adapter.setItems(items);
-      updateStatus();
-      if(initial||atBottom){
-        list.post(()->{ if(adapter.getItemCount()>0) list.scrollToPosition(adapter.getItemCount()-1); });
-      }
-      updateSearchUi();
-      android.util.Log.i("DualPhoneNative","screen=chat messages="+items.size()+" link="+prefs.getString("link_state","searching"));
-    });
+      final boolean shouldStick=forceInitial||stickToBottom;
+
+      io.execute(()->{
+        final List<TransferDb.Msg> items=db.all();
+        mainHandler.post(()->{
+          if(isFinishing()||isDestroyed())return;
+          adapter.setItems(items);
+          updateStatus();
+          if(shouldStick){
+            list.post(()->{
+              if(adapter.getItemCount()>0) list.scrollToPosition(adapter.getItemCount()-1);
+            });
+          }
+          updateSearchUi();
+          android.util.Log.i("DualPhoneNative","screen=chat messages="+items.size()+" link="+prefs.getString("link_state","searching"));
+          reloadInFlight=false;
+          if(reloadQueued){
+            reloadQueued=false;
+            scheduleReload(false);
+          }
+        });
+      });
+    },initial?0:90);
   }
 
   private void updateStatus(){
@@ -394,9 +434,13 @@ public class MainActivity extends Activity implements NativeMessageAdapter.Callb
     String s=input.getText().toString().trim();
     if(s.isEmpty())return;
     input.setText("");
-    db.addText(UUID.randomUUID().toString(),true,s,System.currentTimeMillis(),"pending");
-    reloadMessages(false);
-    TransferService.wake(this);
+    final String id=UUID.randomUUID().toString();
+    final long now=System.currentTimeMillis();
+    io.execute(()->{
+      db.addText(id,true,s,now,"pending");
+      mainHandler.post(()->scheduleReload(false));
+      TransferService.wake(this);
+    });
   }
 
   private void openSearch(){
@@ -422,15 +466,18 @@ public class MainActivity extends Activity implements NativeMessageAdapter.Callb
     list.smoothScrollToPosition(matches.get(searchCursor));
   }
 
-  private void updateSearchUi(){
+  private void updateSearchCountOnly(){
     if(searchPanel==null||searchPanel.getVisibility()!=View.VISIBLE)return;
     List<Integer> m=adapter.getMatchPositions();
     if(m.isEmpty()) searchCount.setText(searchInput.getText().length()==0?"":"0/0");
     else{
       if(searchCursor>=m.size())searchCursor=0;
       searchCount.setText((searchCursor+1)+"/"+m.size());
-      adapter.setSearch(searchInput.getText().toString(),adapter.getItemIdAt(m.get(searchCursor)));
     }
+  }
+
+  private void updateSearchUi(){
+    updateSearchCountOnly();
   }
 
   @Override public void onLongPress(View anchor,TransferDb.Msg msg){
@@ -556,22 +603,43 @@ public class MainActivity extends Activity implements NativeMessageAdapter.Callb
 
   private void clearBackground(){
     File f=new File(getFilesDir(),"chat-background.jpg");if(f.exists())f.delete();
-    wallpaperVersion=-1;applyBackground();
+    wallpaperVersion=-1;loadBackgroundAsync();
   }
 
-  private void applyBackground(){
+  private void loadBackgroundAsync(){
     File f=new File(getFilesDir(),"chat-background.jpg");
     if(!f.isFile()){
-      wallpaper.setVisibility(View.GONE);wallpaperVeil.setVisibility(View.GONE);ambient.setAlpha(1f);return;
+      wallpaper.setImageDrawable(null);
+      wallpaper.setVisibility(View.GONE);
+      wallpaperVeil.setVisibility(View.GONE);
+      ambient.setAlpha(1f);
+      return;
     }
-    if(wallpaperVersion!=f.lastModified()){
-      if(wallpaperBitmap!=null)wallpaperBitmap.recycle();
-      wallpaperBitmap=BitmapFactory.decodeFile(f.getAbsolutePath());
-      wallpaperVersion=f.lastModified();
-      wallpaper.setImageBitmap(wallpaperBitmap);
+    final long version=f.lastModified();
+    if(wallpaperVersion==version&&wallpaperBitmap!=null){
+      wallpaper.setVisibility(View.VISIBLE);
+      wallpaperVeil.setVisibility(View.VISIBLE);
+      ambient.setAlpha(.12f);
+      applyBackgroundEffects();
+      return;
     }
-    wallpaper.setVisibility(View.VISIBLE);wallpaperVeil.setVisibility(View.VISIBLE);ambient.setAlpha(.16f);
-    applyBackgroundEffects();
+    io.execute(()->{
+      BitmapFactory.Options opts=new BitmapFactory.Options();
+      opts.inPreferredConfig=Bitmap.Config.RGB_565;
+      Bitmap decoded=BitmapFactory.decodeFile(f.getAbsolutePath(),opts);
+      if(decoded==null)return;
+      mainHandler.post(()->{
+        if(isFinishing()||isDestroyed()){decoded.recycle();return;}
+        if(wallpaperBitmap!=null&&!wallpaperBitmap.isRecycled())wallpaperBitmap.recycle();
+        wallpaperBitmap=decoded;
+        wallpaperVersion=version;
+        wallpaper.setImageBitmap(decoded);
+        wallpaper.setVisibility(View.VISIBLE);
+        wallpaperVeil.setVisibility(View.VISIBLE);
+        ambient.setAlpha(.12f);
+        applyBackgroundEffects();
+      });
+    });
   }
 
   private void applyBackgroundEffects(){
@@ -590,7 +658,7 @@ public class MainActivity extends Activity implements NativeMessageAdapter.Callb
     if(resultCode!=RESULT_OK||data==null)return;
     if(requestCode==PICK_BG&&data.getData()!=null){
       Uri uri=data.getData();
-      io.execute(()->{try{saveChatBackground(uri);runOnUiThread(this::applyBackground);}catch(Exception e){runOnUiThread(()->toast("背景图片读取失败"));}});
+      io.execute(()->{try{saveChatBackground(uri);mainHandler.post(this::loadBackgroundAsync);}catch(Exception e){runOnUiThread(()->toast("背景图片读取失败"));}});
       return;
     }
     if(requestCode!=PICK_FILES)return;
@@ -599,7 +667,7 @@ public class MainActivity extends Activity implements NativeMessageAdapter.Callb
     else if(data.getData()!=null)uris.add(data.getData());
     io.execute(()->{
       for(Uri u:uris){try{queueFile(u);}catch(Exception e){runOnUiThread(()->toast("文件读取失败"));}}
-      runOnUiThread(()->reloadMessages(false));
+      mainHandler.post(()->scheduleReload(false));
       TransferService.wake(this);
     });
   }
