@@ -44,7 +44,7 @@ public class MainActivity extends Activity {
     @Override public void onBackPressed(){
         if("albumPhoto".equals(screen)){album();return;}
         if("photo".equals(screen)){if(editing!=null)editor(editing);else if(current!=null)detail(current,false);else home();return;}
-        if("edit".equals(screen)){leaveEditor();return;}
+        if("edit".equals(screen)){autoSaveAndLeave();return;}
         if("detail".equals(screen)){home();return;}
         if("trash".equals(screen)){home();return;}
         if(!query.isEmpty()){query="";home();return;}
@@ -170,7 +170,7 @@ public class MainActivity extends Activity {
     }
     EditText input(String hint,int size,boolean multiline){EditText e=new EditText(this);e.setTextSize(size);e.setTextColor(INK);e.setHintTextColor(MUTED);e.setBackgroundColor(Color.TRANSPARENT);e.setPadding(0,dp(5),0,dp(5));e.setGravity(Gravity.TOP);e.setHint(hint);e.setInputType(android.text.InputType.TYPE_CLASS_TEXT|(multiline?android.text.InputType.TYPE_TEXT_FLAG_MULTI_LINE:android.text.InputType.TYPE_TEXT_FLAG_CAP_SENTENCES));if(!multiline)e.setSingleLine();e.setSelectAllOnFocus(false);e.setLineSpacing(dp(6),1);return e;}
     void editor(Store.Note note){
-        editing=note;current=null;changing=true;base("edit");top(store.find(note.id)==null?"新记录":"编辑记录",this::leaveEditor,null,null);
+        editing=note;current=null;changing=true;base("edit");top(store.find(note.id)==null?"新记录":"编辑记录",this::autoSaveAndLeave,null,null);
         LinearLayout content=column();content.setPadding(dp(20),dp(4),dp(20),dp(24));scroller(content);
         LinearLayout field=column();field.setPadding(dp(20),dp(18),dp(20),dp(20));field.setBackground(bg(WHITE,24,LINE));
         categoryButton=text(categoryLabel(note.category)+"  ▾",14,categoryColor(note.category),true);categoryButton.setPadding(dp(12),dp(10),dp(12),dp(10));categoryButton.setBackground(ripple(categoryTint(note.category),10,0));categoryButton.setContentDescription("选择记录分类");categoryButton.setOnClickListener(v->pickCategory());field.addView(categoryButton,lp(-2,42));gap(field,10);
@@ -189,6 +189,18 @@ public class MainActivity extends Activity {
     void pickCategory(){updateEditing();String[] names=new String[store.categories.size()+2];names[0]="暂不分类";for(int i=0;i<store.categories.size();i++)names[i+1]=store.categories.get(i).name;names[names.length-1]="＋ 新建分类";new AlertDialog.Builder(this).setTitle("放在哪个分类").setItems(names,(d,w)->{if(w==names.length-1)categoryNameDialog(null,c->selectCategory(c.id));else selectCategory(w==0?Store.UNFILED:store.categories.get(w-1).id);}).setNegativeButton("取消",null).show();}
     void saveNote(){
         updateEditing();if(!editing.hasContent()){toast("写点文字或添加图片再保存");return;}Store.Note n=editing.copy();n.updated=System.currentTimeMillis();n.normalizeImageTimes();if(commit(()->{Store.Note old=store.find(n.id);if(old!=null)store.notes.remove(old);store.notes.add(n);store.draft=null;})){editing=null;hideKeyboard();query="";filter=n.category;scrollPosition=0;if("album".equals(editorReturn))album();else home();}
+    }
+    void autoSaveAndLeave(){
+        updateEditing();hideKeyboard();if(editing==null)return;
+        Store.Note original=store.find(editing.id);
+        if(!editing.hasContent()){
+            if(commit(()->store.draft=null)){editing=null;if("album".equals(editorReturn))album();else home();}
+            return;
+        }
+        Store.Note n=editing.copy();n.updated=System.currentTimeMillis();n.normalizeImageTimes();
+        if(commit(()->{Store.Note old=store.find(n.id);if(old!=null)store.notes.remove(old);store.notes.add(n);store.draft=null;})){
+            editing=null;query="";filter=n.category;scrollPosition=0;if("album".equals(editorReturn))album();else home();
+        }
     }
     void leaveEditor(){updateEditing();hideKeyboard();if(editing==null||!editing.hasContent()){if(commit(()->store.draft=null)){editing=null;if("album".equals(editorReturn))album();else home();}return;}
         new AlertDialog.Builder(this).setTitle("保留这次编辑吗？").setItems(new String[]{"保存记录","保留草稿","放弃这次编辑"},(d,w)->{if(w==0)saveNote();else if(w==1){Store.Note note=editing.copy();if(commit(()->store.draft=note)){editing=null;if("album".equals(editorReturn))album();else home();}}else if(commit(()->store.draft=null)){editing=null;if("album".equals(editorReturn))album();else home();}}).setNegativeButton("继续写",null).show();
