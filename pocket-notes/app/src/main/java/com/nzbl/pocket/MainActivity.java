@@ -11,13 +11,15 @@ import android.view.*;
 import android.view.inputmethod.InputMethodManager;
 import android.widget.*;
 import java.io.*;
+import java.net.*;
 import java.text.SimpleDateFormat;
 import java.util.*;
+import org.json.*;
 
 public class MainActivity extends Activity {
     public static final int BG=0xfff4f7fa,INK=0xff22343e,MUTED=0xff667987,ACCENT=0xff22646d,LINE=0xffdce5ec,WHITE=0xffffffff;
     Store store;
-    File backgroundFile;
+    File backgroundFile,downloadedUpdate;
     ImageView backdropView;
     LinearLayout root,list,photoStrip;
     View searchBox;
@@ -46,7 +48,7 @@ public class MainActivity extends Activity {
         super.onCreate(saved);getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
         getWindow().setStatusBarColor(BG);getWindow().setNavigationBarColor(BG);
         getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR|View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR);
-        backgroundFile=new File(getFilesDir(),"background.img");store=new Store(this);home();
+        backgroundFile=new File(getFilesDir(),"background.img");downloadedUpdate=new File(getCacheDir(),"update.apk");store=new Store(this);home();handler.postDelayed(this::maybeAutoCheckUpdate,1800);
         if(saved!=null){filter=saved.getString("filter","all");query=saved.getString("query","");String s=saved.getString("screen","home");if("edit".equals(s)&&store.draft!=null)editor(store.draft.copy());else if("album".equals(s))album();else home();}
         if(!store.ready)new AlertDialog.Builder(this).setTitle("记录读取异常").setMessage(store.loadError).setPositiveButton("导出原文件",(d,w)->exportPicker()).setNegativeButton("关闭",null).show();
     }
@@ -234,7 +236,34 @@ public class MainActivity extends Activity {
     void fullPhoto(int index){base("photo");root.setBackgroundColor(0xff18232b);getWindow().setStatusBarColor(0xff18232b);getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR);LinearLayout bar=row();bar.setPadding(dp(12),dp(8),dp(12),dp(8));TextView back=button("返回",false,()->{restoreSystemBars();detail(current,false);});bar.addView(back,lp(70,48));TextView number=text((index+1)+" / "+current.images.size(),16,WHITE,true);number.setGravity(Gravity.CENTER);bar.addView(number,new LinearLayout.LayoutParams(0,dp(48),1));root.addView(bar);Bitmap bitmap=decode(new File(store.photos,current.images.get(index)),2800);if(bitmap!=null)root.addView(new ZoomImage(bitmap),new LinearLayout.LayoutParams(-1,0,1));else{TextView unavailable=text("图片无法读取",18,WHITE,false);unavailable.setGravity(Gravity.CENTER);root.addView(unavailable,new LinearLayout.LayoutParams(-1,0,1));}LinearLayout nav=row();nav.setPadding(dp(20),dp(10),dp(20),dp(16));if(index>0)nav.addView(button("上一张",false,()->fullPhoto(index-1)),new LinearLayout.LayoutParams(0,dp(50),1));else nav.addView(new View(this),new LinearLayout.LayoutParams(0,dp(50),1));gapHorizontal(nav,12);if(index+1<current.images.size())nav.addView(button("下一张",false,()->fullPhoto(index+1)),new LinearLayout.LayoutParams(0,dp(50),1));else nav.addView(new View(this),new LinearLayout.LayoutParams(0,dp(50),1));root.addView(nav);}
     void gapHorizontal(LinearLayout row,int w){row.addView(new View(this),lp(w,1));}
     void restoreSystemBars(){getWindow().setStatusBarColor(BG);getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR|View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR);}
-    void more(){new AlertDialog.Builder(this).setTitle("随手存").setItems(new String[]{"管理分类","背景图","导出备份（含图片）","导入备份","回收站","关于"},(d,w)->{if(w==0)categoriesDialog();else if(w==1)backgroundDialog();else if(w==2)exportPicker();else if(w==3)importPicker();else if(w==4)trash();else new AlertDialog.Builder(this).setTitle("随手存 1.2").setMessage("文字和图片，按你的分类收好。\n\n完全离线，没有账号和广告。\n\n记录保存在这台手机。换手机或卸载前，请导出备份。").setPositiveButton("知道了",null).show();}).show();}
+    void more(){new AlertDialog.Builder(this).setTitle("随手存").setItems(new String[]{"检查更新","管理分类","背景图","导出备份（含图片）","导入备份","回收站","关于"},(d,w)->{if(w==0)checkUpdate(true);else if(w==1)categoriesDialog();else if(w==2)backgroundDialog();else if(w==3)exportPicker();else if(w==4)importPicker();else if(w==5)trash();else new AlertDialog.Builder(this).setTitle("随手存 "+appVersionName()).setMessage("文字和图片，按你的分类收好。\n\n记录保存在这台手机。换手机或卸载前，请导出备份。\n\n新版本可在应用内检查并安装。").setPositiveButton("知道了",null).show();}).show();}
+
+    static class UpdateInfo {long code;String name,url;UpdateInfo(long c,String n,String u){code=c;name=n;url=u;}}
+    String appVersionName(){try{return getPackageManager().getPackageInfo(getPackageName(),0).versionName;}catch(Exception e){return "";}}
+    long appVersionCode(){try{android.content.pm.PackageInfo p=getPackageManager().getPackageInfo(getPackageName(),0);return Build.VERSION.SDK_INT>=28?p.getLongVersionCode():p.versionCode;}catch(Exception e){return 0;}}
+    UpdateInfo parseUpdate(String json)throws Exception{
+        JSONObject release=new JSONObject(json);String tag=release.optString("tag_name","");long code=0;if(tag.startsWith("v"))try{code=Long.parseLong(tag.substring(1));}catch(Exception ignored){}
+        String name=release.optString("name",tag);String url=null;JSONArray assets=release.optJSONArray("assets");if(assets!=null)for(int i=0;i<assets.length();i++){JSONObject a=assets.getJSONObject(i);if("Suishoucun.apk".equals(a.optString("name"))){url=a.optString("browser_download_url");break;}}
+        if(code<=0||url==null||!url.startsWith("https://github.com/"))throw new IOException("更新信息无效");return new UpdateInfo(code,name,url);
+    }
+    String readUrl(String address)throws Exception{
+        HttpURLConnection c=(HttpURLConnection)new URL(address).openConnection();c.setConnectTimeout(8000);c.setReadTimeout(10000);c.setRequestProperty("Accept","application/vnd.github+json");c.setRequestProperty("User-Agent","Suishoucun-Android");int status=c.getResponseCode();if(status<200||status>=300)throw new IOException("HTTP "+status);
+        try(InputStream in=c.getInputStream();ByteArrayOutputStream out=new ByteArrayOutputStream()){byte[] buf=new byte[8192];int n;while((n=in.read(buf))>0){out.write(buf,0,n);if(out.size()>2*1024*1024)throw new IOException("响应过大");}return out.toString("UTF-8");}finally{c.disconnect();}
+    }
+    void maybeAutoCheckUpdate(){long now=System.currentTimeMillis();android.content.SharedPreferences p=getSharedPreferences("update",MODE_PRIVATE);long last=p.getLong("last_check",0);if(now-last<24L*60*60*1000)return;p.edit().putLong("last_check",now).apply();checkUpdate(false);}
+    void checkUpdate(boolean manual){
+        if(manual)toast("正在检查更新…");
+        new Thread(()->{try{UpdateInfo info=parseUpdate(readUrl("https://api.github.com/repos/qxdnzbl-arch/socialmix-android-ci/releases/latest"));long local=appVersionCode();runOnUiThread(()->{if(info.code>local)showUpdate(info);else if(manual)toast("已经是最新版");});}catch(Exception e){if(manual)runOnUiThread(()->error("暂时无法检查更新，请稍后再试。"));}}).start();
+    }
+    void showUpdate(UpdateInfo info){new AlertDialog.Builder(this).setTitle("发现新版本").setMessage((info.name==null||info.name.isEmpty()?"新版":info.name)+"\n\n点更新后会自动下载，下载完成后只需要确认系统安装。").setPositiveButton("更新",(d,w)->downloadUpdate(info)).setNegativeButton("稍后",null).show();}
+    void downloadUpdate(UpdateInfo info){
+        busy("正在下载更新…",()->{File temp=new File(getCacheDir(),"update.tmp");try{HttpURLConnection c=(HttpURLConnection)new URL(info.url).openConnection();c.setConnectTimeout(10000);c.setReadTimeout(30000);c.setInstanceFollowRedirects(true);c.setRequestProperty("User-Agent","Suishoucun-Android");int status=c.getResponseCode();if(status<200||status>=400)throw new IOException("HTTP "+status);try(InputStream in=c.getInputStream();FileOutputStream out=new FileOutputStream(temp)){byte[] buf=new byte[64*1024];int n;long total=0;while((n=in.read(buf))>0){out.write(buf,0,n);total+=n;if(total>100L*1024*1024)throw new IOException("文件过大");}}finally{c.disconnect();}if(temp.length()<20*1024)throw new IOException("下载不完整");if(downloadedUpdate.exists()&&!downloadedUpdate.delete())throw new IOException();if(!temp.renameTo(downloadedUpdate))throw new IOException();runOnUiThread(this::installDownloadedUpdate);}catch(Exception e){temp.delete();runOnUiThread(()->error("更新下载失败，请稍后再试。"));}});
+    }
+    void installDownloadedUpdate(){
+        if(downloadedUpdate==null||!downloadedUpdate.isFile()){error("更新文件不存在，请重新检查更新。");return;}
+        if(Build.VERSION.SDK_INT>=26&&!getPackageManager().canRequestPackageInstalls()){try{Intent permission=new Intent(android.provider.Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,Uri.parse("package:"+getPackageName()));startActivityForResult(permission,40);toast("请允许「安装未知应用」，返回后会继续更新");}catch(Exception e){error("无法打开安装权限设置。");}return;}
+        try{Uri uri=Uri.parse("content://"+getPackageName()+".update/update.apk");Intent install=new Intent(Intent.ACTION_VIEW);install.setDataAndType(uri,"application/vnd.android.package-archive");install.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION|Intent.FLAG_ACTIVITY_NEW_TASK);startActivity(install);}catch(Exception e){error("无法打开系统安装器。");}
+    }
     void backgroundDialog(){if(backgroundFile!=null&&backgroundFile.isFile())new AlertDialog.Builder(this).setTitle("背景图").setItems(new String[]{"更换背景图","恢复默认背景"},(d,w)->{if(w==0)backgroundPicker();else{backgroundFile.delete();home();}}).setNegativeButton("取消",null).show();else backgroundPicker();}
     void backgroundPicker(){Intent i=new Intent(Intent.ACTION_OPEN_DOCUMENT);i.setType("image/*");i.addCategory(Intent.CATEGORY_OPENABLE);try{startActivityForResult(i,30);}catch(ActivityNotFoundException e){error("手机未提供图片选择器。");}}
     void categoriesDialog(){boolean albumMode="album".equals(screen);Runnable refresh=albumMode?this::album:this::home;String[] options=new String[store.categories.size()+1];for(int i=0;i<store.categories.size();i++)options[i]=store.categories.get(i).name;options[options.length-1]="＋ 新建分类";new AlertDialog.Builder(this).setTitle("管理分类").setItems(options,(d,w)->{if(w==options.length-1)categoryNameDialog(null,c->refresh.run());else{Store.Category c=store.categories.get(w);new AlertDialog.Builder(this).setTitle(c.name).setItems(new String[]{"重命名","删除分类"},(dd,ww)->{if(ww==0)categoryNameDialog(c,x->refresh.run());else new AlertDialog.Builder(this).setTitle("删除分类？").setMessage("分类里的记录会保留为未分类，图片和草稿也会保留。").setPositiveButton("删除分类",(a,b)->{if(commit(()->{for(Store.Note n:store.notes)if(n.category.equals(c.id))n.category=Store.UNFILED;if(store.draft!=null&&store.draft.category.equals(c.id))store.draft.category=Store.UNFILED;store.categories.remove(c);})){filter="all";refresh.run();}}).setNegativeButton("取消",null).show();}).show();}}).setNegativeButton("关闭",null).show();}
@@ -244,7 +273,7 @@ public class MainActivity extends Activity {
     void exportPicker(){Intent i=new Intent(Intent.ACTION_CREATE_DOCUMENT);i.addCategory(Intent.CATEGORY_OPENABLE);i.setType("application/zip");i.putExtra(Intent.EXTRA_TITLE,"随手存备份-"+new SimpleDateFormat("yyyyMMdd-HHmm",Locale.ROOT).format(new Date())+".zip");try{startActivityForResult(i,20);}catch(Exception e){error("手机未提供文件保存入口。");}}
     void importPicker(){Intent i=new Intent(Intent.ACTION_OPEN_DOCUMENT);i.addCategory(Intent.CATEGORY_OPENABLE);i.setType("*/*");i.putExtra(Intent.EXTRA_MIME_TYPES,new String[]{"application/zip","application/octet-stream","application/x-zip-compressed"});try{startActivityForResult(i,21);}catch(Exception e){error("手机未提供文件选择器。");}}
     void busy(String label,Runnable background){ProgressDialog p=new ProgressDialog(this);p.setMessage(label);p.setCancelable(false);p.show();new Thread(()->{try{background.run();}finally{runOnUiThread(()->{if(!isFinishing())p.dismiss();});}}).start();}
-    @Override public void onActivityResult(int request,int result,Intent data){super.onActivityResult(request,result,data);if(result!=RESULT_OK||data==null)return;
+    @Override public void onActivityResult(int request,int result,Intent data){super.onActivityResult(request,result,data);if(request==40){if(Build.VERSION.SDK_INT<26||getPackageManager().canRequestPackageInstalls())installDownloadedUpdate();return;}if(result!=RESULT_OK||data==null)return;
         if(request==10&&editing!=null){ArrayList<Uri> uris=new ArrayList<>();if(data.getClipData()!=null)for(int i=0;i<data.getClipData().getItemCount();i++)uris.add(data.getClipData().getItemAt(i).getUri());else if(data.getData()!=null)uris.add(data.getData());Store.Note note=editing;
             busy("正在保存图片…",()->{int failed=0;ArrayList<String> success=new ArrayList<>();for(Uri uri:uris){File target=new File(store.photos,UUID.randomUUID()+".img");try{InputStream in=getContentResolver().openInputStream(uri);if(in==null)throw new IOException();Store.copy(in,new FileOutputStream(target),64*1024*1024);BitmapFactory.Options o=new BitmapFactory.Options();o.inJustDecodeBounds=true;BitmapFactory.decodeFile(target.toString(),o);if(o.outWidth<=0||o.outHeight<=0)throw new IOException();success.add(target.getName());}catch(Exception e){target.delete();failed++;}}int errors=failed;runOnUiThread(()->{long now=System.currentTimeMillis();for(int i=0;i<success.size();i++){note.images.add(success.get(i));note.imageTimes.add(now+i);}captureDraft();renderEditorPhotos();if(errors>0)error(errors+" 张图片没能读取，其他图片已保存。");});});
         }else if(request==11){ArrayList<Uri> uris=new ArrayList<>();if(data.getClipData()!=null)for(int i=0;i<data.getClipData().getItemCount();i++)uris.add(data.getClipData().getItemAt(i).getUri());else if(data.getData()!=null)uris.add(data.getData());String targetCategory=filter.equals("all")?Store.UNFILED:filter;
