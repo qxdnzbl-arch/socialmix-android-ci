@@ -59,8 +59,10 @@ python3 - <<'PY'
 import xml.etree.ElementTree as E
 r=E.parse('out/qa/relaunch.xml')
 texts=[n.get('text','') for n in r.iter('node')]
-assert any('下次理发' in t for t in texts), texts
+descs=[n.get('content-desc','') for n in r.iter('node')]
+assert any(d.startswith('记录卡片：') for d in descs), (texts,descs)
 assert '随手存' in texts, texts
+assert '☆' not in texts and '★' not in texts, texts
 PY
 adb shell wm size 720x1280
 adb shell wm density 320
