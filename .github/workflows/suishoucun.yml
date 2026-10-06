@@ -5,7 +5,7 @@ on:
     paths: ['pocket-notes/**', '.github/workflows/suishoucun.yml']
   workflow_dispatch:
 permissions:
-  contents: read
+  contents: write
   actions: read
 jobs:
   native-acceptance:
@@ -43,6 +43,9 @@ jobs:
       - name: Ensure original signing key
         run: cp pocket-notes/build/previous/build/pocket-signing.jks pocket-notes/build/pocket-signing.jks
       - name: Build native app and acceptance instrumentation
+        env:
+          APP_VERSION_CODE: ${{ github.run_number }}
+          APP_VERSION_NAME: 1.${{ github.run_number }}
         run: |
           bash pocket-notes/build.sh
           cd pocket-notes
@@ -70,3 +73,32 @@ jobs:
             pocket-notes/build/pocket-signing.jks
           retention-days: 14
           if-no-files-found: error
+
+  publish-update:
+    needs: native-acceptance
+    if: success()
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+      actions: read
+    steps:
+      - name: Download verified Linux build
+        uses: actions/download-artifact@v4
+        with:
+          name: Suishoucun-Android-Linux
+          path: release
+      - name: Publish permanent in-app update release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: v${{ github.run_number }}
+          TITLE: 随手存 1.${{ github.run_number }}
+        run: |
+          set -euo pipefail
+          test -f release/out/Suishoucun.apk
+          test -f release/out/SHA256.txt
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" release/out/Suishoucun.apk release/out/SHA256.txt --clobber
+          else
+            gh release create "$TAG" release/out/Suishoucun.apk release/out/SHA256.txt --title "$TITLE" --notes "随手存自动更新版本。已通过 Android 真机环境模拟验收、升级保留检查和小屏布局检查。"
+          fi
