@@ -18,6 +18,7 @@ public class MainActivity extends Activity {
     public static final int BG=0xfff4f7fa,INK=0xff22343e,MUTED=0xff667987,ACCENT=0xff22646d,LINE=0xffdce5ec,WHITE=0xffffffff;
     Store store;
     File backgroundFile;
+    ImageView backdropView;
     LinearLayout root,list,photoStrip;
     View searchBox;
     EditText titleInput,bodyInput,searchInput;
@@ -61,15 +62,20 @@ public class MainActivity extends Activity {
         super.onBackPressed();
     }
     void base(String name){
-        restoreSystemBars();screen=name;root=new LinearLayout(this);root.setOrientation(LinearLayout.VERTICAL);root.setFitsSystemWindows(true);root.setFocusableInTouchMode(true);
-        boolean customBackground=backgroundFile!=null&&backgroundFile.isFile();root.setBackgroundColor(customBackground?Color.TRANSPARENT:BG);
+        restoreSystemBars();screen=name;
+        getWindow().setSoftInputMode("home".equals(name)?WindowManager.LayoutParams.SOFT_INPUT_ADJUST_NOTHING:WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
+        root=new LinearLayout(this);root.setOrientation(LinearLayout.VERTICAL);root.setFitsSystemWindows(true);root.setFocusableInTouchMode(true);
+        boolean customBackground=backgroundFile!=null&&backgroundFile.isFile();root.setBackgroundColor(customBackground?Color.TRANSPARENT:BG);backdropView=null;
         if(customBackground){
-            FrameLayout shell=new FrameLayout(this);ImageView backdrop=new ImageView(this);backdrop.setScaleType(ImageView.ScaleType.CENTER_CROP);
+            FrameLayout shell=new FrameLayout(this);shell.setClipChildren(true);ImageView backdrop=new ImageView(this);backdropView=backdrop;backdrop.setScaleType(ImageView.ScaleType.CENTER_CROP);
             try{Bitmap image=decode(backgroundFile,1800);if(image!=null)backdrop.setImageBitmap(image);}catch(Exception ignored){}
-            shell.addView(backdrop,new FrameLayout.LayoutParams(-1,-1));View veil=new View(this);veil.setBackgroundColor(0xa8f4f7fa);shell.addView(veil,new FrameLayout.LayoutParams(-1,-1));shell.addView(root,new FrameLayout.LayoutParams(-1,-1));setContentView(shell);
+            FrameLayout.LayoutParams backdropParams=new FrameLayout.LayoutParams(-1,getResources().getDisplayMetrics().heightPixels);backdropParams.gravity=Gravity.TOP;
+            shell.addView(backdrop,backdropParams);View veil=new View(this);veil.setBackgroundColor(0x38f4f7fa);shell.addView(veil,new FrameLayout.LayoutParams(-1,-1));shell.addView(root,new FrameLayout.LayoutParams(-1,-1));setContentView(shell);
         }else setContentView(root);
         getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
     }
+    int homePanelColor(){return backgroundFile!=null&&backgroundFile.isFile()?0xcfffffff:WHITE;}
+    int homeSearchColor(){return backgroundFile!=null&&backgroundFile.isFile()?0xe3ffffff:WHITE;}
     LinearLayout column(){LinearLayout l=new LinearLayout(this);l.setOrientation(LinearLayout.VERTICAL);return l;}
     LinearLayout row(){LinearLayout l=new LinearLayout(this);l.setGravity(Gravity.CENTER_VERTICAL);return l;}
     LinearLayout.LayoutParams lp(int w,int h){return new LinearLayout.LayoutParams(w<0?w:dp(w),h<0?h:dp(h));}
@@ -97,7 +103,7 @@ public class MainActivity extends Activity {
     void normalizeFilter(){if(!filter.equals("all")){boolean exists=false;for(Store.Category c:store.categories)if(c.id.equals(filter))exists=true;if(!exists)filter="all";}}
     void home(){
         editing=null;normalizeFilter();base("home");mainHeader("home");
-        LinearLayout search=row();searchBox=search;search.setPadding(dp(15),0,dp(8),0);search.setBackground(bg(WHITE,18,LINE));TextView lens=text("",16,MUTED,false);lens.setCompoundDrawablesWithIntrinsicBounds(new Glyph("search",MUTED,21),null,null,null);search.addView(lens,lp(28,48));
+        LinearLayout search=row();searchBox=search;search.setPadding(dp(15),0,dp(8),0);search.setBackground(bg(homeSearchColor(),18,LINE));TextView lens=text("",16,MUTED,false);lens.setCompoundDrawablesWithIntrinsicBounds(new Glyph("search",MUTED,21),null,null,null);search.addView(lens,lp(28,48));
         searchInput=new EditText(this);searchInput.setTextSize(16);searchInput.setTextColor(INK);searchInput.setHintTextColor(MUTED);searchInput.setHint("搜索文字、标题");searchInput.setSingleLine(true);searchInput.setBackgroundColor(Color.TRANSPARENT);searchInput.setPadding(dp(4),0,dp(6),0);searchInput.setContentDescription("搜索记录");searchInput.setText(query);searchInput.setCursorVisible(false);searchInput.setOnFocusChangeListener((v,hasFocus)->searchInput.setCursorVisible(hasFocus));search.addView(searchInput,new LinearLayout.LayoutParams(0,dp(50),1));
         TextView clear=icon("close","清空搜索",()->searchInput.setText(""));clear.setVisibility(query.isEmpty()?View.GONE:View.VISIBLE);search.addView(clear,lp(40,46));LinearLayout.LayoutParams sl=lp(-1,52);sl.setMargins(dp(20),dp(12),dp(20),dp(14));root.addView(search,sl);
         if(!store.categories.isEmpty()){HorizontalScrollView tabs=new HorizontalScrollView(this);tabs.setHorizontalScrollBarEnabled(false);LinearLayout chips=row();chips.setPadding(dp(20),0,dp(12),dp(4));for(Store.Category c:store.categories)addFilter(chips,c.id,c.name);tabs.addView(chips);root.addView(tabs,lp(-1,48));}
@@ -149,7 +155,7 @@ public class MainActivity extends Activity {
         Collections.sort(found,(a,b)->Long.compare(b.updated,a.updated));
         LinearLayout label=row();TextView kind=text(filter.equals("all")?"记录":store.categoryName(filter),14,MUTED,true);label.addView(kind,new LinearLayout.LayoutParams(0,-2,1));label.addView(text(found.size()+" 条",14,MUTED,false));list.addView(label);gap(list,10);
         if(found.isEmpty()){
-            LinearLayout empty=column();empty.setPadding(dp(22),dp(26),dp(22),dp(26));empty.setBackground(bg(WHITE,24,LINE));
+            LinearLayout empty=column();empty.setPadding(dp(22),dp(26),dp(22),dp(26));empty.setBackground(bg(homePanelColor(),24,LINE));
             empty.addView(text(query.isEmpty()?"把需要的，先收好。":"没有找到这条记录",23,INK,true));gap(empty,12);
             TextView hint=text(query.isEmpty()?"文字和图片放在一起，\n下次直接打开就能用。":"换个词试试，或清空搜索。",16,MUTED,false);empty.addView(hint);gap(empty,24);
             if(query.isEmpty())empty.addView(button("记一条",false,()->newNote(null)));else empty.addView(button("清空搜索",false,()->searchInput.setText("")));
@@ -160,7 +166,7 @@ public class MainActivity extends Activity {
     int categoryColor(String id){if(id.isEmpty())return ACCENT;int color=Math.floorMod(id.hashCode(),3);return color==0?0xff9d642c:color==1?0xff5568a1:ACCENT;}
     int categoryTint(String id){if(id.isEmpty())return 0xffe6f2f3;int color=Math.floorMod(id.hashCode(),3);return color==0?0xfffcf1e4:color==1?0xffeef0fb:0xffe6f2f3;}
     LinearLayout noteCard(Store.Note n){
-        LinearLayout c=column();c.setPadding(dp(14),dp(13),dp(14),dp(11));c.setBackground(ripple(WHITE,20,LINE));
+        LinearLayout c=column();c.setPadding(dp(14),dp(13),dp(14),dp(11));c.setBackground(ripple(homePanelColor(),20,LINE));
         LinearLayout meta=row();TextView tag=text(store.categoryName(n.category),12,categoryColor(n.category),true);tag.setPadding(dp(9),dp(4),dp(9),dp(4));tag.setBackground(bg(categoryTint(n.category),8,0));meta.addView(tag);c.addView(meta);gap(c,8);
         TextView h=text(n.heading(),17,INK,true);h.setMaxLines(1);h.setEllipsize(TextUtils.TruncateAt.END);c.addView(h);
         if(!n.body.trim().isEmpty()){gap(c,6);TextView body=text(n.body,15,MUTED,false);body.setMaxLines(2);body.setEllipsize(TextUtils.TruncateAt.END);c.addView(body);}
