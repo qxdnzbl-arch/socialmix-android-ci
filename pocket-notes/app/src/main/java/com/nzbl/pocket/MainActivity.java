@@ -96,7 +96,7 @@ public class MainActivity extends Activity {
 
     void mainHeader(String mode){
         LinearLayout header=row();header.setPadding(dp(22),dp(18),dp(12),dp(6));
-        LinearLayout names=column();names.addView(text("随手存",30,INK,true));gap(names,8);names.addView(text("想说的话，想用的图。",14,MUTED,false));header.addView(names,new LinearLayout.LayoutParams(0,-2,1));header.addView(icon("more","更多",this::more),lp(48,48));root.addView(header);
+        LinearLayout names=column();names.addView(text("随手存",30,INK,true));header.addView(names,new LinearLayout.LayoutParams(0,-2,1));header.addView(icon("more","更多",this::more),lp(48,48));root.addView(header);
         LinearLayout switcher=row();switcher.setPadding(dp(20),0,dp(20),dp(4));
         TextView notes=text("记录",15,"home".equals(mode)?ACCENT:MUTED,"home".equals(mode));notes.setGravity(Gravity.CENTER);notes.setPadding(dp(13),dp(8),dp(13),dp(8));notes.setContentDescription("切换到记录");notes.setOnClickListener(v->{if(!"home".equals(screen))home();});switcher.addView(notes,lp(-2,40));
         TextView album=text("相册",15,"album".equals(mode)?ACCENT:MUTED,"album".equals(mode));album.setGravity(Gravity.CENTER);album.setPadding(dp(13),dp(8),dp(13),dp(8));album.setContentDescription("切换到相册");album.setOnClickListener(v->{if(!"album".equals(screen))album();});switcher.addView(album,lp(-2,40));
@@ -126,9 +126,9 @@ public class MainActivity extends Activity {
         editing=null;current=null;normalizeFilter();base("album");mainHeader("album");
         if(!store.categories.isEmpty()){HorizontalScrollView tabs=new HorizontalScrollView(this);tabs.setHorizontalScrollBarEnabled(false);LinearLayout chips=row();chips.setPadding(dp(20),0,dp(12),dp(4));for(Store.Category c:store.categories)addFilter(chips,c.id,c.name);tabs.addView(chips);root.addView(tabs,lp(-1,48));}
         ArrayList<AlbumItem> items=albumItems();LinearLayout content=column();content.setPadding(dp(12),dp(8),dp(12),dp(12));ScrollView scroll=scroller(content);
-        LinearLayout label=row();label.setPadding(dp(8),0,dp(8),dp(10));label.addView(text(filter.equals("all")?"照片":store.categoryName(filter),14,MUTED,true),new LinearLayout.LayoutParams(0,-2,1));label.addView(text(items.size()+" 张",14,MUTED,false));content.addView(label);
+        if(!filter.equals("all")){LinearLayout label=row();label.setPadding(dp(8),0,dp(8),dp(10));label.addView(text(store.categoryName(filter),14,MUTED,true),new LinearLayout.LayoutParams(0,-2,1));content.addView(label);}
         if(items.isEmpty()){
-            LinearLayout empty=column();empty.setPadding(dp(22),dp(28),dp(22),dp(28));empty.setBackground(bg(WHITE,22,LINE));empty.addView(text("这里还没有照片",22,INK,true));gap(empty,10);empty.addView(text("直接添加图片，也可以从图文记录里自动出现。",15,MUTED,false));content.addView(empty,lp(-1,-2));
+            LinearLayout empty=column();empty.setPadding(dp(22),dp(28),dp(22),dp(28));empty.setBackground(bg(WHITE,22,LINE));empty.addView(text("这里还没有照片",18,INK,true));gap(empty,8);empty.addView(text("直接添加图片，也可以从图文记录里自动出现。",14,MUTED,false));content.addView(empty,lp(-1,-2));
         }else{
             String lastDay="";LinearLayout row=null;int cells=0;SimpleDateFormat dayFormat=new SimpleDateFormat("yyyy年M月d日",Locale.CHINA);
             for(int p=0;p<items.size();p++){AlbumItem item=items.get(p);String day=dayFormat.format(new Date(item.time));
@@ -155,10 +155,10 @@ public class MainActivity extends Activity {
         ArrayList<Store.Note> found=new ArrayList<>();String q=query.toLowerCase(Locale.ROOT);
         for(Store.Note n:store.notes)if(!n.deleted&&(filter.equals("all")||filter.equals(n.category))&&(n.title+"\n"+n.body).toLowerCase(Locale.ROOT).contains(q))found.add(n);
         Collections.sort(found,(a,b)->Long.compare(b.updated,a.updated));
-        LinearLayout label=row();TextView kind=text(filter.equals("all")?"记录":store.categoryName(filter),14,MUTED,true);label.addView(kind,new LinearLayout.LayoutParams(0,-2,1));label.addView(text(found.size()+" 条",14,MUTED,false));list.addView(label);gap(list,10);
+        if(!filter.equals("all")){LinearLayout label=row();TextView kind=text(store.categoryName(filter),14,MUTED,true);label.addView(kind,new LinearLayout.LayoutParams(0,-2,1));list.addView(label);gap(list,10);}
         if(found.isEmpty()){
             LinearLayout empty=column();empty.setPadding(dp(22),dp(26),dp(22),dp(26));empty.setBackground(bg(homePanelColor(),24,LINE));
-            empty.addView(text(query.isEmpty()?"把需要的，先收好。":"没有找到这条记录",23,INK,true));gap(empty,12);
+            empty.addView(text(query.isEmpty()?"把需要的，先收好。":"没有找到这条记录",18,INK,true));gap(empty,8);
             TextView hint=text(query.isEmpty()?"文字和图片放在一起，\n下次直接打开就能用。":"换个词试试，或清空搜索。",16,MUTED,false);empty.addView(hint);gap(empty,24);
             if(query.isEmpty())empty.addView(button("记一条",false,()->newNote(null)));else empty.addView(button("清空搜索",false,()->searchInput.setText("")));
             list.addView(empty,lp(-1,-2));return;
