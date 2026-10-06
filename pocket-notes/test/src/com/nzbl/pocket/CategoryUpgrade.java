@@ -22,11 +22,12 @@ public class CategoryUpgrade extends Acceptance {
                 check(a.store.categories.size()==3,"old release really has seeded categories");
                 byte[] original=Store.read(new ParcelFileDescriptor.AutoCloseInputStream(getUiAutomation().executeShellCommand("cat /sdcard/Download/reference-fixture.png")),1024*1024);
                 File image=new File(a.store.photos,"upgrade-test.img");try(FileOutputStream out=new FileOutputStream(image)){out.write(original);}
-                main(()->a.newNote("hair"));main(()->{a.titleInput.setText("更新前的真实记录");a.bodyInput.setText("中文和换行都保留。\n图片与常用状态也保留。");a.editing.images.add(image.getName());a.editing.pinned=true;a.renderEditorPhotos();});tap("保存");
-                check(a.store.change(()->{for(Store.Category c:a.store.categories)if("daily".equals(c.id))c.name="自建分类";}),"legacy renamed category persisted before upgrade");
-                main(()->a.newNote("daily"));main(()->{a.titleInput.setText("改过分类名的记录");a.bodyInput.setText("这个分类是用户改过的，必须保留。");});tap("保存");
-                Store.Note legacyDraft=new Store.Note();legacyDraft.category="prompt";legacyDraft.title="更新前的草稿";legacyDraft.body="未保存的输入也不能丢失。";check(a.store.change(()->a.store.draft=legacyDraft),"legacy draft persisted before upgrade");
-                JSONObject before=new JSONObject().put("noteId",a.store.notes.get(0).id).put("secondId",a.store.notes.get(1).id).put("imageSha",sha(original));
+                Store.Note legacyNote=new Store.Note();legacyNote.category="hair";legacyNote.title="更新前的真实记录";legacyNote.body="中文和换行都保留。\n图片与常用状态也保留。";legacyNote.images.add(image.getName());legacyNote.pinned=true;
+                Store.Note secondLegacy=new Store.Note();secondLegacy.category="daily";secondLegacy.title="改过分类名的记录";secondLegacy.body="这个分类是用户改过的，必须保留。";
+                Store.Note legacyDraft=new Store.Note();legacyDraft.category="prompt";legacyDraft.title="更新前的草稿";legacyDraft.body="未保存的输入也不能丢失。";
+                check(a.store.change(()->{for(Store.Category c:a.store.categories)if("daily".equals(c.id))c.name="自建分类";a.store.notes.clear();a.store.notes.add(legacyNote);a.store.notes.add(secondLegacy);a.store.draft=legacyDraft;}),"legacy records categories and draft persisted before upgrade");
+                check(a.store.notes.size()==2,"legacy fixture has two saved notes");
+                JSONObject before=new JSONObject().put("noteId",legacyNote.id).put("secondId",secondLegacy.id).put("imageSha",sha(original));
                 write("upgrade-before.json",before);
                 JSONObject disk=new JSONObject(new String(Store.read(a.store.file.openRead(),16*1024*1024),"UTF-8"));check(!disk.has("categoryMode"),"upgrade input is actual old data format");shot("10-before-upgrade");
             }else{
