@@ -144,7 +144,9 @@ public class MainActivity extends Activity implements NativeMessageAdapter.Callb
       int top=0,bottom=0;
       if(Build.VERSION.SDK_INT>=30){
         android.graphics.Insets bars=insets.getInsets(WindowInsets.Type.systemBars());
-        top=bars.top; bottom=bars.bottom;
+        android.graphics.Insets ime=insets.getInsets(WindowInsets.Type.ime());
+        top=bars.top;
+        bottom=Math.max(bars.bottom,ime.bottom);
       }else{
         top=insets.getSystemWindowInsetTop();
         bottom=insets.getSystemWindowInsetBottom();
@@ -172,12 +174,13 @@ public class MainActivity extends Activity implements NativeMessageAdapter.Callb
     setContentView(root);
 
     root.getViewTreeObserver().addOnGlobalLayoutListener(()->{
-      Rect r=new Rect();
-      root.getWindowVisibleDisplayFrame(r);
-      int visible=r.height();
       int[] loc=new int[2];
       input.getLocationOnScreen(loc);
-      android.util.Log.i("DualPhoneNative","visible="+visible+" inputBottom="+(loc[1]+input.getHeight()));
+      int imeBottom=0;
+      if(Build.VERSION.SDK_INT>=30&&root.getRootWindowInsets()!=null){
+        imeBottom=root.getRootWindowInsets().getInsets(WindowInsets.Type.ime()).bottom;
+      }
+      android.util.Log.i("DualPhoneNative","screen="+root.getHeight()+" ime="+imeBottom+" inputBottom="+(loc[1]+input.getHeight()));
     });
   }
 
