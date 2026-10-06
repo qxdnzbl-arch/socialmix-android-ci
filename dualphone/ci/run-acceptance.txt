@@ -1,1 +1,1 @@
-native-v5.4-stress-r3
+native-v5.4-stress-r4-isolated
