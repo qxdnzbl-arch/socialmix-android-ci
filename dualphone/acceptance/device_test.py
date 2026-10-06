@@ -18,10 +18,17 @@ def screen(name):
  (OUT/(name+'.png')).write_bytes(adb('exec-out','screencap','-p'))
 
 def ui(name='ui',timeout=20):
- start=time.monotonic();s=shell('uiautomator','dump','/sdcard/acceptance.xml',timeout=timeout)
- if 'ERROR' in s:raise RuntimeError(s)
- b=adb('exec-out','cat','/sdcard/acceptance.xml');(OUT/(name+'.xml')).write_bytes(b)
- return ET.fromstring(b),round(time.monotonic()-start,3)
+ start=time.monotonic();deadline=start+timeout;last=''
+ while time.monotonic()<deadline:
+  shell('rm','-f','/sdcard/acceptance.xml')
+  r=subprocess.run([ADB,'shell','uiautomator','dump','/sdcard/acceptance.xml'],capture_output=True,timeout=max(.1,deadline-time.monotonic()))
+  last=(r.stdout+r.stderr).decode(errors='replace');(OUT/(name+'-dump.txt')).write_text(last)
+  b=adb('exec-out','cat','/sdcard/acceptance.xml')
+  if b.lstrip().startswith(b'<?xml'):
+   t=ET.fromstring(b);(OUT/(name+'.xml')).write_bytes(b)
+   return t,round(time.monotonic()-start,3)
+  time.sleep(.3)
+ raise RuntimeError('UI tree unavailable: '+last)
 
 def node(tree,text=None,desc=None,cls=None,contains=None):
  for n in tree.iter('node'):
@@ -72,9 +79,11 @@ def run():
  adb('install','-r',str(BASELINE),timeout=60)
  shell('pm','clear',PKG)
  for perm in ['BLUETOOTH_ADVERTISE','BLUETOOTH_CONNECT','BLUETOOTH_SCAN','NEARBY_WIFI_DEVICES','POST_NOTIFICATIONS']:shell('pm','grant',PKG,'android.permission.'+perm,ok=False)
- shell('am','start','-n',COMP);time.sleep(3)
+ shell('am','start','-W','-n',COMP);time.sleep(1)
  t,_=ui('baseline-empty');record('baseline_empty_chat_visible',node(t,text='我的两台手机') is not None);screen('baseline-empty')
  seed();adb('logcat','-c');shell('am','start','-n',COMP);time.sleep(3)
+ # Reopening chat calls the same service wake path as real foreground use.
+ shell('input','keyevent','3');time.sleep(.3);shell('am','start','-n',COMP);time.sleep(.5)
  blocked=False
  try:
   t,d=ui('baseline-under-stall',timeout=7)
@@ -97,7 +106,7 @@ def run():
  adb('install','-r',str(apk),timeout=60)
  new=database('after-upgrade').execute('SELECT COUNT(*) FROM messages').fetchone()[0]
  record('upgrade_preserves_history',old==new==1005,before=old,after=new)
- adb('logcat','-c');shell('am','start','-n',COMP);time.sleep(3)
+ adb('logcat','-c');shell('am','start','-W','-n',COMP);time.sleep(1)
  t,d=ui('fixed-start');record('release_start_under_slow_network',node(t,text='我的两台手机') is not None,tree_seconds=d);screen('fixed-start')
  edit=node(t,cls='android.widget.EditText');tap(edit);shell('input','text','Draft_Keep');time.sleep(.8)
  t,d=ui('fixed-keyboard');record('real_tap_and_typing',node(t,text='Draft_Keep',cls='android.widget.EditText') is not None,tree_seconds=d)
@@ -138,5 +147,7 @@ try:run()
 except Exception as e:
  record('acceptance_error',False,error=str(e))
 finally:
+ try:screen('last-screen')
+ except:pass
  try:(OUT/'last-logcat.txt').write_bytes(adb('logcat','-d',timeout=12,ok=False))
  except:pass
