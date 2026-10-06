@@ -176,12 +176,8 @@ jobs:
             adb logcat -c
             adb shell am start -n com.qxdnzbl.shuangjichuan.offline/com.qxdnzbl.shuangjichuan.MainActivity --ei ciLoadMessages 400
             sh -c 'for i in $(seq 1 25); do adb logcat -d -s DualPhoneNative:I "*:S" > deliverable/stress.log 2>/dev/null || true; grep -q "ci_load_done=400" deliverable/stress.log && grep -Eq "messages=40[01]" deliverable/stress.log && exit 0; sleep 1; done; exit 1'
-            for i in $(seq 1 10); do
-              timeout 5 adb shell input swipe 540 1500 540 420 180
-            done
-            for i in $(seq 1 5); do
-              timeout 5 adb shell input swipe 540 420 540 1500 180
-            done
+            sh -c 'for i in $(seq 1 10); do timeout 5 adb shell input swipe 540 1500 540 420 180; done'
+            sh -c 'for i in $(seq 1 5); do timeout 5 adb shell input swipe 540 420 540 1500 180; done'
             timeout 10 adb shell uiautomator dump /sdcard/stress.xml
             adb pull /sdcard/stress.xml deliverable/stress.xml
             grep -q "我的两台手机" deliverable/stress.xml
@@ -191,13 +187,13 @@ jobs:
             ! adb logcat -d | grep -E "ANR in com\.qxdnzbl\.shuangjichuan|Input dispatching timed out.*shuangjichuan|FATAL EXCEPTION: main.*shuangjichuan"
             adb shell pidof com.qxdnzbl.shuangjichuan.offline
 
-            cp dualphone/app/build/outputs/apk/release/app-release.apk deliverable/ShuangJiChuan_v5_5_Native.apk
-            sha256sum deliverable/ShuangJiChuan_v5_5_Native.apk > deliverable/SHA256.txt
+            cp dualphone/app/build/outputs/apk/release/app-release.apk deliverable/ShuangJiChuan_v5_4_Native.apk
+            sha256sum deliverable/ShuangJiChuan_v5_4_Native.apk > deliverable/SHA256.txt
 
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: shuangjichuan-v5-5-native
+          name: shuangjichuan-v5-4-native
           path: deliverable/
           if-no-files-found: error
           retention-days: 14
