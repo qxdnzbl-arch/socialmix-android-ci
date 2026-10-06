@@ -88,11 +88,15 @@ def insert(id,text,mine=False,kind='text',name=None,path=None,size=0,status=None
 def core():
  adb('root');time.sleep(.5);adb('wait-for-device')
  for key in ['window_animation_scale','transition_animation_scale','animator_duration_scale']:shell('settings','put','global',key,'0')
- shell('settings','put','secure','show_ime_with_hard_keyboard','1');shell('input','keyevent','82')
+ shell('settings','put','secure','show_ime_with_hard_keyboard','1');shell('wm','dismiss-keyguard')
  shell('iptables','-A','OUTPUT','-p','tcp','--dport','443','-j','DROP');shell('ip6tables','-A','OUTPUT','-p','tcp','--dport','443','-j','DROP',ok=False)
  adb('install','-r',str(BASELINE),timeout=60);shell('pm','clear',PKG)
  for perm in ['BLUETOOTH_ADVERTISE','BLUETOOTH_CONNECT','BLUETOOTH_SCAN','NEARBY_WIFI_DEVICES','POST_NOTIFICATIONS']:shell('pm','grant',PKG,'android.permission.'+perm,ok=False)
- shell('am','start','-W','-n',COMP);time.sleep(.6);t,_=ui('baseline-empty');record('baseline_chat_visible',optional(t,text='我的两台手机') is not None)
+ shell('am','start','-W','-n',COMP);time.sleep(.6);t,_=ui('baseline-empty')
+ if optional(t,text="Pixel Launcher isn't responding") is not None:
+  tap(node(t,text='Close app'));shell('am','start','-W','-n',COMP);time.sleep(.6);t=wait_ui('baseline-recovered',lambda t:optional(t,text='我的两台手机') is not None,20)
+  record('test_device_launcher_recovered')
+ record('baseline_chat_visible',optional(t,text='我的两台手机') is not None)
  seed()
  # A real Android screen capture is used only as a private test photo; it is not shipped in the APK.
  photo=adb('exec-out','screencap','-p');(OUT/'fixture-photo.png').write_bytes(photo)

@@ -180,7 +180,7 @@ final class AppUpdater {
     cancelled=false;progress=new AlertDialog.Builder(activity).setTitle(title).setMessage(message).setNegativeButton("取消",(d,w)->cancelRequest()).create();
     progress.setOnCancelListener(d->cancelRequest());show(progress);
   }
-  private void cancelRequest(){cancelled=true;HttpURLConnection connection=activeConnection;if(connection!=null)connection.disconnect();}
+  private void cancelRequest(){cancelled=true;}
   private void dismissProgress(){if(progress!=null){progress.dismiss();progress=null;}}
   private void show(AlertDialog dialog){
     if(!alive())return;activeDialog=dialog;dialog.show();if(dialog.getWindow()!=null){GradientDrawable bg=new GradientDrawable();bg.setColor(Color.rgb(244,245,247));bg.setCornerRadius(18*activity.getResources().getDisplayMetrics().density);dialog.getWindow().setBackgroundDrawable(bg);}
