@@ -82,6 +82,13 @@ public class MainActivity extends Activity implements NativeMessageAdapter.Callb
     getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
 
     prefs=getSharedPreferences("dual",MODE_PRIVATE);
+    if(!prefs.getBoolean("bg_soft_v2",false)){
+      int oldBlur=prefs.getInt("bg_blur",9);
+      int oldDim=prefs.getInt("bg_dim",24);
+      SharedPreferences.Editor e=prefs.edit().putBoolean("bg_soft_v2",true);
+      if(oldBlur==5&&oldDim==18){e.putInt("bg_blur",9).putInt("bg_dim",24);}
+      e.apply();
+    }
     db=new TransferDb(this);
 
     String device=prefs.getString("device","");
@@ -214,83 +221,99 @@ public class MainActivity extends Activity implements NativeMessageAdapter.Callb
   private View buildHeader(){
     LinearLayout header=new LinearLayout(this);
     header.setOrientation(LinearLayout.VERTICAL);
-    header.setPadding(dp(20),dp(10),dp(16),dp(8));
-    header.setBackground(makeColor(Color.argb(212,250,250,251),0));
+    header.setPadding(dp(12),dp(4),dp(12),dp(7));
+    header.setBackground(glassPanel(0));
 
-    LinearLayout row=new LinearLayout(this);
-    row.setGravity(Gravity.CENTER_VERTICAL);
+    FrameLayout top=new FrameLayout(this);
+    top.setMinimumHeight(dp(52));
 
     LinearLayout titleBox=new LinearLayout(this);
     titleBox.setOrientation(LinearLayout.VERTICAL);
+    titleBox.setGravity(Gravity.CENTER_HORIZONTAL);
 
     TextView title=new TextView(this);
     title.setText("我的两台手机");
-    title.setTextColor(Color.rgb(30,31,34));
-    title.setTextSize(21.5f);
+    title.setTextColor(Color.rgb(29,29,31));
+    title.setTextSize(17.5f);
+    title.setGravity(Gravity.CENTER);
+    title.setIncludeFontPadding(false);
     title.setTypeface(android.graphics.Typeface.create("sans-serif-medium",android.graphics.Typeface.NORMAL));
     titleBox.addView(title,new LinearLayout.LayoutParams(-2,-2));
 
+    LinearLayout statusRow=new LinearLayout(this);
+    statusRow.setGravity(Gravity.CENTER);
+    View dot=new View(this);
+    dot.setBackground(makeColor(Color.rgb(91,145,116),dp(99)));
+    statusRow.addView(dot,new LinearLayout.LayoutParams(dp(6),dp(6)));
     status=new TextView(this);
-    status.setText("● 自动同步");
-    status.setTextSize(11f);
-    status.setTextColor(Color.rgb(76,133,106));
-    status.setPadding(0,dp(3),0,0);
-    status.setBackgroundColor(Color.TRANSPARENT);
-    LinearLayout.LayoutParams slp=new LinearLayout.LayoutParams(-2,-2);
-    slp.topMargin=dp(2);
-    titleBox.addView(status,slp);
+    status.setText("自动同步");
+    status.setTextSize(10.5f);
+    status.setTextColor(Color.rgb(88,129,109));
+    status.setIncludeFontPadding(false);
+    LinearLayout.LayoutParams stlp=new LinearLayout.LayoutParams(-2,-2);
+    stlp.leftMargin=dp(5);
+    statusRow.addView(status,stlp);
+    LinearLayout.LayoutParams srlp=new LinearLayout.LayoutParams(-2,-2);
+    srlp.gravity=Gravity.CENTER_HORIZONTAL;
+    srlp.topMargin=dp(5);
+    titleBox.addView(statusRow,srlp);
 
-    row.addView(titleBox,new LinearLayout.LayoutParams(0,-2,1f));
+    FrameLayout.LayoutParams tlp=new FrameLayout.LayoutParams(-2,-2,Gravity.CENTER);
+    top.addView(titleBox,tlp);
 
+    LinearLayout actions=new LinearLayout(this);
+    actions.setGravity(Gravity.CENTER);
     ImageButton search=iconButton(R.drawable.ic_search);
     search.setContentDescription("搜索");
     search.setOnClickListener(v->openSearch());
-    row.addView(search,buttonLp());
-
+    actions.addView(search,new LinearLayout.LayoutParams(dp(34),dp(34)));
     ImageButton more=iconButton(R.drawable.ic_more);
     more.setContentDescription("聊天背景");
     more.setOnClickListener(v->showBackgroundDialog());
-    LinearLayout.LayoutParams mlp=buttonLp(); mlp.leftMargin=dp(6);
-    row.addView(more,mlp);
+    LinearLayout.LayoutParams mlp=new LinearLayout.LayoutParams(dp(34),dp(34));mlp.leftMargin=dp(6);
+    actions.addView(more,mlp);
+    FrameLayout.LayoutParams alp=new FrameLayout.LayoutParams(-2,-2,Gravity.END|Gravity.CENTER_VERTICAL);
+    top.addView(actions,alp);
 
-    header.addView(row,new LinearLayout.LayoutParams(-1,-2));
+    header.addView(top,new LinearLayout.LayoutParams(-1,dp(52)));
 
     searchPanel=new LinearLayout(this);
     searchPanel.setGravity(Gravity.CENTER_VERTICAL);
-    searchPanel.setPadding(dp(10),0,dp(4),0);
-    searchPanel.setBackground(makeColor(Color.argb(170,255,255,255),dp(14)));
+    searchPanel.setPadding(dp(11),0,dp(4),0);
+    searchPanel.setBackground(glassCapsule(dp(15)));
     searchPanel.setVisibility(View.GONE);
+
+    ImageView searchGlyph=new ImageView(this);
+    searchGlyph.setImageResource(R.drawable.ic_search);
+    searchGlyph.setColorFilter(Color.rgb(126,128,133));
+    searchGlyph.setPadding(dp(3),dp(3),dp(3),dp(3));
+    searchPanel.addView(searchGlyph,new LinearLayout.LayoutParams(dp(26),dp(38)));
 
     searchInput=new EditText(this);
     searchInput.setSingleLine(true);
     searchInput.setTextSize(14);
     searchInput.setHint("搜索聊天");
-    searchInput.setHintTextColor(Color.rgb(152,155,160));
-    searchInput.setTextColor(Color.rgb(34,36,39));
+    searchInput.setHintTextColor(Color.rgb(151,153,158));
+    searchInput.setTextColor(Color.rgb(34,35,38));
     searchInput.setBackgroundColor(Color.TRANSPARENT);
+    searchInput.setPadding(dp(3),0,dp(4),0);
     searchPanel.addView(searchInput,new LinearLayout.LayoutParams(0,dp(38),1f));
 
     searchCount=new TextView(this);
     searchCount.setTextSize(11.5f);
-    searchCount.setTextColor(Color.rgb(127,131,137));
+    searchCount.setTextColor(Color.rgb(127,130,136));
     searchCount.setGravity(Gravity.CENTER);
-    searchPanel.addView(searchCount,new LinearLayout.LayoutParams(dp(42),dp(38)));
+    searchPanel.addView(searchCount,new LinearLayout.LayoutParams(dp(40),dp(38)));
 
-    TextView prev=smallAction("↑");
-    prev.setOnClickListener(v->moveSearch(-1));
-    searchPanel.addView(prev,new LinearLayout.LayoutParams(dp(34),dp(34)));
-
-    TextView next=smallAction("↓");
-    next.setOnClickListener(v->moveSearch(1));
-    searchPanel.addView(next,new LinearLayout.LayoutParams(dp(34),dp(34)));
-
-    TextView close=smallAction("×");
-    close.setTextSize(20);
-    close.setOnClickListener(v->closeSearch());
-    searchPanel.addView(close,new LinearLayout.LayoutParams(dp(34),dp(34)));
+    TextView prev=smallAction("↑");prev.setOnClickListener(v->moveSearch(-1));
+    TextView next=smallAction("↓");next.setOnClickListener(v->moveSearch(1));
+    TextView close=smallAction("×");close.setTextSize(19);close.setOnClickListener(v->closeSearch());
+    searchPanel.addView(prev,new LinearLayout.LayoutParams(dp(32),dp(32)));
+    searchPanel.addView(next,new LinearLayout.LayoutParams(dp(32),dp(32)));
+    searchPanel.addView(close,new LinearLayout.LayoutParams(dp(32),dp(32)));
 
     LinearLayout.LayoutParams splp=new LinearLayout.LayoutParams(-1,-2);
-    splp.topMargin=dp(9);
+    splp.topMargin=dp(5);
     header.addView(searchPanel,splp);
 
     searchInput.addTextChangedListener(new TextWatcher(){
@@ -307,45 +330,54 @@ public class MainActivity extends Activity implements NativeMessageAdapter.Callb
 
   private View buildComposer(){
     FrameLayout wrap=new FrameLayout(this);
-    wrap.setPadding(dp(12),dp(6),dp(12),Math.max(dp(8),navInset()));
+    wrap.setPadding(dp(10),dp(5),dp(10),Math.max(dp(7),navInset()));
 
-    LinearLayout bar=new LinearLayout(this);
-    bar.setGravity(Gravity.BOTTOM);
-    bar.setPadding(dp(5),dp(4),dp(5),dp(4));
-    bar.setBackground(makeColor(Color.argb(220,252,252,253),dp(24)));
-    bar.setElevation(dp(2));
+    LinearLayout row=new LinearLayout(this);
+    row.setGravity(Gravity.BOTTOM|Gravity.CENTER_HORIZONTAL);
 
     ImageButton attach=iconButton(R.drawable.ic_plus);
-    attach.setBackground(makeColor(Color.argb(20,80,88,100),dp(99)));
+    attach.setContentDescription("添加文件");
+    attach.setBackground(glassCircle());
     attach.setOnClickListener(v->pickFiles());
-    bar.addView(attach,new LinearLayout.LayoutParams(dp(36),dp(36)));
+    row.addView(attach,new LinearLayout.LayoutParams(dp(38),dp(38)));
+
+    LinearLayout capsule=new LinearLayout(this);
+    capsule.setGravity(Gravity.BOTTOM);
+    capsule.setPadding(dp(8),dp(3),dp(4),dp(3));
+    capsule.setBackground(glassCapsule(dp(22)));
+    LinearLayout.LayoutParams clp=new LinearLayout.LayoutParams(0,-2,1f);
+    clp.leftMargin=dp(7);
+    row.addView(capsule,clp);
 
     input=new EditText(this);
     input.setTextSize(15);
-    input.setTextColor(Color.rgb(37,40,45));
-    input.setHintTextColor(Color.rgb(150,153,158));
-    input.setHint("消息");
+    input.setTextColor(Color.rgb(37,39,43));
+    input.setHintTextColor(Color.rgb(151,153,158));
+    input.setHint("iMessage");
     input.setGravity(Gravity.CENTER_VERTICAL);
     input.setMinLines(1);
     input.setMaxLines(5);
-    input.setPadding(dp(8),dp(7),dp(8),dp(7));
+    input.setPadding(dp(3),dp(7),dp(5),dp(7));
     input.setBackgroundColor(Color.TRANSPARENT);
-    View.OnFocusChangeListener imeFocus=(v,has)->{
-      if(has) v.postDelayed(()->((InputMethodManager)getSystemService(INPUT_METHOD_SERVICE)).showSoftInput(v,InputMethodManager.SHOW_IMPLICIT),80);
-    };
-    input.setOnFocusChangeListener(imeFocus);
+    input.setOnFocusChangeListener((v,has)->{
+      if(has)v.postDelayed(()->((InputMethodManager)getSystemService(INPUT_METHOD_SERVICE)).showSoftInput(v,InputMethodManager.SHOW_IMPLICIT),70);
+    });
     input.setOnClickListener(v->v.post(()->((InputMethodManager)getSystemService(INPUT_METHOD_SERVICE)).showSoftInput(v,InputMethodManager.SHOW_IMPLICIT)));
-    LinearLayout.LayoutParams ilp=new LinearLayout.LayoutParams(0,-2,1f);
-    ilp.leftMargin=dp(4); ilp.rightMargin=dp(4);
-    bar.addView(input,ilp);
+    capsule.addView(input,new LinearLayout.LayoutParams(0,-2,1f));
 
     ImageButton send=iconButton(R.drawable.ic_send);
+    send.setContentDescription("发送");
     send.setColorFilter(Color.WHITE);
-    send.setBackground(makeGradient(new int[]{Color.rgb(117,136,238),Color.rgb(134,119,233)},GradientDrawable.Orientation.TL_BR,dp(99)));
+    GradientDrawable sendBg=new GradientDrawable();
+    sendBg.setColor(Color.rgb(46,123,246));
+    sendBg.setShape(GradientDrawable.OVAL);
+    send.setBackground(sendBg);
     send.setOnClickListener(v->sendText());
-    bar.addView(send,new LinearLayout.LayoutParams(dp(36),dp(36)));
+    LinearLayout.LayoutParams slp=new LinearLayout.LayoutParams(dp(34),dp(34));
+    slp.gravity=Gravity.BOTTOM;
+    capsule.addView(send,slp);
 
-    wrap.addView(bar,new FrameLayout.LayoutParams(-1,-2,Gravity.BOTTOM));
+    wrap.addView(row,new FrameLayout.LayoutParams(-1,-2,Gravity.BOTTOM));
     return wrap;
   }
 
@@ -355,7 +387,7 @@ public class MainActivity extends Activity implements NativeMessageAdapter.Callb
     b.setColorFilter(Color.rgb(73,79,87));
     b.setPadding(dp(7),dp(7),dp(7),dp(7));
     b.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
-    b.setBackgroundColor(Color.TRANSPARENT);
+    b.setBackground(glassCircle());
     b.setElevation(0);
     return b;
   }
@@ -421,11 +453,11 @@ public class MainActivity extends Activity implements NativeMessageAdapter.Callb
     String s=prefs.getString("link_state","searching");
     String label;
     int fg;
-    if("nearby".equals(s)){label="● 已直连";fg=Color.rgb(70,130,101);}
-    else if("relay".equals(s)){label="● 已同步";fg=Color.rgb(70,130,101);}
-    else if("connecting".equals(s)){label="● 连接中";fg=Color.rgb(84,122,159);}
-    else if("permission".equals(s)){label="● 需要权限";fg=Color.rgb(158,112,53);}
-    else {label="● 自动同步";fg=Color.rgb(80,132,108);}
+    if("nearby".equals(s)){label="已直连";fg=Color.rgb(70,130,101);}
+    else if("relay".equals(s)){label="已同步";fg=Color.rgb(70,130,101);}
+    else if("connecting".equals(s)){label="连接中";fg=Color.rgb(84,122,159);}
+    else if("permission".equals(s)){label="需要权限";fg=Color.rgb(158,112,53);}
+    else {label="自动同步";fg=Color.rgb(80,132,108);}
     status.setText(label);
     status.setTextColor(fg);
   }
@@ -743,6 +775,36 @@ public class MainActivity extends Activity implements NativeMessageAdapter.Callb
 
   private int navInset(){return 0;}
   private int dp(float n){return Math.round(n*getResources().getDisplayMetrics().density);}
+  private GradientDrawable glassCircle(){
+    GradientDrawable g=new GradientDrawable(
+      GradientDrawable.Orientation.TOP_BOTTOM,
+      new int[]{0xD8FFFFFF,0xA8FFFFFF}
+    );
+    g.setShape(GradientDrawable.OVAL);
+    g.setStroke(1,0xB8FFFFFF);
+    return g;
+  }
+
+  private GradientDrawable glassCapsule(float radius){
+    GradientDrawable g=new GradientDrawable(
+      GradientDrawable.Orientation.TOP_BOTTOM,
+      new int[]{0xE4FFFFFF,0xB8FFFFFF}
+    );
+    g.setCornerRadius(radius);
+    g.setStroke(1,0xB8FFFFFF);
+    return g;
+  }
+
+  private GradientDrawable glassPanel(float radius){
+    GradientDrawable g=new GradientDrawable(
+      GradientDrawable.Orientation.TOP_BOTTOM,
+      new int[]{0xB8FFFFFF,0x88FFFFFF}
+    );
+    g.setCornerRadius(radius);
+    g.setStroke(1,0x44FFFFFF);
+    return g;
+  }
+
   private GradientDrawable makeColor(int color,float radius){GradientDrawable g=new GradientDrawable();g.setColor(color);g.setCornerRadius(radius);return g;}
   private GradientDrawable makeGradient(int[] colors,GradientDrawable.Orientation o,float radius){GradientDrawable g=new GradientDrawable(o,colors);g.setCornerRadius(radius);return g;}
   private void toast(String s){Toast.makeText(this,s,Toast.LENGTH_SHORT).show();}

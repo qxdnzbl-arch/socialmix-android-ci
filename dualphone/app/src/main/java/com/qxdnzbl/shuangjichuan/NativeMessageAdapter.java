@@ -87,11 +87,11 @@ public class NativeMessageAdapter extends RecyclerView.Adapter<NativeMessageAdap
   @Override public Holder onCreateViewHolder(ViewGroup parent,int viewType){
     FrameLayout root=new FrameLayout(c);
     root.setLayoutParams(new RecyclerView.LayoutParams(-1,-2));
-    root.setPadding(dp(14),dp(4),dp(14),dp(4));
+    root.setPadding(dp(12),dp(3),dp(12),dp(3));
 
     LinearLayout bubble=new LinearLayout(c);
     bubble.setOrientation(LinearLayout.VERTICAL);
-    bubble.setPadding(dp(13),dp(10),dp(13),dp(9));
+    bubble.setPadding(dp(12),dp(9),dp(12),dp(8));
     root.addView(bubble,new FrameLayout.LayoutParams(-2,-2));
 
     return new Holder(root,bubble);
@@ -113,7 +113,7 @@ public class NativeMessageAdapter extends RecyclerView.Adapter<NativeMessageAdap
     h.bubble.setBackground(bubbleBackground(m.mine,matched,active));
 
     if("text".equals(m.kind)){
-      TextView body=textView(15.5f,m.mine?Color.WHITE:Color.rgb(32,34,38));
+      TextView body=textView(15.5f,m.mine?Color.WHITE:Color.rgb(29,29,31));
       body.setMaxWidth(maxWidth);
       body.setLineSpacing(0,1.05f);
       body.setText(highlight(m.text==null?"":m.text,query,m.mine));
@@ -153,7 +153,7 @@ public class NativeMessageAdapter extends RecyclerView.Adapter<NativeMessageAdap
 
     if(m.mine&&position==latestMinePosition){
       TextView state=textView(10.5f,0xAFFFFFFF);
-      state.setText("sent".equals(m.status)?"已送达":"等待发送");
+      state.setText("sent".equals(m.status)?"已送达":"正在发送");
       state.setGravity(Gravity.END);
       LinearLayout.LayoutParams sp=new LinearLayout.LayoutParams(-1,-2);sp.topMargin=dp(5);
       h.bubble.addView(state,sp);
@@ -176,11 +176,11 @@ public class NativeMessageAdapter extends RecyclerView.Adapter<NativeMessageAdap
   private GradientDrawable bubbleBackground(boolean mine,boolean matched,boolean active){
     GradientDrawable g=new GradientDrawable();
     if(mine){
-      g.setColor(Color.rgb(74,122,246));
+      g.setColor(Color.rgb(45,124,246));
       float r=dp(19),tight=dp(6);
       g.setCornerRadii(new float[]{r,r,r,r,tight,tight,r,r});
     }else{
-      g.setColor(0xDCFFFFFF);
+      g.setColor(0xD9FFFFFF);
       float r=dp(19),tight=dp(6);
       g.setCornerRadii(new float[]{r,r,r,r,r,r,tight,tight});
       g.setStroke(1,0x66FFFFFF);
