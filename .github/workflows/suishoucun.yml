@@ -7,7 +7,7 @@ on:
 permissions:
   contents: write
   actions: read
-jobs:
+concurrency:\n  group: suishoucun-${{ github.ref }}\n  cancel-in-progress: true\njobs:
   native-acceptance:
     strategy:
       fail-fast: false
