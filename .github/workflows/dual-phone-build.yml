@@ -10,8 +10,8 @@ permissions:
   contents: read
 
 concurrency:
-  group: dual-phone-v5-final
-  cancel-in-progress: true
+  group: dual-phone-v5-final-${{ github.sha }}
+  cancel-in-progress: false
 
 jobs:
   build-test:
