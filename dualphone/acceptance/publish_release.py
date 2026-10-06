@@ -12,6 +12,16 @@ def find(tag):
  except urllib.error.HTTPError as e:
   if e.code==404:return None
   raise
+if len(sys.argv)>1 and sys.argv[1]=='rollback':
+ previous=json.loads((OUT/'previous-channel.json').read_text());channel=find('dualphone-latest')
+ if channel is not None:
+  if previous is None:api('/releases/'+str(channel['id']),'DELETE')
+  else:
+   channel=api('/releases/'+str(channel['id']),'PATCH',{'body':json.dumps(previous,ensure_ascii=False)})
+   for a in channel.get('assets',[]):
+    if a['name']=='update.json':api('/releases/assets/'+str(a['id']),'DELETE')
+   api(channel['upload_url'].split('{')[0]+'?name=update.json','POST',json.dumps(previous,ensure_ascii=False).encode(),True)
+ print('Update channel restored after failed install acceptance',flush=True);raise SystemExit(0)
 if not json.loads((OUT/'core-result.json').read_text()).get('passed'):raise RuntimeError('Core runtime acceptance has not passed')
 apk=ROOT/'app/build/outputs/apk/release/app-release.apk';version=int(os.environ['RELEASE_VERSION_CODE']);name=os.environ['RELEASE_VERSION_NAME'];commit=os.environ['GITHUB_SHA'];tag='dualphone-v'+name.replace('-native','')+'-'+commit[:8]
 sha=hashlib.sha256(apk.read_bytes()).hexdigest();asset_name='ShuangJiChuan_'+str(version)+'.apk'
@@ -27,6 +37,7 @@ meta={'packageName':'com.qxdnzbl.shuangjichuan.offline','versionCode':version,'v
 with urllib.request.urlopen(meta['apkUrl'],timeout=60) as response:download=response.read()
 if hashlib.sha256(download).hexdigest()!=sha:raise RuntimeError('Public APK bytes mismatch')
 channel=find('dualphone-latest')
+(OUT/'previous-channel.json').write_text(json.dumps(json.loads(channel.get('body','{}')) if channel else None,ensure_ascii=False))
 if channel is not None:
  try:old=json.loads(channel.get('body','{}'))
  except ValueError:old={}

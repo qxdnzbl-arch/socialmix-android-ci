@@ -162,7 +162,13 @@ def core():
  tap(node(t,desc='图片：fixture-photo.png'));time.sleep(.5);t,_=ui('photo-viewer');record('native_photo_viewer_opens',optional(t,desc='图片预览') is not None and optional(t,text='保存到下载') is not None)
  screen('photo-viewer');shell('input','tap','500','750');shell('input','tap','500','750');shell('input','swipe','700','850','430','650','300');t,_=ui('photo-zoom');record('photo_zoom_pan_remains_responsive',optional(t,desc='关闭图片') is not None)
  tap(node(t,text='保存到下载'));time.sleep(.6)
- paths=shell('find','/sdcard/Download','-type','f','-name','fixture-photo*').splitlines();record('photo_save_keeps_original_bytes',len(paths)>=2 and any(adb('exec-out','cat',shlex.quote(p))==photo for p in paths if p!='/sdcard/Download/fixture-photo.png'))
+ deadline=time.monotonic()+12;valid=False;paths=[];expected_hash=hashlib.sha256(photo).hexdigest()
+ while time.monotonic()<deadline:
+  paths=shell('find','/sdcard/Download','-type','f','-name','fixture-photo*').splitlines()
+  valid=len(paths)>=2 and any(shell('sha256sum '+shlex.quote(p)).startswith(expected_hash) for p in paths if p!='/sdcard/Download/fixture-photo.png')
+  if valid:break
+  time.sleep(.3)
+ record('photo_save_keeps_original_bytes',valid,download_files=paths)
  t,_=ui('photo-save');tap(node(t,desc='关闭图片'));t,_=ui('photo-close');record('viewer_returns_to_chat',optional(t,text='我的两台手机') is not None)
  # Real file picker selection must enqueue and land at latest, even from history.
  for i in range(3):shell('input','swipe','270','400','270','1100','150')
@@ -262,7 +268,9 @@ try:
  if len(sys.argv)>1 and sys.argv[1]=='update':
   checks=json.loads((OUT/'runtime-checks.json').read_text());update()
  else:core()
-except Exception as e:record('acceptance_error',False,error=str(e))
+except Exception as e:
+ if len(sys.argv)>1 and sys.argv[1]=='update' and (OUT/'previous-channel.json').exists():subprocess.run([sys.executable,str(OUT/'publish_release.py'),'rollback'],check=False)
+ record('acceptance_error',False,error=str(e))
 finally:
  try:screen('last-screen')
  except:pass

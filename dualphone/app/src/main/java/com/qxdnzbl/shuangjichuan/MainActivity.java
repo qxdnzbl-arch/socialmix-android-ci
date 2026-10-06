@@ -252,7 +252,7 @@ public class MainActivity extends Activity implements NativeMessageAdapter.Callb
     LinearLayout header=new LinearLayout(this);
     header.setOrientation(LinearLayout.VERTICAL);
     header.setPadding(dp(12),dp(4),dp(12),dp(7));
-    header.setBackground(solidPanel(Color.rgb(244,245,247),0));
+    header.setBackground(makeColor(Color.rgb(244,245,247),0));
 
     FrameLayout top=new FrameLayout(this);
     top.setMinimumHeight(dp(52));

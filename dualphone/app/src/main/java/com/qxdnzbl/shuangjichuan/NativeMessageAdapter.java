@@ -98,8 +98,8 @@ public class NativeMessageAdapter extends RecyclerView.Adapter<NativeMessageAdap
     bubble.setPadding(dp(12),dp(9),dp(12),dp(9));
     column.addView(bubble,new LinearLayout.LayoutParams(-2,-2));
     TextView state=textView(10.5f,Color.rgb(89,96,107));state.setGravity(Gravity.END);
-    state.setPadding(dp(3),0,dp(3),0);
-    LinearLayout.LayoutParams sp=new LinearLayout.LayoutParams(-1,-2);sp.topMargin=dp(4);column.addView(state,sp);
+    state.setPadding(dp(6),dp(2),dp(6),dp(2));state.setBackground(makeColor(Color.rgb(231,233,238),dp(5)));
+    LinearLayout.LayoutParams sp=new LinearLayout.LayoutParams(-2,-2);sp.gravity=Gravity.END;sp.topMargin=dp(4);column.addView(state,sp);
     if(type==TYPE_TEXT){
       TextView body=textView(15.5f,Color.BLACK);body.setMaxWidth(maxWidth-dp(24));body.setLineSpacing(0,1.06f);
       bubble.addView(body,new LinearLayout.LayoutParams(-2,-2));
