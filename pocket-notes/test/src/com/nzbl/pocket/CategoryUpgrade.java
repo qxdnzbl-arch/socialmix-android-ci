@@ -31,7 +31,7 @@ public class CategoryUpgrade extends Acceptance {
                 write("upgrade-before.json",before);
                 JSONObject disk=new JSONObject(new String(Store.read(a.store.file.openRead(),16*1024*1024),"UTF-8"));check(!disk.has("categoryMode"),"upgrade input is actual old data format");shot("10-before-upgrade");
             }else{
-                check(getTargetContext().getPackageManager().getPackageInfo("com.nzbl.pocket",0).versionCode==2,"replacement installs over existing APK");
+                check(getTargetContext().getPackageManager().getPackageInfo("com.nzbl.pocket",0).versionCode>1,"replacement installs over existing APK with a newer monotonic version");
                 JSONObject before=new JSONObject(new String(Store.read(new FileInputStream(new File(dir,"upgrade-before.json")),1024*1024),"UTF-8"));
                 check(a.store.ready&&a.store.notes.size()==2,"upgrade reads all original notes");
                 Store.Note n=a.store.find(before.getString("noteId"));Store.Note second=a.store.find(before.getString("secondId"));
