@@ -2,8 +2,15 @@
 set -euo pipefail
 cd pocket-notes
 mkdir -p out/qa
-adb root
-adb wait-for-device
+# adb root restarts adbd and can briefly close the transport on hosted runners.
+# Treat that restart as expected, then require a real shell before continuing.
+adb root || true
+for qa_attempt in {1..30}; do
+  adb wait-for-device || true
+  if adb shell 'echo ready' 2>/dev/null | grep -q ready; then break; fi
+  if [ "$qa_attempt" -eq 30 ]; then echo "ADB did not recover after root"; exit 1; fi
+  sleep 1
+done
 adb shell wm dismiss-keyguard
 for qa_attempt in {1..20}; do
   if adb shell mkdir -p /sdcard/Download; then break; fi
