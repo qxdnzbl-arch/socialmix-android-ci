@@ -171,7 +171,7 @@ jobs:
             adb exec-out screencap -p > deliverable/02-native-keyboard.png
 
             cp dualphone/app/build/outputs/apk/release/app-release.apk deliverable/ShuangJiChuan_v5_3_Native.apk
-            sha256sum deliverable/ShuangJiChuan_v5_Final.apk > deliverable/SHA256.txt
+            sha256sum deliverable/ShuangJiChuan_v5_3_Native.apk > deliverable/SHA256.txt
 
       - uses: actions/upload-artifact@v4
         if: always()
