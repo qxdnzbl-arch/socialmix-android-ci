@@ -19,6 +19,7 @@ public class MainActivity extends Activity {
     Store store;
     File backgroundFile;
     LinearLayout root,list,photoStrip;
+    View searchBox;
     EditText titleInput,bodyInput,searchInput;
     Store.Note editing,current;
     String screen="home",filter="all",query="",editorReturn="home";
@@ -31,6 +32,15 @@ public class MainActivity extends Activity {
     int scrollPosition=0;
     ListView homeList;
     public int dp(float n){return Math.round(n*getResources().getDisplayMetrics().density);}
+    @Override public boolean dispatchTouchEvent(MotionEvent e){
+        if(e.getActionMasked()==MotionEvent.ACTION_DOWN&&"home".equals(screen)&&searchInput!=null&&searchInput.hasFocus()&&searchBox!=null){
+            Rect r=new Rect();searchBox.getGlobalVisibleRect(r);
+            if(!r.contains((int)e.getRawX(),(int)e.getRawY())){
+                searchInput.clearFocus();searchInput.setCursorVisible(false);hideKeyboard();
+            }
+        }
+        return super.dispatchTouchEvent(e);
+    }
     @Override public void onCreate(Bundle saved){
         super.onCreate(saved);getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
         getWindow().setStatusBarColor(BG);getWindow().setNavigationBarColor(BG);
@@ -87,7 +97,7 @@ public class MainActivity extends Activity {
     void normalizeFilter(){if(!filter.equals("all")){boolean exists=false;for(Store.Category c:store.categories)if(c.id.equals(filter))exists=true;if(!exists)filter="all";}}
     void home(){
         editing=null;normalizeFilter();base("home");mainHeader("home");
-        LinearLayout search=row();search.setPadding(dp(15),0,dp(8),0);search.setBackground(bg(WHITE,18,LINE));TextView lens=text("",16,MUTED,false);lens.setCompoundDrawablesWithIntrinsicBounds(new Glyph("search",MUTED,21),null,null,null);search.addView(lens,lp(28,48));
+        LinearLayout search=row();searchBox=search;search.setPadding(dp(15),0,dp(8),0);search.setBackground(bg(WHITE,18,LINE));TextView lens=text("",16,MUTED,false);lens.setCompoundDrawablesWithIntrinsicBounds(new Glyph("search",MUTED,21),null,null,null);search.addView(lens,lp(28,48));
         searchInput=new EditText(this);searchInput.setTextSize(16);searchInput.setTextColor(INK);searchInput.setHintTextColor(MUTED);searchInput.setHint("搜索文字、标题");searchInput.setSingleLine(true);searchInput.setBackgroundColor(Color.TRANSPARENT);searchInput.setPadding(dp(4),0,dp(6),0);searchInput.setContentDescription("搜索记录");searchInput.setText(query);searchInput.setCursorVisible(false);searchInput.setOnFocusChangeListener((v,hasFocus)->searchInput.setCursorVisible(hasFocus));search.addView(searchInput,new LinearLayout.LayoutParams(0,dp(50),1));
         TextView clear=icon("close","清空搜索",()->searchInput.setText(""));clear.setVisibility(query.isEmpty()?View.GONE:View.VISIBLE);search.addView(clear,lp(40,46));LinearLayout.LayoutParams sl=lp(-1,52);sl.setMargins(dp(20),dp(12),dp(20),dp(14));root.addView(search,sl);
         if(!store.categories.isEmpty()){HorizontalScrollView tabs=new HorizontalScrollView(this);tabs.setHorizontalScrollBarEnabled(false);LinearLayout chips=row();chips.setPadding(dp(20),0,dp(12),dp(4));for(Store.Category c:store.categories)addFilter(chips,c.id,c.name);tabs.addView(chips);root.addView(tabs,lp(-1,48));}
@@ -158,7 +168,7 @@ public class MainActivity extends Activity {
         gap(c,9);LinearLayout bottom=row();String date=new SimpleDateFormat("M月d日",Locale.CHINA).format(new Date(n.updated));bottom.addView(text(date+(n.images.isEmpty()?"":"  ·  "+n.images.size()+" 张图"),13,MUTED,false),new LinearLayout.LayoutParams(0,-2,1));
         TextView copy=text("复制文字",13,ACCENT,true);copy.setGravity(Gravity.CENTER);copy.setPadding(dp(12),dp(8),dp(12),dp(8));copy.setMinHeight(dp(38));copy.setBackground(ripple(0xffedf6f7,12,0));copy.setOnClickListener(v->copy(n));bottom.addView(copy);c.addView(bottom);
         c.setContentDescription("记录卡片："+n.heading());c.setOnLongClickListener(v->{hideKeyboard();confirmDelete(n);return true;});
-        c.setOnClickListener(v->{scrollPosition=homeList.getFirstVisiblePosition();hideKeyboard();editorReturn="home";editor(n.copy());});return c;
+        c.setOnClickListener(v->{scrollPosition=homeList.getFirstVisiblePosition();hideKeyboard();editorReturn="home";detail(n,false);});return c;
     }
     void copy(Store.Note n){String value=n.body.trim().isEmpty()?n.title:n.body;if(value.isEmpty()){toast("这条记录只有图片");return;}((android.content.ClipboardManager)getSystemService(CLIPBOARD_SERVICE)).setPrimaryClip(ClipData.newPlainText(n.heading(),value));if(Build.VERSION.SDK_INT<33)toast("已复制");}
     void confirmDelete(Store.Note n){new AlertDialog.Builder(this).setTitle("移到回收站？").setMessage("之后可以在「更多 · 回收站」找回。").setPositiveButton("删除",(d,w)->{if(commit(()->{n.deleted=true;n.updated=System.currentTimeMillis();}))home();}).setNegativeButton("取消",null).show();}
@@ -197,7 +207,7 @@ public class MainActivity extends Activity {
         }
         Store.Note n=editing.copy();n.updated=System.currentTimeMillis();n.normalizeImageTimes();
         if(commit(()->{Store.Note old=store.find(n.id);if(old!=null)store.notes.remove(old);store.notes.add(n);store.draft=null;})){
-            editing=null;query="";filter=n.category;scrollPosition=0;if("album".equals(editorReturn))album();else home();
+            editing=null;query="";filter=n.category;scrollPosition=0;if("detail".equals(editorReturn))detail(n,false);else if("album".equals(editorReturn))album();else home();
         }
     }
     void leaveEditor(){updateEditing();hideKeyboard();if(editing==null||!editing.hasContent()){if(commit(()->store.draft=null)){editing=null;if("album".equals(editorReturn))album();else home();}return;}
@@ -210,7 +220,7 @@ public class MainActivity extends Activity {
     void photoPicker(){captureDraft();Intent i=new Intent(Intent.ACTION_OPEN_DOCUMENT);i.setType("image/*");i.addCategory(Intent.CATEGORY_OPENABLE);i.putExtra(Intent.EXTRA_ALLOW_MULTIPLE,true);try{startActivityForResult(i,10);}catch(ActivityNotFoundException e){error("手机未提供图片选择器。");}}
     void fullEditorPhoto(int index){if(editing==null||index<0||index>=editing.images.size())return;base("photo");root.setBackgroundColor(0xff18232b);getWindow().setStatusBarColor(0xff18232b);getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR);LinearLayout bar=row();bar.setPadding(dp(12),dp(8),dp(12),dp(8));TextView back=button("返回",false,()->{restoreSystemBars();editor(editing);});bar.addView(back,lp(70,48));TextView number=text((index+1)+" / "+editing.images.size(),16,WHITE,true);number.setGravity(Gravity.CENTER);bar.addView(number,new LinearLayout.LayoutParams(0,dp(48),1));root.addView(bar);Bitmap bitmap=decode(new File(store.photos,editing.images.get(index)),2800);if(bitmap!=null)root.addView(new ZoomImage(bitmap),new LinearLayout.LayoutParams(-1,0,1));else{TextView unavailable=text("图片无法读取",18,WHITE,false);unavailable.setGravity(Gravity.CENTER);root.addView(unavailable,new LinearLayout.LayoutParams(-1,0,1));}LinearLayout nav=row();nav.setPadding(dp(20),dp(10),dp(20),dp(16));if(index>0)nav.addView(button("上一张",false,()->fullEditorPhoto(index-1)),new LinearLayout.LayoutParams(0,dp(50),1));else nav.addView(new View(this),new LinearLayout.LayoutParams(0,dp(50),1));gapHorizontal(nav,12);if(index+1<editing.images.size())nav.addView(button("下一张",false,()->fullEditorPhoto(index+1)),new LinearLayout.LayoutParams(0,dp(50),1));else nav.addView(new View(this),new LinearLayout.LayoutParams(0,dp(50),1));root.addView(nav);}
     void detail(Store.Note n,boolean ignored){
-        editing=null;current=n;base("detail");top("记录",()->{current=null;if("album".equals(editorReturn))album();else home();},null,null);
+        editing=null;current=n;base("detail");top("记录",()->{current=null;if("album".equals(editorReturn))album();else home();},"编辑",()->{editorReturn="detail";editor(n.copy());});
         LinearLayout content=column();content.setPadding(dp(20),dp(6),dp(20),dp(24));scroller(content);LinearLayout card=column();card.setPadding(dp(22),dp(23),dp(22),dp(22));card.setBackground(bg(WHITE,24,LINE));
         TextView tag=text(store.categoryName(n.category),13,categoryColor(n.category),true);card.addView(tag);gap(card,10);TextView h=text(n.heading(),20,INK,true);h.setTextIsSelectable(true);card.addView(h);if(!n.body.trim().isEmpty()){gap(card,12);TextView body=text(n.body,16,INK,false);body.setTextIsSelectable(true);body.setLineSpacing(dp(5),1);card.addView(body);}content.addView(card);
         if(!n.images.isEmpty()){gap(content,25);content.addView(text("参考图片 · 点击放大",14,MUTED,true));gap(content,12);for(int i=0;i<n.images.size();i++){final int index=i;ImageView image=thumbnail(n.images.get(i),1200);image.setScaleType(ImageView.ScaleType.FIT_CENTER);image.setContentDescription("参考图片 "+(i+1));image.setOnClickListener(v->fullPhoto(index));content.addView(image,lp(-1,-2));gap(content,12);}}
