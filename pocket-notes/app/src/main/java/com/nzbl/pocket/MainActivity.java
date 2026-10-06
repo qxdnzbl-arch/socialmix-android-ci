@@ -36,7 +36,7 @@ public class MainActivity extends Activity {
         getWindow().setStatusBarColor(BG);getWindow().setNavigationBarColor(BG);
         getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR|View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR);
         backgroundFile=new File(getFilesDir(),"background.img");store=new Store(this);home();
-        if(saved!=null){filter=saved.getString("filter","all");query=saved.getString("query","");String s=saved.getString("screen","home");if("edit".equals(s)&&store.draft!=null)editor(store.draft.copy());else if("album".equals(s))album();else if("detail".equals(s)){Store.Note n=store.find(saved.getString("id",""));if(n!=null)detail(n,false);}else home();}
+        if(saved!=null){filter=saved.getString("filter","all");query=saved.getString("query","");String s=saved.getString("screen","home");if("edit".equals(s)&&store.draft!=null)editor(store.draft.copy());else if("album".equals(s))album();else home();}
         if(!store.ready)new AlertDialog.Builder(this).setTitle("记录读取异常").setMessage(store.loadError).setPositiveButton("导出原文件",(d,w)->exportPicker()).setNegativeButton("关闭",null).show();
     }
     @Override public void onSaveInstanceState(Bundle out){captureDraft();out.putString("screen",screen);out.putString("filter",filter);out.putString("query",query);if(current!=null)out.putString("id",current.id);super.onSaveInstanceState(out);}
@@ -151,8 +151,7 @@ public class MainActivity extends Activity {
     int categoryTint(String id){if(id.isEmpty())return 0xffe6f2f3;int color=Math.floorMod(id.hashCode(),3);return color==0?0xfffcf1e4:color==1?0xffeef0fb:0xffe6f2f3;}
     LinearLayout noteCard(Store.Note n){
         LinearLayout c=column();c.setPadding(dp(14),dp(13),dp(14),dp(11));c.setBackground(ripple(WHITE,20,LINE));
-        LinearLayout meta=row();TextView tag=text(store.categoryName(n.category),12,categoryColor(n.category),true);tag.setPadding(dp(9),dp(4),dp(9),dp(4));tag.setBackground(bg(categoryTint(n.category),8,0));meta.addView(tag);meta.addView(new View(this),new LinearLayout.LayoutParams(0,1,1));
-        TextView view=text("查看",13,MUTED,true);view.setGravity(Gravity.CENTER);view.setPadding(dp(9),dp(5),dp(9),dp(5));view.setContentDescription("查看记录："+n.heading());view.setBackground(ripple(0x00000000,10,0));view.setOnClickListener(v->{hideKeyboard();detail(n,false);});meta.addView(view,lp(-2,34));c.addView(meta);gap(c,8);
+        LinearLayout meta=row();TextView tag=text(store.categoryName(n.category),12,categoryColor(n.category),true);tag.setPadding(dp(9),dp(4),dp(9),dp(4));tag.setBackground(bg(categoryTint(n.category),8,0));meta.addView(tag);c.addView(meta);gap(c,8);
         TextView h=text(n.heading(),17,INK,true);h.setMaxLines(1);h.setEllipsize(TextUtils.TruncateAt.END);c.addView(h);
         if(!n.body.trim().isEmpty()){gap(c,6);TextView body=text(n.body,15,MUTED,false);body.setMaxLines(2);body.setEllipsize(TextUtils.TruncateAt.END);c.addView(body);}
         if(!n.images.isEmpty()){gap(c,9);ImageView image=thumbnail(n.images.get(0),1200);image.setScaleType(ImageView.ScaleType.CENTER_CROP);image.setContentDescription("首页预览图："+n.heading());c.addView(image,lp(-1,68));}
