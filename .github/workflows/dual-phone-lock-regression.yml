@@ -5,7 +5,6 @@ on:
     paths:
       - '.github/workflows/dual-phone-lock-regression.yml'
       - 'dualphone/app/src/main/java/com/qxdnzbl/shuangjichuan/TransferService.java'
-      - 'dualphone/app/src/main/java/com/qxdnzbl/shuangjichuan/NativeMessageAdapter.java'
       - 'dualphone/acceptance/device_test.py'
 permissions:
   contents: read

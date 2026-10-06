@@ -6,9 +6,10 @@ android {
     applicationId 'com.qxdnzbl.shuangjichuan.offline'
     minSdk 26
     targetSdk 35
-    versionCode 550
-    versionName '5.5-native'
+    versionCode 561
+    versionName '5.6-native'
   }
+  buildFeatures { buildConfig true }
   signingConfigs {
     release {
       storeFile file('shuangjichuan-release.jks')

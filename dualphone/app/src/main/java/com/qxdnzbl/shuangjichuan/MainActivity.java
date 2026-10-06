@@ -33,13 +33,17 @@ public class MainActivity extends Activity implements NativeMessageAdapter.Callb
 
   private FrameLayout root;
   private ImageView wallpaper;
-  private View wallpaperVeil;
   private AmbientView ambient;
   private TextView status;
   private View statusDot;
   private RecyclerView list;
   private NativeMessageAdapter adapter;
   private EditText input;
+  private ImageButton sendButton;
+  private TextView latestButton;
+  private boolean followLatest=true,imeWasVisible=false;
+  private AppUpdater updater;
+  private Dialog photoDialog;
   private LinearLayout searchPanel;
   private EditText searchInput;
   private TextView searchCount;
@@ -47,7 +51,6 @@ public class MainActivity extends Activity implements NativeMessageAdapter.Callb
   private PopupWindow contextPopup;
   private Bitmap wallpaperBitmap;
   private long wallpaperVersion=-1L;
-  private int wallpaperBlur=-1;
   private long wallpaperLoadingKey=-1L;
   private View headerView;
   private final Handler mainHandler=new Handler(Looper.getMainLooper());
@@ -84,13 +87,6 @@ public class MainActivity extends Activity implements NativeMessageAdapter.Callb
     getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
 
     prefs=getSharedPreferences("dual",MODE_PRIVATE);
-    if(!prefs.getBoolean("bg_soft_v2",false)){
-      int oldBlur=prefs.getInt("bg_blur",9);
-      int oldDim=prefs.getInt("bg_dim",24);
-      SharedPreferences.Editor e=prefs.edit().putBoolean("bg_soft_v2",true);
-      if(oldBlur==5&&oldDim==18){e.putInt("bg_blur",9).putInt("bg_dim",24);}
-      e.apply();
-    }
     db=new TransferDb(this);
 
     String device=prefs.getString("device","");
@@ -122,6 +118,7 @@ public class MainActivity extends Activity implements NativeMessageAdapter.Callb
     loadBackgroundAsync();
     scheduleReload(true);
     updateStatus();
+    updater=new AppUpdater(this);
     if(ciLoadCount>0)loadCiMessagesAsync(ciLoadCount);
 
     requestNearbyPermissions();
@@ -145,27 +142,34 @@ public class MainActivity extends Activity implements NativeMessageAdapter.Callb
     if(hasNearbyPermissions()) TransferService.wake(this);
     scheduleReload(false);
     updateStatus();
+    if(updater!=null)updater.onResume();
+  }
+
+  @Override protected void onPause(){
+    if(input!=null)prefs.edit().putString("draft_text",input.getText().toString()).apply();
+    super.onPause();
   }
 
   @Override protected void onDestroy(){
     mainHandler.removeCallbacksAndMessages(null);
     io.shutdownNow();
+    if(photoDialog!=null)photoDialog.dismiss();
+    if(adapter!=null)adapter.close();
+    if(updater!=null)updater.close();
     if(wallpaperBitmap!=null) wallpaperBitmap.recycle();
     super.onDestroy();
   }
 
   private void buildNativeUi(){
     root=new FrameLayout(this);
+    root.setFocusableInTouchMode(true);
     root.setBackground(makeGradient(new int[]{Color.rgb(252,249,248),Color.rgb(246,248,252),Color.rgb(241,245,251)},GradientDrawable.Orientation.TL_BR,0));
 
     wallpaper=new ImageView(this);
     wallpaper.setScaleType(ImageView.ScaleType.CENTER_CROP);
     wallpaper.setVisibility(View.GONE);
-    root.addView(wallpaper,new FrameLayout.LayoutParams(-1,-1));
-
-    wallpaperVeil=new View(this);
-    wallpaperVeil.setVisibility(View.GONE);
-    root.addView(wallpaperVeil,new FrameLayout.LayoutParams(-1,-1));
+    int wallpaperHeight=Build.VERSION.SDK_INT>=30?getWindowManager().getCurrentWindowMetrics().getBounds().height():getResources().getDisplayMetrics().heightPixels;
+    root.addView(wallpaper,new FrameLayout.LayoutParams(-1,wallpaperHeight,Gravity.TOP));
 
     ambient=new AmbientView(this);
     root.addView(ambient,new FrameLayout.LayoutParams(-1,-1));
@@ -196,17 +200,32 @@ public class MainActivity extends Activity implements NativeMessageAdapter.Callb
     adapter=new NativeMessageAdapter(this,this);
     list=new RecyclerView(this);
     LinearLayoutManager lm=new LinearLayoutManager(this);
-    lm.setStackFromEnd(false);
+    lm.setStackFromEnd(true);
     list.setLayoutManager(lm);
     list.setAdapter(adapter);
     list.setClipToPadding(false);
     list.setPadding(0,dp(8),0,dp(10));
     list.setOverScrollMode(View.OVER_SCROLL_IF_CONTENT_SCROLLS);
     list.setItemAnimator(null);
-    page.addView(list,new LinearLayout.LayoutParams(-1,0,1f));
+    FrameLayout messages=new FrameLayout(this);
+    messages.addView(list,new FrameLayout.LayoutParams(-1,-1));
+    latestButton=smallAction("回到最新");latestButton.setTextSize(12);latestButton.setContentDescription("回到最新");
+    latestButton.setPadding(dp(14),0,dp(14),0);latestButton.setBackground(solidPanel(Color.rgb(238,240,243),dp(12)));
+    latestButton.setVisibility(View.GONE);latestButton.setOnClickListener(v->{endInput();scrollToLatest();});
+    FrameLayout.LayoutParams latestLp=new FrameLayout.LayoutParams(-2,dp(40),Gravity.END|Gravity.BOTTOM);
+    latestLp.rightMargin=dp(14);latestLp.bottomMargin=dp(10);messages.addView(latestButton,latestLp);
+    page.addView(messages,new LinearLayout.LayoutParams(-1,0,1f));
+    list.addOnScrollListener(new RecyclerView.OnScrollListener(){
+      @Override public void onScrollStateChanged(RecyclerView r,int state){
+        if(state==RecyclerView.SCROLL_STATE_DRAGGING){followLatest=false;endInput();}
+        if(state==RecyclerView.SCROLL_STATE_IDLE){followLatest=isAtLatest();updateLatestButton();}
+      }
+      @Override public void onScrolled(RecyclerView r,int dx,int dy){updateLatestButton();}
+    });
 
     page.addView(buildComposer(),new LinearLayout.LayoutParams(-1,-2));
     setContentView(root);
+    root.requestFocus();
 
     root.getViewTreeObserver().addOnGlobalLayoutListener(()->{
       int[] loc=new int[2];
@@ -215,6 +234,11 @@ public class MainActivity extends Activity implements NativeMessageAdapter.Callb
       if(Build.VERSION.SDK_INT>=30&&root.getRootWindowInsets()!=null){
         imeBottom=root.getRootWindowInsets().getInsets(WindowInsets.Type.ime()).bottom;
       }
+      boolean imeVisible=imeBottom>0;
+      if(Build.VERSION.SDK_INT<30){Rect visible=new Rect();root.getWindowVisibleDisplayFrame(visible);imeVisible=root.getHeight()-visible.height()>dp(150);}
+      if(imeWasVisible&&!imeVisible)clearInputFocus();
+      if(imeVisible!=imeWasVisible&&followLatest&&searchPanel.getVisibility()!=View.VISIBLE)scrollToLatest();
+      imeWasVisible=imeVisible;
       int inputBottom=loc[1]+input.getHeight();
       if(imeBottom!=lastLoggedIme||Math.abs(inputBottom-lastLoggedInputBottom)>dp(8)){
         lastLoggedIme=imeBottom;
@@ -228,7 +252,7 @@ public class MainActivity extends Activity implements NativeMessageAdapter.Callb
     LinearLayout header=new LinearLayout(this);
     header.setOrientation(LinearLayout.VERTICAL);
     header.setPadding(dp(12),dp(4),dp(12),dp(7));
-    header.setBackground(glassPanel(0));
+    header.setBackground(solidPanel(Color.rgb(244,245,247),0));
 
     FrameLayout top=new FrameLayout(this);
     top.setMinimumHeight(dp(52));
@@ -286,7 +310,7 @@ public class MainActivity extends Activity implements NativeMessageAdapter.Callb
     searchPanel=new LinearLayout(this);
     searchPanel.setGravity(Gravity.CENTER_VERTICAL);
     searchPanel.setPadding(dp(11),0,dp(4),0);
-    searchPanel.setBackground(glassCapsule(dp(15)));
+    searchPanel.setBackground(solidPanel(Color.rgb(231,233,237),dp(12)));
     searchPanel.setVisibility(View.GONE);
 
     ImageView searchGlyph=new ImageView(this);
@@ -303,6 +327,7 @@ public class MainActivity extends Activity implements NativeMessageAdapter.Callb
     searchInput.setTextColor(Color.rgb(34,35,38));
     searchInput.setBackgroundColor(Color.TRANSPARENT);
     searchInput.setPadding(dp(3),0,dp(4),0);
+    configureInput(searchInput);
     searchPanel.addView(searchInput,new LinearLayout.LayoutParams(0,dp(38),1f));
 
     searchCount=new TextView(this);
@@ -336,55 +361,72 @@ public class MainActivity extends Activity implements NativeMessageAdapter.Callb
 
   private View buildComposer(){
     FrameLayout wrap=new FrameLayout(this);
-    wrap.setPadding(dp(10),dp(5),dp(10),Math.max(dp(7),navInset()));
-
-    LinearLayout row=new LinearLayout(this);
-    row.setGravity(Gravity.BOTTOM|Gravity.CENTER_HORIZONTAL);
-
-    ImageButton attach=iconButton(R.drawable.ic_plus);
-    attach.setContentDescription("添加文件");
-    attach.setBackground(glassCircle());
-    attach.setOnClickListener(v->pickFiles());
-    row.addView(attach,new LinearLayout.LayoutParams(dp(38),dp(38)));
-
-    LinearLayout capsule=new LinearLayout(this);
-    capsule.setGravity(Gravity.BOTTOM);
-    capsule.setPadding(dp(8),dp(3),dp(4),dp(3));
-    capsule.setBackground(glassCapsule(dp(22)));
-    LinearLayout.LayoutParams clp=new LinearLayout.LayoutParams(0,-2,1f);
-    clp.leftMargin=dp(7);
-    row.addView(capsule,clp);
-
-    input=new EditText(this);
-    input.setTextSize(15);
-    input.setTextColor(Color.rgb(37,39,43));
-    input.setHintTextColor(Color.rgb(151,153,158));
-    input.setHint("消息");
-    input.setGravity(Gravity.CENTER_VERTICAL);
-    input.setMinLines(1);
-    input.setMaxLines(5);
-    input.setPadding(dp(3),dp(7),dp(5),dp(7));
-    input.setBackgroundColor(Color.TRANSPARENT);
-    input.setOnFocusChangeListener((v,has)->{
-      if(has)v.postDelayed(()->((InputMethodManager)getSystemService(INPUT_METHOD_SERVICE)).showSoftInput(v,InputMethodManager.SHOW_IMPLICIT),70);
+    wrap.setPadding(dp(10),dp(5),dp(10),dp(7));
+    LinearLayout row=new LinearLayout(this);row.setGravity(Gravity.BOTTOM);
+    row.setPadding(dp(2),dp(2),dp(2),dp(2));
+    row.setBackground(solidPanel(Color.rgb(236,238,241),dp(14)));
+    ImageButton attach=iconButton(R.drawable.ic_plus);attach.setContentDescription("添加文件");attach.setId(R.id.attach);
+    attach.setBackgroundColor(Color.TRANSPARENT);attach.setOnClickListener(v->pickFiles());
+    row.addView(attach,new LinearLayout.LayoutParams(dp(42),dp(42)));
+    input=new EditText(this);input.setId(R.id.message);
+    input.setTextSize(15);input.setTextColor(Color.rgb(37,39,43));input.setHintTextColor(Color.rgb(118,123,133));
+    input.setHint("消息");input.setGravity(Gravity.CENTER_VERTICAL);input.setMinLines(1);input.setMaxLines(5);
+    input.setPadding(dp(3),dp(9),dp(5),dp(9));input.setBackgroundColor(Color.TRANSPARENT);
+    configureInput(input);row.addView(input,new LinearLayout.LayoutParams(0,-2,1f));
+    sendButton=iconButton(R.drawable.ic_send);sendButton.setId(R.id.send);sendButton.setContentDescription("发送");
+    sendButton.setBackgroundColor(Color.TRANSPARENT);sendButton.setColorFilter(Color.rgb(48,51,58));
+    sendButton.setOnClickListener(v->sendText());
+    row.addView(sendButton,new LinearLayout.LayoutParams(dp(42),dp(42)));
+    input.addTextChangedListener(new TextWatcher(){
+      public void beforeTextChanged(CharSequence s,int start,int count,int after){}
+      public void onTextChanged(CharSequence s,int start,int before,int count){updateSendButton();}
+      public void afterTextChanged(Editable e){}
     });
-    input.setOnClickListener(v->v.post(()->((InputMethodManager)getSystemService(INPUT_METHOD_SERVICE)).showSoftInput(v,InputMethodManager.SHOW_IMPLICIT)));
-    capsule.addView(input,new LinearLayout.LayoutParams(0,-2,1f));
-
-    ImageButton send=iconButton(R.drawable.ic_send);
-    send.setContentDescription("发送");
-    send.setColorFilter(Color.WHITE);
-    GradientDrawable sendBg=new GradientDrawable();
-    sendBg.setColor(Color.rgb(46,123,246));
-    sendBg.setShape(GradientDrawable.OVAL);
-    send.setBackground(sendBg);
-    send.setOnClickListener(v->sendText());
-    LinearLayout.LayoutParams slp=new LinearLayout.LayoutParams(dp(34),dp(34));
-    slp.gravity=Gravity.BOTTOM;
-    capsule.addView(send,slp);
-
-    wrap.addView(row,new FrameLayout.LayoutParams(-1,-2,Gravity.BOTTOM));
-    return wrap;
+    input.setText(prefs.getString("draft_text",""));
+    updateSendButton();
+    wrap.addView(row,new FrameLayout.LayoutParams(-1,-2,Gravity.BOTTOM));return wrap;
+  }
+  private void updateSendButton(){boolean enabled=input.getText().toString().trim().length()>0;sendButton.setEnabled(enabled);sendButton.setAlpha(enabled?1f:.32f);}
+  private void configureInput(EditText edit){
+    edit.setCursorVisible(false);
+    edit.setOnFocusChangeListener((v,has)->{
+      edit.setCursorVisible(has);
+      if(has)v.post(()->{if(v.hasFocus())((InputMethodManager)getSystemService(INPUT_METHOD_SERVICE)).showSoftInput(v,InputMethodManager.SHOW_IMPLICIT);});
+    });
+    edit.setOnClickListener(v->{edit.setCursorVisible(true);edit.requestFocus();((InputMethodManager)getSystemService(INPUT_METHOD_SERVICE)).showSoftInput(edit,InputMethodManager.SHOW_IMPLICIT);});
+  }
+  private void clearInputFocus(){
+    if(input!=null){input.clearFocus();input.setCursorVisible(false);}
+    if(searchInput!=null){searchInput.clearFocus();searchInput.setCursorVisible(false);}
+    if(root!=null)root.requestFocus();
+  }
+  private void endInput(){
+    View focus=getCurrentFocus();
+    if(focus!=null)((InputMethodManager)getSystemService(INPUT_METHOD_SERVICE)).hideSoftInputFromWindow(focus.getWindowToken(),0);
+    clearInputFocus();
+  }
+  @Override public boolean dispatchTouchEvent(MotionEvent event){
+    if(event.getActionMasked()==MotionEvent.ACTION_DOWN){
+      View focus=getCurrentFocus();
+      if(focus instanceof EditText){Rect rect=new Rect();focus.getGlobalVisibleRect(rect);if(!rect.contains((int)event.getRawX(),(int)event.getRawY()))endInput();}
+    }
+    return super.dispatchTouchEvent(event);
+  }
+  private boolean isAtLatest(){return list==null||adapter==null||adapter.getItemCount()==0||!list.canScrollVertically(1);}
+  private void updateLatestButton(){
+    if(latestButton!=null)latestButton.setVisibility(!isAtLatest()&&searchPanel.getVisibility()!=View.VISIBLE?View.VISIBLE:View.GONE);
+  }
+  private void scrollToLatest(){
+    followLatest=true;
+    list.post(()->{
+      if(isFinishing()||isDestroyed()||adapter.getItemCount()==0)return;
+      int position=adapter.getItemCount()-1;list.scrollToPosition(position);
+      list.post(()->{
+        LinearLayoutManager lm=(LinearLayoutManager)list.getLayoutManager();View last=lm.findViewByPosition(position);
+        if(last!=null)list.scrollBy(0,lm.getDecoratedBottom(last)-(list.getHeight()-list.getPaddingBottom()));
+        followLatest=true;updateLatestButton();
+      });
+    });
   }
 
   private ImageButton iconButton(int drawable){
@@ -393,7 +435,7 @@ public class MainActivity extends Activity implements NativeMessageAdapter.Callb
     b.setColorFilter(Color.rgb(73,79,87));
     b.setPadding(dp(7),dp(7),dp(7),dp(7));
     b.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
-    b.setBackground(glassCircle());
+    b.setBackground(solidPanel(Color.rgb(228,231,236),dp(11)));
     b.setElevation(0);
     return b;
   }
@@ -423,25 +465,14 @@ public class MainActivity extends Activity implements NativeMessageAdapter.Callb
       final boolean forceInitial=reloadInitialPending;
       reloadInitialPending=false;
 
-      boolean stickToBottom=true;
-      RecyclerView.LayoutManager lm=list==null?null:list.getLayoutManager();
-      if(lm instanceof LinearLayoutManager){
-        int last=((LinearLayoutManager)lm).findLastVisibleItemPosition();
-        stickToBottom=last>=Math.max(0,adapter.getItemCount()-3);
-      }
-      final boolean shouldStick=forceInitial||stickToBottom;
-
       io.execute(()->{
         final List<TransferDb.Msg> items=db.all();
         mainHandler.post(()->{
           if(isFinishing()||isDestroyed())return;
           adapter.setItems(items);
           updateStatus();
-          if(shouldStick){
-            list.post(()->{
-              if(adapter.getItemCount()>0) list.scrollToPosition(adapter.getItemCount()-1);
-            });
-          }
+          if(forceInitial||(followLatest&&searchPanel.getVisibility()!=View.VISIBLE))scrollToLatest();
+          else list.post(this::updateLatestButton);
           updateSearchUi();
           android.util.Log.i("DualPhoneNative","screen=chat messages="+items.size()+" link="+prefs.getString("link_state","searching"));
           reloadInFlight=false;
@@ -476,6 +507,7 @@ public class MainActivity extends Activity implements NativeMessageAdapter.Callb
   private void updateStatus(){
     if(status==null)return;
     String s=prefs.getString("link_state","searching");
+    if(adapter!=null)adapter.setLinkState(s);
     String label;
     int fg;
     if("nearby".equals(s)){label="已直连";fg=Color.rgb(70,130,101);}
@@ -496,21 +528,25 @@ public class MainActivity extends Activity implements NativeMessageAdapter.Callb
     final long now=System.currentTimeMillis();
     io.execute(()->{
       db.addText(id,true,s,now,"pending");
-      mainHandler.post(()->scheduleReload(false));
+      mainHandler.post(()->scheduleReload(true));
       TransferService.wake(this);
     });
   }
 
   private void openSearch(){
+    endInput();
     searchPanel.setVisibility(View.VISIBLE);
     searchInput.requestFocus();
+    updateLatestButton();
     ((InputMethodManager)getSystemService(INPUT_METHOD_SERVICE)).showSoftInput(searchInput,InputMethodManager.SHOW_IMPLICIT);
   }
 
   private void closeSearch(){
+    endInput();
     searchInput.setText("");
     searchPanel.setVisibility(View.GONE);
     adapter.setSearch("",null);
+    updateLatestButton();
     ((InputMethodManager)getSystemService(INPUT_METHOD_SERVICE)).hideSoftInputFromWindow(searchInput.getWindowToken(),0);
   }
 
@@ -521,6 +557,7 @@ public class MainActivity extends Activity implements NativeMessageAdapter.Callb
     String active=adapter.getItemIdAt(matches.get(searchCursor));
     adapter.setSearch(searchInput.getText().toString(),active);
     searchCount.setText((searchCursor+1)+"/"+matches.size());
+    followLatest=false;
     list.smoothScrollToPosition(matches.get(searchCursor));
   }
 
@@ -539,11 +576,12 @@ public class MainActivity extends Activity implements NativeMessageAdapter.Callb
   }
 
   @Override public void onLongPress(View anchor,TransferDb.Msg msg){
+    endInput();
     if(contextPopup!=null)contextPopup.dismiss();
     LinearLayout menu=new LinearLayout(this);
     menu.setPadding(dp(5),dp(5),dp(5),dp(5));
     menu.setGravity(Gravity.CENTER);
-    menu.setBackground(makeColor(Color.argb(246,249,249,251),dp(15)));
+    menu.setBackground(solidPanel(Color.rgb(244,245,247),dp(13)));
     menu.setElevation(dp(10));
 
     if(!"file".equals(msg.kind)){
@@ -576,7 +614,34 @@ public class MainActivity extends Activity implements NativeMessageAdapter.Callb
     return v;
   }
 
-  @Override public void onFileClick(TransferDb.Msg msg){ if(!msg.mine)saveToDownloadsAsync(msg); }
+  @Override public void onFileClick(TransferDb.Msg msg){
+    endInput();
+    if(PhotoImages.isPhoto(msg.fileName)){showPhoto(msg);return;}
+    if(!msg.mine){saveToDownloadsAsync(msg);return;}
+    new AlertDialog.Builder(this).setTitle(msg.fileName).setPositiveButton("保存到下载",(d,w)->saveToDownloadsAsync(msg)).setNegativeButton("取消",null).show();
+  }
+  private void showPhoto(TransferDb.Msg msg){
+    if(photoDialog!=null)photoDialog.dismiss();
+    final Dialog dialog=new Dialog(this,android.R.style.Theme_Material_Light_NoActionBar_Fullscreen);photoDialog=dialog;
+    LinearLayout page=new LinearLayout(this);page.setOrientation(LinearLayout.VERTICAL);page.setBackgroundColor(Color.rgb(31,33,38));
+    LinearLayout toolbar=new LinearLayout(this);toolbar.setGravity(Gravity.CENTER_VERTICAL);toolbar.setPadding(dp(14),dp(8),dp(10),dp(8));
+    TextView title=new TextView(this);title.setText(msg.fileName);title.setTextColor(Color.WHITE);title.setTextSize(14);title.setSingleLine(true);title.setEllipsize(TextUtils.TruncateAt.MIDDLE);toolbar.addView(title,new LinearLayout.LayoutParams(0,dp(40),1));
+    TextView save=smallAction("保存到下载");save.setTextSize(13);save.setTextColor(Color.WHITE);save.setPadding(dp(12),0,dp(12),0);save.setOnClickListener(v->saveToDownloadsAsync(msg));toolbar.addView(save,new LinearLayout.LayoutParams(-2,dp(44)));
+    TextView close=smallAction("×");close.setContentDescription("关闭图片");close.setTextColor(Color.WHITE);close.setTextSize(24);close.setOnClickListener(v->dialog.dismiss());toolbar.addView(close,new LinearLayout.LayoutParams(dp(44),dp(44)));
+    page.addView(toolbar,new LinearLayout.LayoutParams(-1,-2));
+    FrameLayout content=new FrameLayout(this);ZoomImageView photo=new ZoomImageView(this);content.addView(photo,new FrameLayout.LayoutParams(-1,-1));
+    TextView loading=new TextView(this);loading.setText("加载中");loading.setTextColor(Color.WHITE);loading.setGravity(Gravity.CENTER);content.addView(loading,new FrameLayout.LayoutParams(-1,-1));page.addView(content,new LinearLayout.LayoutParams(-1,0,1));
+    final Bitmap[] shown={null};dialog.setContentView(page);dialog.setOnDismissListener(d->{photo.setImageDrawable(null);if(shown[0]!=null)shown[0].recycle();});dialog.show();
+    if(dialog.getWindow()!=null)dialog.getWindow().setLayout(-1,-1);
+    io.execute(()->{
+      Bitmap decoded=PhotoImages.decode(msg.filePath,2048);
+      mainHandler.post(()->{
+        if(!dialog.isShowing()||isDestroyed()){if(decoded!=null)decoded.recycle();return;}
+        if(decoded==null){loading.setText("图片无法预览");return;}
+        shown[0]=decoded;photo.setImageBitmap(decoded);loading.setVisibility(View.GONE);
+      });
+    });
+  }
 
   private void copy(String s){
     android.content.ClipboardManager cm=(android.content.ClipboardManager)getSystemService(CLIPBOARD_SERVICE);
@@ -585,18 +650,20 @@ public class MainActivity extends Activity implements NativeMessageAdapter.Callb
   }
 
   private void pickFiles(){
+    endInput();
     Intent i=new Intent(Intent.ACTION_OPEN_DOCUMENT);
     i.setType("*/*");i.putExtra(Intent.EXTRA_ALLOW_MULTIPLE,true);i.addCategory(Intent.CATEGORY_OPENABLE);
     startActivityForResult(i,PICK_FILES);
   }
 
   private void showBackgroundDialog(){
+    endInput();
     final Dialog d=new Dialog(this);
     d.requestWindowFeature(Window.FEATURE_NO_TITLE);
     LinearLayout box=new LinearLayout(this);
     box.setOrientation(LinearLayout.VERTICAL);
     box.setPadding(dp(20),dp(10),dp(20),dp(18));
-    GradientDrawable bg=makeColor(Color.argb(248,250,250,252),dp(28));
+    GradientDrawable bg=solidPanel(Color.rgb(244,245,247),dp(22));
     box.setBackground(bg);
 
     View grab=new View(this);grab.setBackground(makeColor(Color.rgb(205,208,214),dp(99)));
@@ -606,7 +673,7 @@ public class MainActivity extends Activity implements NativeMessageAdapter.Callb
     LinearLayout head=new LinearLayout(this);head.setGravity(Gravity.CENTER_VERTICAL);
     TextView title=new TextView(this);title.setText("聊天背景");title.setTextSize(20);title.setTypeface(Typeface.DEFAULT_BOLD);title.setTextColor(Color.rgb(31,32,35));
     head.addView(title,new LinearLayout.LayoutParams(0,-2,1f));
-    TextView close=smallAction("×");close.setTextSize(21);close.setBackground(makeColor(Color.argb(18,80,85,95),dp(99)));close.setOnClickListener(v->d.dismiss());
+    TextView close=smallAction("×");close.setTextSize(21);close.setBackground(makeColor(Color.rgb(224,227,232),dp(10)));close.setOnClickListener(v->d.dismiss());
     head.addView(close,new LinearLayout.LayoutParams(dp(32),dp(32)));
     box.addView(head,new LinearLayout.LayoutParams(-1,-2));
 
@@ -614,11 +681,7 @@ public class MainActivity extends Activity implements NativeMessageAdapter.Callb
     File f=new File(getFilesDir(),"chat-background.jpg");
     if(f.isFile())box.addView(settingRow("清除背景","恢复默认界面","清除",v->{clearBackground();d.dismiss();}));
 
-    box.addView(sliderRow("模糊","bg_blur",0,18,prefs.getInt("bg_blur",7),v->{prefs.edit().putInt("bg_blur",v).apply();scheduleBackgroundReload();}));
-    box.addView(sliderRow("柔化","bg_dim",6,42,prefs.getInt("bg_dim",26),v->{prefs.edit().putInt("bg_dim",v).apply();applyBackgroundEffects();}));
-
-    TextView note=new TextView(this);note.setText("背景只保存在这台手机，没有预设背景。");note.setTextSize(11.5f);note.setTextColor(Color.rgb(126,129,135));note.setPadding(dp(11),dp(10),dp(11),dp(10));note.setBackground(makeColor(Color.argb(12,70,75,85),dp(13)));
-    LinearLayout.LayoutParams nlp=new LinearLayout.LayoutParams(-1,-2);nlp.topMargin=dp(10);box.addView(note,nlp);
+    box.addView(settingRow("应用更新", "当前版本 "+BuildConfig.VERSION_NAME, "检查更新", v->{d.dismiss();updater.check(true);}));
 
     d.setContentView(box);
     Window w=d.getWindow();
@@ -637,22 +700,9 @@ public class MainActivity extends Activity implements NativeMessageAdapter.Callb
     TextView t=new TextView(this);t.setText(title);t.setTextSize(14.5f);t.setTextColor(Color.rgb(37,39,43));t.setTypeface(Typeface.DEFAULT_BOLD);txt.addView(t);
     TextView s=new TextView(this);s.setText(sub);s.setTextSize(11.5f);s.setTextColor(Color.rgb(135,138,144));LinearLayout.LayoutParams slp=new LinearLayout.LayoutParams(-2,-2);slp.topMargin=dp(2);txt.addView(s,slp);
     row.addView(txt,new LinearLayout.LayoutParams(0,-2,1f));
-    TextView a=new TextView(this);a.setText(action);a.setTextSize(13);a.setTextColor(Color.rgb(96,116,216));a.setGravity(Gravity.CENTER);a.setPadding(dp(13),0,dp(13),0);a.setBackground(makeColor(Color.argb(20,100,120,220),dp(13)));a.setOnClickListener(l);
+    TextView a=new TextView(this);a.setText(action);a.setTextSize(13);a.setTextColor(Color.WHITE);a.setGravity(Gravity.CENTER);a.setPadding(dp(13),0,dp(13),0);a.setBackground(makeColor(Color.rgb(48,51,58),dp(10)));a.setOnClickListener(l);
     row.addView(a,new LinearLayout.LayoutParams(-2,dp(36)));
     return row;
-  }
-
-  private interface IntListener{void on(int v);}
-  private View sliderRow(String title,String key,int min,int max,int current,IntListener listener){
-    LinearLayout box=new LinearLayout(this);box.setGravity(Gravity.CENTER_VERTICAL);box.setPadding(0,dp(8),0,dp(4));
-    TextView label=new TextView(this);label.setText(title);label.setTextSize(13.5f);label.setTextColor(Color.rgb(55,57,61));box.addView(label,new LinearLayout.LayoutParams(dp(48),-2));
-    SeekBar seek=new SeekBar(this);seek.setMax(max-min);seek.setProgress(current-min);box.addView(seek,new LinearLayout.LayoutParams(0,-2,1f));
-    TextView value=new TextView(this);value.setText(String.valueOf(current));value.setTextSize(11.5f);value.setGravity(Gravity.END);value.setTextColor(Color.rgb(130,133,139));box.addView(value,new LinearLayout.LayoutParams(dp(40),-2));
-    seek.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener(){
-      public void onProgressChanged(SeekBar s,int p,boolean from){int v=p+min;value.setText(String.valueOf(v));listener.on(v);}
-      public void onStartTrackingTouch(SeekBar s){} public void onStopTrackingTouch(SeekBar s){}
-    });
-    return box;
   }
 
   private void pickBackground(){
@@ -667,69 +717,25 @@ public class MainActivity extends Activity implements NativeMessageAdapter.Callb
   private void loadBackgroundAsync(){
     File f=new File(getFilesDir(),"chat-background.jpg");
     if(!f.isFile()){
-      wallpaperLoadingKey=-1L;
-      wallpaperVersion=-1L;
-      wallpaperBlur=-1;
-      wallpaper.setImageDrawable(null);
+      wallpaperLoadingKey=-1L;wallpaperVersion=-1L;wallpaper.setImageDrawable(null);
       if(wallpaperBitmap!=null&&!wallpaperBitmap.isRecycled())wallpaperBitmap.recycle();
-      wallpaperBitmap=null;
-      wallpaper.setVisibility(View.GONE);
-      wallpaperVeil.setVisibility(View.GONE);
-      ambient.setAlpha(1f);
-      return;
+      wallpaperBitmap=null;wallpaper.setVisibility(View.GONE);ambient.setVisibility(View.VISIBLE);return;
     }
     final long version=f.lastModified();
-    final int blur=prefs.getInt("bg_blur",7);
-    final long key=version*31L+blur;
-    wallpaper.setVisibility(View.VISIBLE);
-    wallpaperVeil.setVisibility(View.VISIBLE);
-    ambient.setAlpha(.10f);
-    applyBackgroundEffects();
-    if(wallpaperVersion==version&&wallpaperBlur==blur&&wallpaperBitmap!=null)return;
-    if(wallpaperLoadingKey==key)return;
-    wallpaperLoadingKey=key;
+    wallpaper.setVisibility(View.VISIBLE);ambient.setVisibility(View.GONE);
+    if(wallpaperVersion==version&&wallpaperBitmap!=null)return;
+    if(wallpaperLoadingKey==version)return;wallpaperLoadingKey=version;
     io.execute(()->{
-      BitmapFactory.Options opts=new BitmapFactory.Options();
-      opts.inPreferredConfig=Bitmap.Config.RGB_565;
-      Bitmap raw=BitmapFactory.decodeFile(f.getAbsolutePath(),opts);
-      if(raw==null){wallpaperLoadingKey=-1L;return;}
-      Bitmap ready=raw;
-      if(blur>0){
-        int factor=blur<=3?2:(blur<=8?4:6);
-        int w=Math.max(96,raw.getWidth()/factor),h=Math.max(96,raw.getHeight()/factor);
-        ready=Bitmap.createScaledBitmap(raw,w,h,true);
-        if(ready!=raw)raw.recycle();
-      }
-      final Bitmap decoded=ready;
+      Bitmap decoded=PhotoImages.decode(f.getAbsolutePath(),2048);
       mainHandler.post(()->{
-        if(isFinishing()||isDestroyed()){decoded.recycle();return;}
+        if(isFinishing()||isDestroyed()){if(decoded!=null)decoded.recycle();return;}
         File current=new File(getFilesDir(),"chat-background.jpg");
-        int currentBlur=prefs.getInt("bg_blur",7);
-        long currentKey=current.lastModified()*31L+currentBlur;
-        if(currentKey!=key){decoded.recycle();wallpaperLoadingKey=-1L;return;}
-        Bitmap old=wallpaperBitmap;
-        wallpaperBitmap=decoded;
-        wallpaperVersion=version;
-        wallpaperBlur=blur;
-        wallpaperLoadingKey=-1L;
-        wallpaper.setRenderEffect(null);
-        wallpaper.setImageBitmap(decoded);
+        if(!current.isFile()||current.lastModified()!=version){if(decoded!=null)decoded.recycle();wallpaperLoadingKey=-1L;return;}
+        wallpaperLoadingKey=-1L;if(decoded==null)return;
+        Bitmap old=wallpaperBitmap;wallpaperBitmap=decoded;wallpaperVersion=version;wallpaper.setImageBitmap(decoded);
         if(old!=null&&old!=decoded&&!old.isRecycled())old.recycle();
       });
     });
-  }
-
-  private void applyBackgroundEffects(){
-    if(wallpaper.getVisibility()!=View.VISIBLE)return;
-    int dim=prefs.getInt("bg_dim",26);
-    wallpaper.setRenderEffect(null);
-    wallpaperVeil.setBackgroundColor(Color.argb(Math.min(230,Math.round(255f*dim/100f)),250,250,252));
-  }
-
-  private final Runnable backgroundReload=()->loadBackgroundAsync();
-  private void scheduleBackgroundReload(){
-    mainHandler.removeCallbacks(backgroundReload);
-    mainHandler.postDelayed(backgroundReload,120);
   }
 
   @Override protected void onActivityResult(int requestCode,int resultCode,Intent data){
@@ -746,7 +752,7 @@ public class MainActivity extends Activity implements NativeMessageAdapter.Callb
     else if(data.getData()!=null)uris.add(data.getData());
     io.execute(()->{
       for(Uri u:uris){try{queueFile(u);}catch(Exception e){runOnUiThread(()->toast("文件读取失败"));}}
-      mainHandler.post(()->scheduleReload(false));
+      mainHandler.post(()->scheduleReload(true));
       TransferService.wake(this);
     });
   }
@@ -820,37 +826,8 @@ public class MainActivity extends Activity implements NativeMessageAdapter.Callb
     }
   }
 
-  private int navInset(){return 0;}
   private int dp(float n){return Math.round(n*getResources().getDisplayMetrics().density);}
-  private GradientDrawable glassCircle(){
-    GradientDrawable g=new GradientDrawable(
-      GradientDrawable.Orientation.TOP_BOTTOM,
-      new int[]{0xD8FFFFFF,0xA8FFFFFF}
-    );
-    g.setShape(GradientDrawable.OVAL);
-    g.setStroke(1,0xB8FFFFFF);
-    return g;
-  }
-
-  private GradientDrawable glassCapsule(float radius){
-    GradientDrawable g=new GradientDrawable(
-      GradientDrawable.Orientation.TOP_BOTTOM,
-      new int[]{0xE4FFFFFF,0xB8FFFFFF}
-    );
-    g.setCornerRadius(radius);
-    g.setStroke(1,0xB8FFFFFF);
-    return g;
-  }
-
-  private GradientDrawable glassPanel(float radius){
-    GradientDrawable g=new GradientDrawable(
-      GradientDrawable.Orientation.TOP_BOTTOM,
-      new int[]{0xB8FFFFFF,0x88FFFFFF}
-    );
-    g.setCornerRadius(radius);
-    g.setStroke(1,0x44FFFFFF);
-    return g;
-  }
+  private GradientDrawable solidPanel(int color,float radius){GradientDrawable g=makeColor(color,radius);g.setStroke(dp(1),Color.rgb(194,199,207));return g;}
 
   private GradientDrawable makeColor(int color,float radius){GradientDrawable g=new GradientDrawable();g.setColor(color);g.setCornerRadius(radius);return g;}
   private GradientDrawable makeGlass(int color,float radius,int stroke){GradientDrawable g=makeColor(color,radius);g.setStroke(1,stroke);return g;}

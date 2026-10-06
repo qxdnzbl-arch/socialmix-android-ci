@@ -1,0 +1,91 @@
+name: Dual Phone Native UI and In-App Update
+on:
+  push:
+    branches: [dual-phone-transfer-build]
+    paths:
+      - '.github/workflows/dual-phone-ui-update.yml'
+      - 'dualphone/app/**'
+      - 'dualphone/acceptance/ui_test.py'
+      - 'dualphone/acceptance/FixtureSql.java'
+      - 'dualphone/acceptance/publish_release.py'
+permissions:
+  contents: write
+  actions: read
+concurrency:
+  group: dual-phone-ui-update
+  cancel-in-progress: true
+jobs:
+  acceptance:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: '17' }
+      - uses: gradle/actions/setup-gradle@v4
+        with: { gradle-version: '8.11.1' }
+      - name: Build final and lower-version signed update baseline
+        working-directory: dualphone
+        run: |
+          base64 -d keystore.b64 > app/shuangjichuan-release.jks
+          gradle --no-daemon :app:assembleRelease
+          cp app/build/outputs/apk/release/app-release.apk acceptance/final.apk
+          cp app/build.gradle acceptance/original-build.gradle
+          python3 - <<'PY'
+          import pathlib,re,os
+          p=pathlib.Path('app/build.gradle');s=p.read_text();code=int(re.search(r'versionCode (\d+)',s).group(1));name=re.search(r"versionName '([^']+)'",s).group(1)
+          with open(os.environ['GITHUB_ENV'],'a') as f:f.write('RELEASE_VERSION_CODE='+str(code)+'\nRELEASE_VERSION_NAME='+name+'\n')
+          p.write_text(s.replace('versionCode '+str(code),'versionCode '+str(code-1)).replace("versionName '"+name+"'","versionName '"+name+"-preview'"))
+          PY
+          gradle --no-daemon :app:assembleRelease
+          cp app/build/outputs/apk/release/app-release.apk acceptance/bootstrap.apk
+          cp acceptance/original-build.gradle app/build.gradle
+          cp acceptance/final.apk app/build/outputs/apk/release/app-release.apk
+          mkdir -p acceptance/fixture-dex acceptance/fixture-classes
+          javac -cp "$ANDROID_HOME/platforms/android-35/android.jar" -d acceptance/fixture-classes acceptance/FixtureSql.java
+          "$ANDROID_HOME/build-tools/35.0.0/d8" --lib "$ANDROID_HOME/platforms/android-35/android.jar" --output acceptance/fixture-dex acceptance/fixture-classes/FixtureSql.class
+          python3 -m pip install --quiet pillow
+      - name: Locate previous signed release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          mkdir -p previous-artifact
+          if gh api repos/qxdnzbl-arch/socialmix-android-ci/releases/tags/dualphone-latest > previous-artifact/channel.json; then
+            python3 - <<'PY'
+          import pathlib,json,urllib.request
+          meta=json.loads(json.loads(pathlib.Path('previous-artifact/channel.json').read_text())['body'])
+          with urllib.request.urlopen(meta['apkUrl'],timeout=60) as r:pathlib.Path('previous-artifact/baseline.apk').write_bytes(r.read())
+          PY
+          else
+            gh run download 37473258717 -n shuangjichuan-v5-5-slow-network-acceptance -D previous-artifact
+            cp previous-artifact/app/build/outputs/apk/release/app-release.apk previous-artifact/baseline.apk
+          fi
+      - name: Enable hardware acceleration
+        run: sudo chmod 666 /dev/kvm
+      - name: Real native clicks and live in-app signed update
+        uses: reactivecircus/android-emulator-runner@v2
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          api-level: 35
+          arch: x86_64
+          target: google_apis
+          profile: pixel_6
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none
+          script: |
+            BASELINE_APK="$PWD/previous-artifact/baseline.apk" python3 dualphone/acceptance/ui_test.py
+            python3 dualphone/acceptance/publish_release.py
+            BASELINE_APK="$PWD/previous-artifact/baseline.apk" python3 dualphone/acceptance/ui_test.py update
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: shuangjichuan-v5-6-native-ui-update
+          path: |
+            dualphone/app/build/outputs/apk/release/app-release.apk
+            dualphone/acceptance/*.png
+            dualphone/acceptance/*.xml
+            dualphone/acceptance/*.json
+            dualphone/acceptance/*.txt
+          if-no-files-found: error
+          retention-days: 14
