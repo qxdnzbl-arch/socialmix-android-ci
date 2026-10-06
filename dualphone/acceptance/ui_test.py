@@ -225,6 +225,11 @@ def core(reuse=False):
 
 def allow_update_hosts():
  # Keep all other external HTTPS blocked: the user's private relay room is never contacted.
+ request=urllib.request.Request('https://api.github.com/meta',headers={'User-Agent':'DualPhone-native-acceptance','Authorization':'Bearer '+os.environ['GH_TOKEN']})
+ with urllib.request.urlopen(request,timeout=20) as response:ranges=json.load(response)
+ cidrs=sorted({cidr for group in ['web','api','git'] for cidr in ranges[group]})
+ for cidr in cidrs:shell('ip6tables' if ':' in cidr else 'iptables','-I','OUTPUT','1','-p','tcp','-d',cidr,'--dport','443','-j','ACCEPT')
+ record('official_github_frontend_ranges_allowed',True,cidrs=cidrs)
  addresses={}
  for host in ['api.github.com','github.com','release-assets.githubusercontent.com','objects.githubusercontent.com','github-releases.githubusercontent.com']:
   resolved=shell('env','CLASSPATH=/data/local/tmp/fixture.dex','app_process','/system/bin','FixtureSql','dns',host,ok=False).splitlines()
@@ -251,7 +256,12 @@ def update():
  tap(node(t,desc='聊天背景'));t,_=ui('update-settings');tap(node(t,text='检查更新'));time.sleep(.6);t=wait_ui('update-offer',lambda t:any(n.get('text','').startswith('有新版本') for n in t.iter('node')))
  record('live_update_offer',any(n.get('text','').startswith('有新版本') for n in t.iter('node')))
  before=database('before-in-app-update').execute('SELECT COUNT(*) FROM messages').fetchone()[0]
- tap(node(t,text='更新'));time.sleep(.6);t=wait_ui('update-downloaded',lambda t:optional(t,text='去允许') is not None or optional(t,text='Update') is not None or optional(t,text='Install') is not None);screen('update-downloaded')
+ tap(node(t,text='更新'));time.sleep(.6)
+ diagnostic=[]
+ for path in ['/proc/net/tcp','/proc/net/tcp6']:diagnostic.append(path+'\n'+shell('cat',path,ok=False))
+ (OUT/'update-network.txt').write_text('\n'.join(diagnostic))
+ (OUT/'update-firewall.txt').write_text(shell('iptables','-L','OUTPUT','-n','-v',ok=False)+'\n'+shell('ip6tables','-L','OUTPUT','-n','-v',ok=False))
+ t=wait_ui('update-downloaded',lambda t:optional(t,text='去允许') is not None or optional(t,text='Update') is not None or optional(t,text='Install') is not None);screen('update-downloaded')
  if optional(t,text='去允许') is not None:
   record('first_update_permission_guidance',True);tap(node(t,text='去允许'));t,_=ui('install-permission')
   switch=optional(t,cls='android.widget.Switch')
