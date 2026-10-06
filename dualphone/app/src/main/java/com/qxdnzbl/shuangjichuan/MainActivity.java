@@ -287,6 +287,11 @@ public class MainActivity extends Activity implements NativeMessageAdapter.Callb
     input.setMaxLines(5);
     input.setPadding(dp(8),dp(7),dp(8),dp(7));
     input.setBackgroundColor(Color.TRANSPARENT);
+    View.OnFocusChangeListener imeFocus=(v,has)->{
+      if(has) v.postDelayed(()->((InputMethodManager)getSystemService(INPUT_METHOD_SERVICE)).showSoftInput(v,InputMethodManager.SHOW_IMPLICIT),80);
+    };
+    input.setOnFocusChangeListener(imeFocus);
+    input.setOnClickListener(v->v.post(()->((InputMethodManager)getSystemService(INPUT_METHOD_SERVICE)).showSoftInput(v,InputMethodManager.SHOW_IMPLICIT)));
     LinearLayout.LayoutParams ilp=new LinearLayout.LayoutParams(0,-2,1f);
     ilp.leftMargin=dp(4); ilp.rightMargin=dp(4);
     bar.addView(input,ilp);
