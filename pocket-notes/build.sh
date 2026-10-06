@@ -6,8 +6,22 @@ sdk_jar="$sdk_path/platforms/android-35/android.jar"
 build_tools="$sdk_path/build-tools/35.0.0"
 test -f "$sdk_jar"
 mkdir -p build/classes build/dex build/test-classes build/test-dex out
+manifest_path="app/src/main/AndroidManifest.xml"
+if [ -n "${APP_VERSION_CODE:-}" ]; then
+  cp app/src/main/AndroidManifest.xml build/AndroidManifest.xml
+  python3 - <<'PY'
+from pathlib import Path
+import os,re
+p=Path('build/AndroidManifest.xml')
+s=p.read_text()
+s=re.sub(r'android:versionCode="[^"]+"', f'android:versionCode="{os.environ["APP_VERSION_CODE"]}"', s, count=1)
+s=re.sub(r'android:versionName="[^"]+"', f'android:versionName="{os.environ.get("APP_VERSION_NAME","1."+os.environ["APP_VERSION_CODE"])}"', s, count=1)
+p.write_text(s)
+PY
+  manifest_path="build/AndroidManifest.xml"
+fi
 "$build_tools/aapt2" compile --dir app/src/main/res -o build/resources.zip
-"$build_tools/aapt2" link -o build/base.apk -I "$sdk_jar" --manifest app/src/main/AndroidManifest.xml --java build/generated build/resources.zip
+"$build_tools/aapt2" link -o build/base.apk -I "$sdk_jar" --manifest "$manifest_path" --java build/generated build/resources.zip
 javac -encoding UTF-8 -source 8 -target 8 -classpath "$sdk_jar" -d build/classes $(find app/src/main/java -name '*.java')
 jar cf build/main-classes.jar -C build/classes .
 "$build_tools/d8" --min-api 26 --lib "$sdk_jar" --output build/dex $(find build/classes -name '*.class')
