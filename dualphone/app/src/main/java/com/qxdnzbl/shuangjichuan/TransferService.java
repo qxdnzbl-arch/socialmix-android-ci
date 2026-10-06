@@ -20,6 +20,7 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.util.*;
 import java.util.concurrent.*;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 public class TransferService extends Service {
   public static final String ACTION_CHANGED="com.qxdnzbl.shuangjichuan.CHANGED";
@@ -32,6 +33,9 @@ public class TransferService extends Service {
   };
 
   private final ExecutorService io=Executors.newCachedThreadPool();
+  private final ExecutorService payloadIo=Executors.newSingleThreadExecutor();
+  private final ExecutorService sendIo=Executors.newSingleThreadExecutor();
+  private final AtomicBoolean flushQueued=new AtomicBoolean();
   private final ScheduledExecutorService timer=Executors.newScheduledThreadPool(1);
   private final Set<String> endpoints=new CopyOnWriteArraySet<>();
   private final Set<String> requested=new CopyOnWriteArraySet<>();
@@ -73,7 +77,6 @@ public class TransferService extends Service {
     startForeground(NOTIFY_ID,notification("自动同步中"));
 
     nearby=Nearby.getConnectionsClient(this);
-    tryStartNearby();
 
     boolean ciNearbyOnly=
       (getApplicationInfo().flags & android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE)!=0
@@ -85,8 +88,8 @@ public class TransferService extends Service {
       }
     }
 
-    timer.scheduleWithFixedDelay(this::flushPending,250,500,TimeUnit.MILLISECONDS);
-    timer.scheduleWithFixedDelay(this::tryStartNearby,3,5,TimeUnit.SECONDS);
+    timer.scheduleWithFixedDelay(this::requestFlush,250,500,TimeUnit.MILLISECONDS);
+    timer.scheduleWithFixedDelay(this::tryStartNearby,0,5,TimeUnit.SECONDS);
   }
 
   public static void start(Context c){
@@ -232,7 +235,7 @@ public class TransferService extends Service {
         Log.i("DualNearby","connected "+endpointId);
         endpoints.add(endpointId);
         setLinkState("nearby");
-        io.execute(TransferService.this::flushPending);
+        requestFlush();
       }else{
         requested.remove(endpointId);
       }
@@ -245,12 +248,16 @@ public class TransferService extends Service {
       inFlight.clear();
       nearbyStarted=false;
       setLinkState("searching");
-      io.execute(TransferService.this::tryStartNearby);
+      timer.execute(TransferService.this::tryStartNearby);
     }
   };
 
   private final PayloadCallback payloads=new PayloadCallback(){
     @Override public void onPayloadReceived(String endpointId,Payload payload){
+      if(running)payloadIo.execute(()->handlePayloadReceived(endpointId,payload));
+    }
+
+    private void handlePayloadReceived(String endpointId,Payload payload){
       try{
         if(payload.getType()==Payload.Type.BYTES){
           JSONObject j=new JSONObject(
@@ -294,6 +301,10 @@ public class TransferService extends Service {
       String endpointId,
       PayloadTransferUpdate update
     ){
+      if(running)payloadIo.execute(()->handlePayloadTransferUpdate(endpointId,update));
+    }
+
+    private void handlePayloadTransferUpdate(String endpointId,PayloadTransferUpdate update){
       long id=update.getPayloadId();
 
       if(update.getStatus()==PayloadTransferUpdate.Status.SUCCESS){
@@ -321,7 +332,7 @@ public class TransferService extends Service {
     }
   };
 
-  private synchronized void tryFinalizeIncoming(long pid){
+  private void tryFinalizeIncoming(long pid){
     if(!completedIncoming.contains(pid)) return;
 
     FileMeta meta=incomingMeta.get(pid);
@@ -366,8 +377,18 @@ public class TransferService extends Service {
     }
   }
 
-  private synchronized void flushPending(){
-    tryStartNearby();
+  private void requestFlush(){
+    if(!running||!flushQueued.compareAndSet(false,true))return;
+    try{
+      sendIo.execute(()->{
+        try{if(running)flushPending();}
+        catch(Exception e){Log.w("DualNearby","flush "+e);}
+        finally{flushQueued.set(false);}
+      });
+    }catch(RejectedExecutionException ignored){flushQueued.set(false);}
+  }
+
+  private void flushPending(){
 
     List<TransferDb.Msg> pending=db.pending();
     if(pending.isEmpty()) return;
@@ -597,8 +618,8 @@ public class TransferService extends Service {
     int flags,
     int startId
   ){
-    tryStartNearby();
-    io.execute(this::flushPending);
+    if(running&&!timer.isShutdown())timer.execute(this::tryStartNearby);
+    requestFlush();
     return START_STICKY;
   }
 
@@ -612,6 +633,8 @@ public class TransferService extends Service {
     }catch(Exception ignored){}
 
     timer.shutdownNow();
+    payloadIo.shutdownNow();
+    sendIo.shutdownNow();
     io.shutdownNow();
     super.onDestroy();
   }

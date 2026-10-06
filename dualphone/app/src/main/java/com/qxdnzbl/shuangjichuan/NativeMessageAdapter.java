@@ -21,6 +21,7 @@ public class NativeMessageAdapter extends RecyclerView.Adapter<NativeMessageAdap
   private final Callbacks cb;
   private final ArrayList<TransferDb.Msg> items=new ArrayList<>();
   private final ArrayList<Integer> matches=new ArrayList<>();
+  private final HashSet<Integer> matchedPositions=new HashSet<>();
   private String query="",activeId=null;
   private final int maxWidth;
   private int lastMine=-1;
@@ -63,16 +64,16 @@ public class NativeMessageAdapter extends RecyclerView.Adapter<NativeMessageAdap
   }
   private int findLastMine(){for(int i=items.size()-1;i>=0;i--)if(items.get(i).mine)return i;return -1;}
 
-  public void setSearch(String q,String active){query=q==null?"":q.trim();activeId=active;rebuildMatches();notifyDataSetChanged();}
+  public void setSearch(String q,String active){String next=q==null?"":q.trim();if(Objects.equals(query,next)&&Objects.equals(activeId,active))return;query=next;activeId=active;rebuildMatches();notifyDataSetChanged();}
   public List<Integer> getMatchPositions(){return new ArrayList<>(matches);}
   public String getItemIdAt(int p){return p>=0&&p<items.size()?items.get(p).id:null;}
   private void rebuildMatches(){
-    matches.clear();if(query.isEmpty())return;
+    matches.clear();matchedPositions.clear();if(query.isEmpty())return;
     String q=query.toLowerCase(Locale.ROOT);
     for(int i=0;i<items.size();i++){
       TransferDb.Msg m=items.get(i);
       String hay="file".equals(m.kind)?String.valueOf(m.fileName):String.valueOf(m.text);
-      if(hay.toLowerCase(Locale.ROOT).contains(q))matches.add(i);
+      if(hay.toLowerCase(Locale.ROOT).contains(q)){matches.add(i);matchedPositions.add(i);}
     }
   }
 
@@ -115,7 +116,7 @@ public class NativeMessageAdapter extends RecyclerView.Adapter<NativeMessageAdap
   @Override public void onBindViewHolder(Holder holder,int position){
     TransferDb.Msg m=items.get(position);
     FrameLayout.LayoutParams lp=(FrameLayout.LayoutParams)holder.bubble.getLayoutParams();lp.gravity=m.mine?Gravity.END:Gravity.START;holder.bubble.setLayoutParams(lp);
-    boolean matched=!query.isEmpty()&&matches.contains(position),active=matched&&m.id!=null&&m.id.equals(activeId);
+    boolean matched=!query.isEmpty()&&matchedPositions.contains(position),active=matched&&m.id!=null&&m.id.equals(activeId);
     holder.bubble.setBackground(bubbleBackground(m.mine,matched,active));
     holder.bubble.setOnLongClickListener(v->{cb.onLongPress(v,m);return true;});holder.bubble.setOnClickListener(null);
 

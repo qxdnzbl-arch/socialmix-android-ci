@@ -1,0 +1,63 @@
+name: Dual Phone Slow Network UI Acceptance
+on:
+  push:
+    branches: [dual-phone-transfer-build]
+    paths:
+      - '.github/workflows/dual-phone-lock-regression.yml'
+      - 'dualphone/app/src/main/java/com/qxdnzbl/shuangjichuan/TransferService.java'
+      - 'dualphone/app/src/main/java/com/qxdnzbl/shuangjichuan/NativeMessageAdapter.java'
+      - 'dualphone/acceptance/device_test.py'
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: dual-phone-lock-regression
+  cancel-in-progress: true
+jobs:
+  acceptance:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: '17' }
+      - uses: gradle/actions/setup-gradle@v4
+        with: { gradle-version: '8.11.1' }
+      - name: Restore existing signing key
+        working-directory: dualphone
+        run: base64 -d keystore.b64 > app/shuangjichuan-release.jks
+      - name: Build final signed release
+        working-directory: dualphone
+        run: gradle --no-daemon :app:assembleRelease
+      - uses: actions/download-artifact@v4
+        with:
+          name: shuangjichuan-v5-4-native
+          run-id: 37464984662
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path: previous-artifact
+      - name: Enable hardware acceleration
+        run: sudo chmod 666 /dev/kvm
+      - name: Exact old APK and final release under stalled network
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          target: google_apis
+          profile: pixel_6
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none
+          script: |
+            export BASELINE_APK="$PWD/previous-artifact/ShuangJiChuan_v5_4_Native.apk"
+            python3 dualphone/acceptance/device_test.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: shuangjichuan-v5-5-slow-network-acceptance
+          path: |
+            dualphone/app/build/outputs/apk/release/app-release.apk
+            dualphone/acceptance/*.png
+            dualphone/acceptance/*.xml
+            dualphone/acceptance/*.json
+            dualphone/acceptance/*.txt
+          if-no-files-found: error
+          retention-days: 14
