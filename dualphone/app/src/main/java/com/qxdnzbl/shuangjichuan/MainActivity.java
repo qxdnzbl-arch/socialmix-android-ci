@@ -36,6 +36,7 @@ public class MainActivity extends Activity implements NativeMessageAdapter.Callb
   private View wallpaperVeil;
   private AmbientView ambient;
   private TextView status;
+  private View statusDot;
   private RecyclerView list;
   private NativeMessageAdapter adapter;
   private EditText input;
@@ -55,6 +56,7 @@ public class MainActivity extends Activity implements NativeMessageAdapter.Callb
   private boolean reloadInitialPending=false;
   private int lastLoggedIme=-1;
   private int lastLoggedInputBottom=-1;
+  private int ciLoadCount=0;
 
   private final BroadcastReceiver receiver=new BroadcastReceiver(){
     @Override public void onReceive(Context c,Intent i){
@@ -100,6 +102,7 @@ public class MainActivity extends Activity implements NativeMessageAdapter.Callb
 
     if(isDebuggable()){
       prefs.edit().putBoolean("ci_nearby_only",getIntent().getBooleanExtra("ciNearbyOnly",false)).apply();
+      ciLoadCount=Math.min(600,Math.max(0,getIntent().getIntExtra("ciLoadMessages",0)));
       if(getIntent().getBooleanExtra("ciSend",false)){
         db.addText("ci-local-message",true,"hello",System.currentTimeMillis(),"pending");
       }
@@ -119,6 +122,7 @@ public class MainActivity extends Activity implements NativeMessageAdapter.Callb
     loadBackgroundAsync();
     scheduleReload(true);
     updateStatus();
+    if(ciLoadCount>0)loadCiMessagesAsync(ciLoadCount);
 
     requestNearbyPermissions();
     if(hasNearbyPermissions()) TransferService.start(this);
@@ -244,9 +248,9 @@ public class MainActivity extends Activity implements NativeMessageAdapter.Callb
 
     LinearLayout statusRow=new LinearLayout(this);
     statusRow.setGravity(Gravity.CENTER);
-    View dot=new View(this);
-    dot.setBackground(makeColor(Color.rgb(91,145,116),dp(99)));
-    statusRow.addView(dot,new LinearLayout.LayoutParams(dp(6),dp(6)));
+    statusDot=new View(this);
+    statusDot.setBackground(makeColor(Color.rgb(91,145,116),dp(99)));
+    statusRow.addView(statusDot,new LinearLayout.LayoutParams(dp(6),dp(6)));
     status=new TextView(this);
     status.setText("自动同步");
     status.setTextSize(10.5f);
@@ -355,7 +359,7 @@ public class MainActivity extends Activity implements NativeMessageAdapter.Callb
     input.setTextSize(15);
     input.setTextColor(Color.rgb(37,39,43));
     input.setHintTextColor(Color.rgb(151,153,158));
-    input.setHint("iMessage");
+    input.setHint("消息");
     input.setGravity(Gravity.CENTER_VERTICAL);
     input.setMinLines(1);
     input.setMaxLines(5);
@@ -450,6 +454,25 @@ public class MainActivity extends Activity implements NativeMessageAdapter.Callb
     },initial?0:90);
   }
 
+  private void loadCiMessagesAsync(int count){
+    io.execute(()->{
+      long base=System.currentTimeMillis()-count*1000L;
+      for(int i=0;i<count;i++){
+        String text;
+        if(i%17==0){
+          text="这是用于真实负载验收的长消息。\n第二行用于测试滚动、换行和触摸响应。\n第 "+(i+1)+" 条。";
+        }else{
+          text="性能测试消息 "+(i+1)+" · 双机传原生界面";
+        }
+        db.addText("ci-load-"+i,(i%3)!=0,text,base+i*1000L,"sent");
+      }
+      mainHandler.post(()->{
+        android.util.Log.i("DualPhoneNative","ci_load_done="+count);
+        scheduleReload(true);
+      });
+    });
+  }
+
   private void updateStatus(){
     if(status==null)return;
     String s=prefs.getString("link_state","searching");
@@ -462,6 +485,7 @@ public class MainActivity extends Activity implements NativeMessageAdapter.Callb
     else {label="自动同步";fg=Color.rgb(80,132,108);}
     status.setText(label);
     status.setTextColor(fg);
+    if(statusDot!=null)statusDot.setBackground(makeColor(fg,dp(99)));
   }
 
   private void sendText(){
