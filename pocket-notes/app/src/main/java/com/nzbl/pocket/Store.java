@@ -27,14 +27,18 @@ public final class Store {
         public long updated=System.currentTimeMillis();
         public boolean pinned=false,deleted=false;
         public ArrayList<String> images=new ArrayList<>();
+        public ArrayList<Long> imageTimes=new ArrayList<>();
+        public void normalizeImageTimes(){while(imageTimes.size()<images.size())imageTimes.add(updated);while(imageTimes.size()>images.size())imageTimes.remove(imageTimes.size()-1);}
         public JSONObject json() throws JSONException {
+            normalizeImageTimes();JSONArray times=new JSONArray();for(Long time:imageTimes)times.put(time);
             return new JSONObject().put("id",id).put("category",category).put("title",title).put("body",body)
-              .put("updated",updated).put("pinned",pinned).put("deleted",deleted).put("images",new JSONArray(images));
+              .put("updated",updated).put("pinned",pinned).put("deleted",deleted).put("images",new JSONArray(images)).put("imageTimes",times);
         }
         public static Note from(JSONObject j) throws JSONException {
             Note n=new Note();n.id=j.getString("id");n.category=j.getString("category");n.title=j.getString("title");
             n.body=j.getString("body");n.updated=j.getLong("updated");n.pinned=j.optBoolean("pinned");n.deleted=j.optBoolean("deleted");
             JSONArray a=j.getJSONArray("images");for(int i=0;i<a.length();i++){String s=a.getString(i); if(!s.matches("[a-zA-Z0-9_.-]+"))throw new JSONException("非法图片名");n.images.add(s);}
+            JSONArray times=j.optJSONArray("imageTimes");if(times!=null)for(int i=0;i<Math.min(times.length(),n.images.size());i++)n.imageTimes.add(times.optLong(i,n.updated));n.normalizeImageTimes();
             return n;
         }
         public Note copy(){try{return from(json());}catch(Exception e){throw new IllegalStateException(e);}}
