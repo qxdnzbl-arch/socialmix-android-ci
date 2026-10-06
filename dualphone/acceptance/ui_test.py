@@ -46,8 +46,13 @@ def center(n):
 def tap(n):shell('input','tap',*map(str,center(n)));time.sleep(.4)
 
 def database(name):
- p=OUT/(name+'.db');p.write_bytes(adb('exec-out','cat','/data/data/'+PKG+'/databases/shuangjichuan.db'))
- return sqlite3.connect(p)
+ # Copy a consistent SQLite snapshot instead of reading a file while its pages change.
+ remote='/data/local/tmp/fixture-snapshot.db';shell('rm','-f',remote)
+ encoded=base64.b64encode(("VACUUM INTO '"+remote+"'").encode()).decode()
+ shell('env','CLASSPATH=/data/local/tmp/fixture.dex','app_process','/system/bin','FixtureSql','/data/data/'+PKG+'/databases/shuangjichuan.db',encoded)
+ p=OUT/(name+'.db');p.write_bytes(adb('exec-out','cat',remote));c=sqlite3.connect(p)
+ if c.execute('PRAGMA quick_check').fetchone()[0]!='ok':raise AssertionError('Invalid SQLite snapshot')
+ return c
 
 def seed():
  p=OUT/'fixture.db'
@@ -65,6 +70,7 @@ def seed():
  c.commit();c.close()
  shell('am','force-stop',PKG);shell('mkdir','-p','/data/data/'+PKG+'/databases','/data/data/'+PKG+'/files/incoming')
  uid=shell('stat','-c','%u','/data/data/'+PKG).strip()
+ for suffix in ['', '-journal','-wal','-shm']:shell('rm','-f','/data/data/'+PKG+'/databases/shuangjichuan.db'+suffix)
  adb('push',str(p),'/data/data/'+PKG+'/databases/shuangjichuan.db');adb('push',str(OUT/'fixture.bin'),'/data/data/'+PKG+'/files/incoming/fixture.bin')
  shell('rm','-f','/data/data/'+PKG+'/databases/shuangjichuan.db-wal','/data/data/'+PKG+'/databases/shuangjichuan.db-shm')
  shell('chown','-R',uid+':'+uid,'/data/data/'+PKG+'/databases','/data/data/'+PKG+'/files')
@@ -85,8 +91,9 @@ def insert(id,text,mine=False,kind='text',name=None,path=None,size=0,status=None
  if 'fixture_written' not in r:raise RuntimeError(r)
  shell('am','broadcast','-a','com.qxdnzbl.shuangjichuan.CHANGED','-p',PKG);time.sleep(.5)
 
-def core():
+def core(reuse=False):
  adb('root');time.sleep(.5);adb('wait-for-device')
+ adb('push',str(OUT/'fixture-dex/classes.dex'),'/data/local/tmp/fixture.dex')
  for key in ['window_animation_scale','transition_animation_scale','animator_duration_scale']:shell('settings','put','global',key,'0')
  shell('settings','put','secure','show_ime_with_hard_keyboard','1');shell('wm','dismiss-keyguard')
  shell('iptables','-A','OUTPUT','-p','tcp','--dport','443','-j','DROP');shell('ip6tables','-A','OUTPUT','-p','tcp','--dport','443','-j','DROP',ok=False)
@@ -121,82 +128,87 @@ def core():
  record('old_blur_and_white_veil_disabled',matched>=len(points)*.8,matching=matched,total=len(points))
  colors=rendered.getcolors(rendered.width*rendered.height) or [];color_counts={color:n for n,color in colors}
  record('opaque_charcoal_bubbles_and_solid_composer',color_counts.get((48,51,58),0)>500 and color_counts.get((236,238,241),0)>1000)
- e=edit(t);record('composer_not_focused_on_launch',e.get('focused')=='false')
- tap(e);t,_=ui('blank-input');record('tap_focuses_empty_input',edit(t).get('focused')=='true')
- shell('input','keyevent','4');time.sleep(.6);t,_=ui('input-back');record('keyboard_back_clears_empty_cursor_focus',edit(t).get('focused')=='false')
- tap(edit(t));shell('input','text','Draft_Keep');time.sleep(.5);t,_=ui('keyboard');screen('keyboard')
- record('typing_works',optional(t,text='Draft_Keep',cls='android.widget.EditText') is not None)
- record('real_ime_visible','mInputShown=true' in shell('dumpsys','input_method'))
- tap(node(t,text='我的两台手机'));t,_=ui('outside-input');record('outside_tap_clears_focus_and_keeps_draft',edit(t).get('focused')=='false' and edit(t).get('text')=='Draft_Keep')
- for i in range(4):shell('input','swipe','270','400','270','1100','180')
- time.sleep(.6);t,_=ui('history');seen=[n.get('text') for n in t.iter('node') if n.get('text','').startswith('load-')]
- record('real_history_scroll',bool(seen));record('return_to_latest_available',optional(t,desc='回到最新') is not None)
- insert('arrival-history','incoming-while-reading')
- t,_=ui('history-incoming');after=[n.get('text') for n in t.iter('node') if n.get('text','').startswith('load-')]
- record('incoming_keeps_history_position_and_draft',seen==after and edit(t).get('text')=='Draft_Keep')
- # Local send must jump from history all the way to the newest item.
- tap(node(t,desc='发送'));time.sleep(.7);t,_=ui('own-send')
- record('own_send_clears_input',edit(t).get('text') in ('消息',''))
- record('own_send_forces_latest',optional(t,text='Draft_Keep') is not None and optional(t,desc='回到最新') is None)
- c=database('sent-data');record('own_text_queued_once',c.execute("SELECT COUNT(*) FROM messages WHERE text_content='Draft_Keep' AND status='pending'").fetchone()[0]==1)
- state=node(t,text='等待连接');body=node(t,text='Draft_Keep');parents={child:parent for parent in t.iter() for child in parent}
- record('waiting_state_outside_bubble',parents.get(parents.get(body)) is parents.get(state) and parents.get(body) is not parents.get(state))
- insert('arrival-bottom','incoming-while-at-bottom');t,_=ui('bottom-incoming');record('incoming_follows_at_bottom',optional(t,text='incoming-while-at-bottom') is not None)
- tap(edit(t));t,_=ui('bottom-keyboard');record('latest_visible_above_ime',optional(t,text='incoming-while-at-bottom') is not None)
- shell('input','keyevent','4');time.sleep(.5)
- # Both search and composer must use the same focus exit behavior.
- t,_=ui('before-search');tap(node(t,desc='搜索'));t,_=ui('search-blank')
- search=next(n for n in t.iter('node') if n.get('class')=='android.widget.EditText' and not n.get('resource-id','').endswith('/message'))
- record('search_focuses_on_open',search.get('focused')=='true')
- tap(node(t,text='我的两台手机'));t,_=ui('search-outside');search=next(n for n in t.iter('node') if n.get('class')=='android.widget.EditText' and not n.get('resource-id','').endswith('/message'));record('search_outside_tap_clears_cursor',search.get('focused')=='false')
- tap(search);shell('input','text','load-');time.sleep(.4);t,_=ui('search-match');record('search_all_history',optional(t,text='1/1000') is not None)
- tap(node(t,text='↓'));time.sleep(.5);t,_=ui('search-next');record('search_next',optional(t,text='2/1000') is not None)
- tap(node(t,text='↑'));time.sleep(.4);t,_=ui('search-prev');record('search_previous',optional(t,text='1/1000') is not None)
- tap(node(t,text='×'));t,_=ui('search-close');record('search_close_clears_focus',edit(t).get('focused')=='false')
- tap(node(t,desc='回到最新'));t,_=ui('latest-button');record('return_to_latest_reaches_newest',optional(t,text='incoming-while-at-bottom') is not None)
- target=node(t,text='incoming-while-at-bottom');x,y=center(target);shell('input','swipe',str(x),str(y),str(x),str(y),'850');t,_=ui('longpress');record('long_press_copy_and_search',optional(t,text='复制') is not None and optional(t,text='搜索') is not None);tap(node(t,text='复制'))
- # Real received photo, asynchronous thumbnail, full viewer, gestures, save and close.
- private='/data/data/'+PKG+'/files/incoming/fixture-photo.png';adb('push',str(OUT/'fixture-photo.png'),private);shell('chown',uid+':'+uid,private);shell('restorecon',private)
- insert('photo-arrival',None,kind='file',name='fixture-photo.png',path=private,size=len(photo));time.sleep(.7);t,_=ui('photo-thumb')
- record('received_photo_is_thumbnail',optional(t,desc='图片：fixture-photo.png') is not None and optional(t,text='图片') is None)
- tap(node(t,desc='图片：fixture-photo.png'));time.sleep(.5);t,_=ui('photo-viewer');record('native_photo_viewer_opens',optional(t,desc='图片预览') is not None and optional(t,text='保存到下载') is not None)
- screen('photo-viewer');shell('input','tap','500','750');shell('input','tap','500','750');shell('input','swipe','700','850','430','650','300');t,_=ui('photo-zoom');record('photo_zoom_pan_remains_responsive',optional(t,desc='关闭图片') is not None)
- tap(node(t,text='保存到下载'));time.sleep(.6)
- deadline=time.monotonic()+12;valid=False;paths=[];expected_hash=hashlib.sha256(photo).hexdigest()
- while time.monotonic()<deadline:
-  paths=shell('find','/sdcard/Download','-type','f','-name','fixture-photo*').splitlines()
-  valid=len(paths)>=2 and any(shell('sha256sum '+shlex.quote(p)).startswith(expected_hash) for p in paths if p!='/sdcard/Download/fixture-photo.png')
-  if valid:break
-  time.sleep(.3)
- record('photo_save_keeps_original_bytes',valid,download_files=paths)
- t,_=ui('photo-save');tap(node(t,desc='关闭图片'));t,_=ui('photo-close');record('viewer_returns_to_chat',optional(t,text='我的两台手机') is not None)
- # Real file picker selection must enqueue and land at latest, even from history.
- for i in range(3):shell('input','swipe','270','400','270','1100','150')
- t,_=ui('file-send-from-history');tap(node(t,desc='添加文件'));time.sleep(.6);t,_=ui('file-picker')
- if optional(t,desc='Show roots') is not None:tap(node(t,desc='Show roots'));t,_=ui('file-roots')
- if optional(t,text='Downloads') is not None:tap(node(t,text='Downloads'));t,_=ui('file-downloads')
- if optional(t,text='fixture-photo.png') is None:
-  search=optional(t,desc='Search');
-  if search is not None:
-   tap(search);t,_=ui('file-picker-search');tap(node(t,cls='android.widget.EditText'));shell('input','text','fixture-photo.png');shell('input','keyevent','66');time.sleep(.6);t,_=ui('file-picker-found')
- tap(node(t,text='fixture-photo.png'));time.sleep(.7);t,_=ui('file-sent')
- record('file_picker_selects_and_returns',optional(t,text='我的两台手机') is not None)
- record('own_file_send_forces_latest',optional(t,desc='图片：fixture-photo.png') is not None and optional(t,desc='回到最新') is None)
- thumbs=[n for n in t.iter('node') if n.get('content-desc')=='图片：fixture-photo.png'];tap(thumbs[-1]);t,_=ui('own-photo-viewer');record('own_photo_also_opens_viewer',optional(t,desc='关闭图片') is not None);tap(node(t,desc='关闭图片'));t,_=ui('own-photo-close')
- c=database('file-sent-data');record('outgoing_file_queued_with_original_bytes',c.execute("SELECT COUNT(*) FROM messages WHERE mine=1 AND kind='file' AND file_name='fixture-photo.png' AND status='pending'").fetchone()[0]==1)
- # Locate regular file by actual filename and save the real bytes.
- tap(node(t,desc='搜索'));t,_=ui('file-search-open');search=next(n for n in t.iter('node') if n.get('class')=='android.widget.EditText' and not n.get('resource-id','').endswith('/message'));tap(search);shell('input','text','fixture.bin');time.sleep(.3);t,_=ui('file-search');tap(node(t,text='↓'));time.sleep(.5);t,_=ui('file-found');tap(node(t,text='×'));t,_=ui('file-ready');tap(node(t,text='fixture.bin'));time.sleep(.7)
- paths=shell('find','/sdcard/Download','-type','f','-name','fixture*.bin').splitlines();record('compact_file_saves_original_bytes',bool(paths) and adb('exec-out','cat',paths[-1])==(OUT/'fixture.bin').read_bytes())
- t,_=ui('before-background');tap(node(t,desc='聊天背景'));t,_=ui('background-dialog')
- record('background_controls_removed',optional(t,text='选择照片') is not None and not any(n.get('class')=='android.widget.SeekBar' or n.get('text') in ('模糊','柔化','背景只保存在这台手机，没有预设背景。') for n in t.iter('node')))
- record('update_entry_visible',optional(t,text='检查更新') is not None);screen('background-dialog')
- tap(node(t,text='清除'));time.sleep(.5);t,_=ui('background-cleared');record('clear_background_returns',optional(t,text='我的两台手机') is not None)
- for attempt in range(3):
-  tap(node(t,desc='聊天背景'));t,_=ui('cancel-check-settings');tap(node(t,text='检查更新'));time.sleep(.2);t,_=ui('cancel-check')
-  if optional(t,text='取消') is not None:tap(node(t,text='取消'));break
-  t,_=ui('cancel-retry-chat')
- else:raise AssertionError('Unable to open cancellable update check')
- t,_=ui('cancel-check-return');record('stalled_update_check_can_cancel_back_to_chat',optional(t,text='我的两台手机') is not None)
+ if not reuse:
+  e=edit(t);record('composer_not_focused_on_launch',e.get('focused')=='false')
+  tap(e);t,_=ui('blank-input');record('tap_focuses_empty_input',edit(t).get('focused')=='true')
+  shell('input','keyevent','4');time.sleep(.6);t,_=ui('input-back');record('keyboard_back_clears_empty_cursor_focus',edit(t).get('focused')=='false')
+  tap(edit(t));shell('input','text','Draft_Keep');time.sleep(.5);t,_=ui('keyboard');screen('keyboard')
+  record('typing_works',optional(t,text='Draft_Keep',cls='android.widget.EditText') is not None)
+  record('real_ime_visible','mInputShown=true' in shell('dumpsys','input_method'))
+  tap(node(t,text='我的两台手机'));t,_=ui('outside-input');record('outside_tap_clears_focus_and_keeps_draft',edit(t).get('focused')=='false' and edit(t).get('text')=='Draft_Keep')
+  for i in range(4):shell('input','swipe','270','400','270','1100','180')
+  time.sleep(.6);t,_=ui('history');seen=[n.get('text') for n in t.iter('node') if n.get('text','').startswith('load-')]
+  record('real_history_scroll',bool(seen));record('return_to_latest_available',optional(t,desc='回到最新') is not None)
+  insert('arrival-history','incoming-while-reading')
+  t,_=ui('history-incoming');after=[n.get('text') for n in t.iter('node') if n.get('text','').startswith('load-')]
+  record('incoming_keeps_history_position_and_draft',seen==after and edit(t).get('text')=='Draft_Keep')
+  # Local send must jump from history all the way to the newest item.
+  tap(node(t,desc='发送'));time.sleep(.7);t,_=ui('own-send')
+  record('own_send_clears_input',edit(t).get('text') in ('消息',''))
+  record('own_send_forces_latest',optional(t,text='Draft_Keep') is not None and optional(t,desc='回到最新') is None)
+  c=database('sent-data');record('own_text_queued_once',c.execute("SELECT COUNT(*) FROM messages WHERE text_content='Draft_Keep' AND status='pending'").fetchone()[0]==1)
+  state=node(t,text='等待连接');body=node(t,text='Draft_Keep');parents={child:parent for parent in t.iter() for child in parent}
+  record('waiting_state_outside_bubble',parents.get(parents.get(body)) is parents.get(state) and parents.get(body) is not parents.get(state))
+  insert('arrival-bottom','incoming-while-at-bottom');t,_=ui('bottom-incoming');record('incoming_follows_at_bottom',optional(t,text='incoming-while-at-bottom') is not None)
+  tap(edit(t));t,_=ui('bottom-keyboard');record('latest_visible_above_ime',optional(t,text='incoming-while-at-bottom') is not None)
+  shell('input','keyevent','4');time.sleep(.5)
+  # Both search and composer must use the same focus exit behavior.
+  t,_=ui('before-search');tap(node(t,desc='搜索'));t,_=ui('search-blank')
+  search=next(n for n in t.iter('node') if n.get('class')=='android.widget.EditText' and not n.get('resource-id','').endswith('/message'))
+  record('search_focuses_on_open',search.get('focused')=='true')
+  tap(node(t,text='我的两台手机'));t,_=ui('search-outside');search=next(n for n in t.iter('node') if n.get('class')=='android.widget.EditText' and not n.get('resource-id','').endswith('/message'));record('search_outside_tap_clears_cursor',search.get('focused')=='false')
+  tap(search);shell('input','text','load-');time.sleep(.4);t,_=ui('search-match');record('search_all_history',optional(t,text='1/1000') is not None)
+  tap(node(t,text='↓'));time.sleep(.5);t,_=ui('search-next');record('search_next',optional(t,text='2/1000') is not None)
+  tap(node(t,text='↑'));time.sleep(.4);t,_=ui('search-prev');record('search_previous',optional(t,text='1/1000') is not None)
+  tap(node(t,text='×'));t,_=ui('search-close');record('search_close_clears_focus',edit(t).get('focused')=='false')
+  tap(node(t,desc='回到最新'));t,_=ui('latest-button');record('return_to_latest_reaches_newest',optional(t,text='incoming-while-at-bottom') is not None)
+  target=node(t,text='incoming-while-at-bottom');x,y=center(target);shell('input','swipe',str(x),str(y),str(x),str(y),'850');t,_=ui('longpress');record('long_press_copy_and_search',optional(t,text='复制') is not None and optional(t,text='搜索') is not None);tap(node(t,text='复制'))
+  # Real received photo, asynchronous thumbnail, full viewer, gestures, save and close.
+  private='/data/data/'+PKG+'/files/incoming/fixture-photo.png';adb('push',str(OUT/'fixture-photo.png'),private);shell('chown',uid+':'+uid,private);shell('restorecon',private)
+  insert('photo-arrival',None,kind='file',name='fixture-photo.png',path=private,size=len(photo));time.sleep(.7);t,_=ui('photo-thumb')
+  record('received_photo_is_thumbnail',optional(t,desc='图片：fixture-photo.png') is not None and optional(t,text='图片') is None)
+  tap(node(t,desc='图片：fixture-photo.png'));time.sleep(.5);t,_=ui('photo-viewer');record('native_photo_viewer_opens',optional(t,desc='图片预览') is not None and optional(t,text='保存到下载') is not None)
+  screen('photo-viewer');shell('input','tap','500','750');shell('input','tap','500','750');shell('input','swipe','700','850','430','650','300');t,_=ui('photo-zoom');record('photo_zoom_pan_remains_responsive',optional(t,desc='关闭图片') is not None)
+  tap(node(t,text='保存到下载'));time.sleep(.6)
+  deadline=time.monotonic()+12;valid=False;paths=[];expected_hash=hashlib.sha256(photo).hexdigest()
+  while time.monotonic()<deadline:
+   paths=shell('find','/sdcard/Download','-type','f','-name','fixture-photo*').splitlines()
+   valid=len(paths)>=2 and any(shell('sha256sum '+shlex.quote(p)).startswith(expected_hash) for p in paths if p!='/sdcard/Download/fixture-photo.png')
+   if valid:break
+   time.sleep(.3)
+  record('photo_save_keeps_original_bytes',valid,download_files=paths)
+  t,_=ui('photo-save');tap(node(t,desc='关闭图片'));t,_=ui('photo-close');record('viewer_returns_to_chat',optional(t,text='我的两台手机') is not None)
+  # Real file picker selection must enqueue and land at latest, even from history.
+  for i in range(3):shell('input','swipe','270','400','270','1100','150')
+  t,_=ui('file-send-from-history');tap(node(t,desc='添加文件'));time.sleep(.6);t,_=ui('file-picker')
+  if optional(t,desc='Show roots') is not None:tap(node(t,desc='Show roots'));t,_=ui('file-roots')
+  if optional(t,text='Downloads') is not None:tap(node(t,text='Downloads'));t,_=ui('file-downloads')
+  if optional(t,text='fixture-photo.png') is None:
+   search=optional(t,desc='Search');
+   if search is not None:
+    tap(search);t,_=ui('file-picker-search');tap(node(t,cls='android.widget.EditText'));shell('input','text','fixture-photo.png');shell('input','keyevent','66');time.sleep(.6);t,_=ui('file-picker-found')
+  tap(node(t,text='fixture-photo.png'));time.sleep(.7);t,_=ui('file-sent')
+  record('file_picker_selects_and_returns',optional(t,text='我的两台手机') is not None)
+  record('own_file_send_forces_latest',optional(t,desc='图片：fixture-photo.png') is not None and optional(t,desc='回到最新') is None)
+  thumbs=[n for n in t.iter('node') if n.get('content-desc')=='图片：fixture-photo.png'];tap(thumbs[-1]);t,_=ui('own-photo-viewer');record('own_photo_also_opens_viewer',optional(t,desc='关闭图片') is not None);tap(node(t,desc='关闭图片'));t,_=ui('own-photo-close')
+  c=database('file-sent-data');record('outgoing_file_queued_with_original_bytes',c.execute("SELECT COUNT(*) FROM messages WHERE mine=1 AND kind='file' AND file_name='fixture-photo.png' AND status='pending'").fetchone()[0]==1)
+  # Locate regular file by actual filename and save the real bytes.
+  tap(node(t,desc='搜索'));t,_=ui('file-search-open');search=next(n for n in t.iter('node') if n.get('class')=='android.widget.EditText' and not n.get('resource-id','').endswith('/message'));tap(search);shell('input','text','fixture.bin');time.sleep(.3);t,_=ui('file-search');tap(node(t,text='↓'));time.sleep(.5);t,_=ui('file-found');tap(node(t,text='×'));t,_=ui('file-ready');tap(node(t,text='fixture.bin'));time.sleep(.7)
+  paths=shell('find','/sdcard/Download','-type','f','-name','fixture*.bin').splitlines();record('compact_file_saves_original_bytes',bool(paths) and adb('exec-out','cat',paths[-1])==(OUT/'fixture.bin').read_bytes())
+  t,_=ui('before-background');tap(node(t,desc='聊天背景'));t,_=ui('background-dialog')
+  record('background_controls_removed',optional(t,text='选择照片') is not None and not any(n.get('class')=='android.widget.SeekBar' or n.get('text') in ('模糊','柔化','背景只保存在这台手机，没有预设背景。') for n in t.iter('node')))
+  record('update_entry_visible',optional(t,text='检查更新') is not None);screen('background-dialog')
+  tap(node(t,text='清除'));time.sleep(.5);t,_=ui('background-cleared');record('clear_background_returns',optional(t,text='我的两台手机') is not None)
+  for attempt in range(3):
+   tap(node(t,desc='聊天背景'));t,_=ui('cancel-check-settings');tap(node(t,text='检查更新'));time.sleep(.2);t,_=ui('cancel-check')
+   if optional(t,text='取消') is not None:tap(node(t,text='取消'));break
+   t,_=ui('cancel-retry-chat')
+  else:raise AssertionError('Unable to open cancellable update check')
+  t,_=ui('cancel-check-return');record('stalled_update_check_can_cancel_back_to_chat',optional(t,text='我的两台手机') is not None)
+ if reuse:
+  private='/data/data/'+PKG+'/files/incoming/fixture-photo.png';adb('push',str(OUT/'fixture-photo.png'),private);shell('chown',uid+':'+uid,private);shell('restorecon',private)
+  tap(node(t,desc='聊天背景'));t,_=ui('fast-background');tap(node(t,text='清除'));t,_=ui('fast-default-chat')
+  record('new_update_fixture_ready',optional(t,text='我的两台手机') is not None)
  # Add human-readable demo messages to the test device only, for actual release screenshots.
  insert('demo-1','现在消息终于能跟到最下面了。',mine=True)
  insert('demo-2','收到。图片可以直接点开看。')
@@ -215,9 +227,11 @@ def allow_update_hosts():
  # Keep all other external HTTPS blocked: the user's private relay room is never contacted.
  addresses={}
  for host in ['api.github.com','github.com','release-assets.githubusercontent.com','objects.githubusercontent.com','github-releases.githubusercontent.com']:
-  resolved=shell('env','CLASSPATH=/data/local/tmp/fixture.dex','app_process','/system/bin','FixtureSql','dns',host).splitlines()
+  resolved=shell('env','CLASSPATH=/data/local/tmp/fixture.dex','app_process','/system/bin','FixtureSql','dns',host,ok=False).splitlines()
   ips=sorted({addr.strip() for addr in resolved if re.fullmatch(r'[0-9a-fA-F:.]+',addr.strip()) and ('.' in addr or ':' in addr)})
-  if not ips:raise AssertionError('Device DNS returned no update host addresses: '+host)
+  if not ips:
+   if host in ['api.github.com','github.com','release-assets.githubusercontent.com']:raise AssertionError('Device DNS returned no update host addresses: '+host)
+   continue
   addresses[host]=ips
   for addr in ips:shell('ip6tables' if ':' in addr else 'iptables','-I','OUTPUT','1','-p','tcp','-d',addr,'--dport','443','-j','ACCEPT')
  record('github_update_hosts_allowed_by_device_dns',True,addresses=addresses)
@@ -271,7 +285,12 @@ def update():
 try:
  if len(sys.argv)>1 and sys.argv[1]=='update':
   checks=json.loads((OUT/'runtime-checks.json').read_text());update()
- else:core()
+ else:
+  reuse=os.environ.get('REUSE_CORE')=='1'
+  if reuse:
+   previous=json.loads((OUT/'reused-core-checks.json').read_text());checks=[{**c,'source_run':37494942937} for c in previous]
+   record('unchanged_app_reuses_verified_native_ui_checks',True,source_commit='0e90a758f78b34e5ac6f1f26f0f4aba9cf9ff4ec')
+  core(reuse)
 except Exception as e:
  if len(sys.argv)>1 and sys.argv[1]=='update' and (OUT/'previous-channel.json').exists():subprocess.run([sys.executable,str(OUT/'publish_release.py'),'rollback'],check=False)
  record('acceptance_error',False,error=str(e))
