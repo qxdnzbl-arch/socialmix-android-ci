@@ -47,8 +47,7 @@ jobs:
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none
           script: |
-            export BASELINE_APK="$PWD/previous-artifact/ShuangJiChuan_v5_4_Native.apk"
-            python3 dualphone/acceptance/device_test.py
+            BASELINE_APK="$PWD/previous-artifact/ShuangJiChuan_v5_4_Native.apk" python3 dualphone/acceptance/device_test.py
       - uses: actions/upload-artifact@v4
         if: always()
         with:
