@@ -5,6 +5,7 @@ import android.content.*;
 import android.graphics.*;
 import android.os.*;
 import android.view.*;
+import android.net.Uri;
 import android.view.accessibility.*;
 import android.view.inputmethod.InputMethodManager;
 import android.widget.*;
