@@ -8,8 +8,6 @@ import android.text.style.BackgroundColorSpan;
 import android.view.*;
 import android.widget.*;
 import androidx.recyclerview.widget.RecyclerView;
-import androidx.recyclerview.widget.AsyncListDiffer;
-import androidx.recyclerview.widget.DiffUtil;
 import java.util.*;
 
 public class NativeMessageAdapter extends RecyclerView.Adapter<NativeMessageAdapter.Holder>{
@@ -18,204 +16,155 @@ public class NativeMessageAdapter extends RecyclerView.Adapter<NativeMessageAdap
     void onFileClick(TransferDb.Msg msg);
   }
 
+  private static final int TYPE_TEXT=0,TYPE_FILE=1;
   private final Context c;
   private final Callbacks cb;
-  private final AsyncListDiffer<TransferDb.Msg> differ;
-  private String query="";
-  private String activeId=null;
+  private final ArrayList<TransferDb.Msg> items=new ArrayList<>();
   private final ArrayList<Integer> matches=new ArrayList<>();
-  private final HashSet<Integer> matchSet=new HashSet<>();
+  private String query="",activeId=null;
   private final int maxWidth;
-  private int latestMinePosition=-1;
+  private int lastMine=-1;
 
   public NativeMessageAdapter(Context c,Callbacks cb){
     this.c=c;this.cb=cb;
     maxWidth=Math.round(c.getResources().getDisplayMetrics().widthPixels*.76f);
     setHasStableIds(true);
-    differ=new AsyncListDiffer<>(this,new DiffUtil.ItemCallback<TransferDb.Msg>(){
-      @Override public boolean areItemsTheSame(TransferDb.Msg a,TransferDb.Msg b){
-        return Objects.equals(a.id,b.id);
-      }
-      @Override public boolean areContentsTheSame(TransferDb.Msg a,TransferDb.Msg b){
-        return a.mine==b.mine
-          && a.fileSize==b.fileSize
-          && a.createdAt==b.createdAt
-          && Objects.equals(a.kind,b.kind)
-          && Objects.equals(a.text,b.text)
-          && Objects.equals(a.fileName,b.fileName)
-          && Objects.equals(a.filePath,b.filePath)
-          && Objects.equals(a.status,b.status);
-      }
-    });
   }
 
-  public void setItems(List<TransferDb.Msg> list){
-    ArrayList<TransferDb.Msg> copy=new ArrayList<>(list);
-    differ.submitList(copy,()->{
-      latestMinePosition=-1;
-      for(int i=differ.getCurrentList().size()-1;i>=0;i--){
-        if(differ.getCurrentList().get(i).mine){latestMinePosition=i;break;}
+  public void setItems(List<TransferDb.Msg> next){
+    ArrayList<TransferDb.Msg> n=new ArrayList<>(next);
+    int oldLast=lastMine,oldSize=items.size();
+    boolean prefix=n.size()>=oldSize;
+    if(prefix)for(int i=0;i<oldSize;i++)if(!Objects.equals(items.get(i).id,n.get(i).id)){prefix=false;break;}
+    if(prefix){
+      for(int i=0;i<oldSize;i++){
+        TransferDb.Msg old=items.get(i),now=n.get(i);
+        if(!same(old,now)){items.set(i,now);notifyItemChanged(i);}
       }
-      rebuildMatches();
-      if(!query.isEmpty())notifyDataSetChanged();
-    });
+      if(n.size()>oldSize){
+        for(int i=oldSize;i<n.size();i++)items.add(n.get(i));
+        notifyItemRangeInserted(oldSize,n.size()-oldSize);
+      }
+    }else{
+      items.clear();items.addAll(n);notifyDataSetChanged();
+    }
+    lastMine=findLastMine();
+    if(oldLast!=lastMine){
+      if(oldLast>=0&&oldLast<items.size())notifyItemChanged(oldLast);
+      if(lastMine>=0&&lastMine<items.size())notifyItemChanged(lastMine);
+    }
+    rebuildMatches();
   }
 
-  public void setSearch(String q,String active){
-    query=q==null?"":q.trim();activeId=active;rebuildMatches();notifyDataSetChanged();
+  private boolean same(TransferDb.Msg a,TransferDb.Msg b){
+    return a.mine==b.mine&&a.fileSize==b.fileSize&&a.createdAt==b.createdAt
+      &&Objects.equals(a.id,b.id)&&Objects.equals(a.kind,b.kind)&&Objects.equals(a.text,b.text)
+      &&Objects.equals(a.fileName,b.fileName)&&Objects.equals(a.filePath,b.filePath)&&Objects.equals(a.status,b.status);
   }
+  private int findLastMine(){for(int i=items.size()-1;i>=0;i--)if(items.get(i).mine)return i;return -1;}
 
+  public void setSearch(String q,String active){query=q==null?"":q.trim();activeId=active;rebuildMatches();notifyDataSetChanged();}
   public List<Integer> getMatchPositions(){return new ArrayList<>(matches);}
-  public String getItemIdAt(int position){List<TransferDb.Msg> items=differ.getCurrentList();return position>=0&&position<items.size()?items.get(position).id:null;}
-
-  @Override public long getItemId(int position){
-    String id=getItemIdAt(position);
-    return id==null?RecyclerView.NO_ID:((long)id.hashCode()<<32)^(id.length()*2654435761L);
-  }
-
+  public String getItemIdAt(int p){return p>=0&&p<items.size()?items.get(p).id:null;}
   private void rebuildMatches(){
-    matches.clear();matchSet.clear();if(query.isEmpty())return;
-    List<TransferDb.Msg> items=differ.getCurrentList();
+    matches.clear();if(query.isEmpty())return;
     String q=query.toLowerCase(Locale.ROOT);
     for(int i=0;i<items.size();i++){
       TransferDb.Msg m=items.get(i);
       String hay="file".equals(m.kind)?String.valueOf(m.fileName):String.valueOf(m.text);
-      if(hay.toLowerCase(Locale.ROOT).contains(q)){matches.add(i);matchSet.add(i);}
+      if(hay.toLowerCase(Locale.ROOT).contains(q))matches.add(i);
     }
   }
 
-  @Override public Holder onCreateViewHolder(ViewGroup parent,int viewType){
-    FrameLayout root=new FrameLayout(c);
-    root.setLayoutParams(new RecyclerView.LayoutParams(-1,-2));
-    root.setPadding(dp(12),dp(3),dp(12),dp(3));
+  @Override public long getItemId(int p){String id=items.get(p).id;return id==null?p:(((long)id.hashCode())<<32)^id.length();}
+  @Override public int getItemViewType(int p){return "file".equals(items.get(p).kind)?TYPE_FILE:TYPE_TEXT;}
+  @Override public int getItemCount(){return items.size();}
 
-    LinearLayout bubble=new LinearLayout(c);
-    bubble.setOrientation(LinearLayout.VERTICAL);
-    bubble.setPadding(dp(12),dp(9),dp(12),dp(8));
-    root.addView(bubble,new FrameLayout.LayoutParams(-2,-2));
-
-    return new Holder(root,bubble);
+  private FrameLayout root(){
+    FrameLayout r=new FrameLayout(c);
+    r.setLayoutParams(new RecyclerView.LayoutParams(-1,-2));
+    r.setPadding(dp(12),dp(3),dp(12),dp(3));
+    return r;
+  }
+  private LinearLayout bubble(FrameLayout root){
+    LinearLayout b=new LinearLayout(c);b.setOrientation(LinearLayout.VERTICAL);b.setPadding(dp(12),dp(8),dp(12),dp(8));
+    root.addView(b,new FrameLayout.LayoutParams(-2,-2));return b;
   }
 
-  @Override public void onBindViewHolder(Holder h,int position){
-    TransferDb.Msg m=differ.getCurrentList().get(position);
-    h.bubble.removeAllViews();
-    h.bubble.setOnClickListener(null);
-    h.bubble.setOnLongClickListener(v->{cb.onLongPress(v,m);return true;});
+  @Override public Holder onCreateViewHolder(ViewGroup parent,int type){
+    FrameLayout root=root();LinearLayout bubble=bubble(root);
+    if(type==TYPE_TEXT){
+      TextView body=textView(15.5f,Color.BLACK);body.setMaxWidth(maxWidth);body.setLineSpacing(0,1.04f);
+      bubble.addView(body,new LinearLayout.LayoutParams(-2,-2));
+      TextView state=textView(10.5f,0xB8FFFFFF);state.setGravity(Gravity.END);
+      LinearLayout.LayoutParams sp=new LinearLayout.LayoutParams(-1,-2);sp.topMargin=dp(4);bubble.addView(state,sp);
+      return new TextHolder(root,bubble,body,state);
+    }
+    LinearLayout title=new LinearLayout(c);title.setGravity(Gravity.CENTER_VERTICAL);
+    FrameLayout iconBox=new FrameLayout(c);ImageView icon=new ImageView(c);icon.setImageResource(R.drawable.ic_attachment);icon.setPadding(dp(7),dp(7),dp(7),dp(7));
+    iconBox.addView(icon,new FrameLayout.LayoutParams(-1,-1));title.addView(iconBox,new LinearLayout.LayoutParams(dp(32),dp(32)));
+    TextView label=textView(14.5f,Color.rgb(34,36,40));label.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);label.setSingleLine(true);label.setEllipsize(TextUtils.TruncateAt.END);label.setMaxWidth(maxWidth-dp(52));
+    LinearLayout.LayoutParams llp=new LinearLayout.LayoutParams(0,-2,1f);llp.leftMargin=dp(8);title.addView(label,llp);
+    bubble.addView(title,new LinearLayout.LayoutParams(Math.min(maxWidth,dp(246)),-2));
+    TextView meta=textView(11.5f,Color.rgb(128,132,138));LinearLayout.LayoutParams mp=new LinearLayout.LayoutParams(-2,-2);mp.topMargin=dp(4);bubble.addView(meta,mp);
+    TextView save=textView(11.5f,Color.rgb(52,120,246));save.setText("保存到下载");LinearLayout.LayoutParams svp=new LinearLayout.LayoutParams(-2,-2);svp.topMargin=dp(4);bubble.addView(save,svp);
+    TextView state=textView(10.5f,0xB8FFFFFF);state.setGravity(Gravity.END);LinearLayout.LayoutParams sp=new LinearLayout.LayoutParams(-1,-2);sp.topMargin=dp(4);bubble.addView(state,sp);
+    return new FileHolder(root,bubble,iconBox,icon,label,meta,save,state);
+  }
 
-    FrameLayout.LayoutParams lp=(FrameLayout.LayoutParams)h.bubble.getLayoutParams();
-    lp.gravity=m.mine?Gravity.END:Gravity.START;
-    h.bubble.setLayoutParams(lp);
+  @Override public void onBindViewHolder(Holder holder,int position){
+    TransferDb.Msg m=items.get(position);
+    FrameLayout.LayoutParams lp=(FrameLayout.LayoutParams)holder.bubble.getLayoutParams();lp.gravity=m.mine?Gravity.END:Gravity.START;holder.bubble.setLayoutParams(lp);
+    boolean matched=!query.isEmpty()&&matches.contains(position),active=matched&&m.id!=null&&m.id.equals(activeId);
+    holder.bubble.setBackground(bubbleBackground(m.mine,matched,active));
+    holder.bubble.setOnLongClickListener(v->{cb.onLongPress(v,m);return true;});holder.bubble.setOnClickListener(null);
 
-    boolean matched=!query.isEmpty()&&matchSet.contains(position);
-    boolean active=matched&&m.id!=null&&m.id.equals(activeId);
-
-    h.bubble.setBackground(bubbleBackground(m.mine,matched,active));
-
-    if("text".equals(m.kind)){
-      TextView body=textView(15.5f,m.mine?Color.WHITE:Color.rgb(29,29,31));
-      body.setMaxWidth(maxWidth);
-      body.setLineSpacing(0,1.05f);
-      body.setText(highlight(m.text==null?"":m.text,query,m.mine));
-      h.bubble.addView(body,new LinearLayout.LayoutParams(-2,-2));
+    if(holder instanceof TextHolder){
+      TextHolder h=(TextHolder)holder;h.body.setTextColor(m.mine?Color.WHITE:Color.rgb(28,28,30));h.body.setText(highlight(m.text==null?"":m.text,query,m.mine));bindState(h.state,m,position);
     }else{
-      LinearLayout title=new LinearLayout(c);title.setGravity(Gravity.CENTER_VERTICAL);
-      FrameLayout iconBox=new FrameLayout(c);
-      iconBox.setBackground(makeColor(m.mine?0x1FFFFFFF:0x12687EE0,dp(11)));
-      ImageView clip=new ImageView(c);
-      clip.setImageResource(R.drawable.ic_attachment);
-      clip.setColorFilter(m.mine?0xE6FFFFFF:Color.rgb(104,126,224));
-      clip.setPadding(dp(8),dp(8),dp(8),dp(8));
-      iconBox.addView(clip,new FrameLayout.LayoutParams(-1,-1));
-      title.addView(iconBox,new LinearLayout.LayoutParams(dp(34),dp(34)));
-
-      TextView label=textView(14.5f,m.mine?Color.WHITE:Color.rgb(34,36,40));
-      label.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
-      label.setSingleLine(true);label.setEllipsize(TextUtils.TruncateAt.END);label.setMaxWidth(maxWidth-dp(54));
-      label.setText(highlight(friendlyFileLabel(m.fileName),query,m.mine));
-      LinearLayout.LayoutParams llp=new LinearLayout.LayoutParams(0,-2,1f);llp.leftMargin=dp(9);
-      title.addView(label,llp);
-      h.bubble.addView(title,new LinearLayout.LayoutParams(Math.min(maxWidth,dp(250)),-2));
-
-      TextView meta=textView(11.5f,m.mine?0xC8FFFFFF:Color.rgb(128,132,138));
-      meta.setText(size(m.fileSize));
-      LinearLayout.LayoutParams mlp=new LinearLayout.LayoutParams(-2,-2);mlp.topMargin=dp(5);
-      h.bubble.addView(meta,mlp);
-
-      if(!m.mine){
-        TextView save=textView(11.5f,Color.rgb(99,124,222));
-        save.setText("保存到下载");
-        LinearLayout.LayoutParams slp=new LinearLayout.LayoutParams(-2,-2);slp.topMargin=dp(5);
-        h.bubble.addView(save,slp);
-        h.bubble.setOnClickListener(v->cb.onFileClick(m));
-      }
-    }
-
-    if(m.mine&&position==latestMinePosition){
-      TextView state=textView(10.5f,0xAFFFFFFF);
-      state.setText("sent".equals(m.status)?"已送达":"正在发送");
-      state.setGravity(Gravity.END);
-      LinearLayout.LayoutParams sp=new LinearLayout.LayoutParams(-1,-2);sp.topMargin=dp(5);
-      h.bubble.addView(state,sp);
+      FileHolder h=(FileHolder)holder;
+      h.icon.setColorFilter(m.mine?0xE6FFFFFF:Color.rgb(52,120,246));h.iconBox.setBackground(makeColor(m.mine?0x20FFFFFF:0x123478F6,dp(10)));
+      h.label.setTextColor(m.mine?Color.WHITE:Color.rgb(28,28,30));h.label.setText(highlight(friendlyFileLabel(m.fileName),query,m.mine));
+      h.meta.setTextColor(m.mine?0xC8FFFFFF:Color.rgb(128,128,134));h.meta.setText(size(m.fileSize));
+      h.save.setVisibility(m.mine?View.GONE:View.VISIBLE);if(!m.mine)holder.bubble.setOnClickListener(v->cb.onFileClick(m));bindState(h.state,m,position);
     }
   }
 
-  @Override public int getItemCount(){return differ.getCurrentList().size();}
+  private void bindState(TextView state,TransferDb.Msg m,int position){
+    boolean show=m.mine&&position==lastMine;state.setVisibility(show?View.VISIBLE:View.GONE);
+    if(show)state.setText("sent".equals(m.status)?"已送达":"发送中");
+  }
 
   private CharSequence highlight(String text,String q,boolean mine){
     if(q==null||q.isEmpty())return text;
-    String low=text.toLowerCase(Locale.ROOT),needle=q.toLowerCase(Locale.ROOT);
-    SpannableString s=new SpannableString(text);int from=0,i;
-    while((i=low.indexOf(needle,from))>=0){
-      s.setSpan(new BackgroundColorSpan(mine?0xAAFFE5A8:0xFFFFE5A6),i,i+q.length(),Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
-      from=i+q.length();
-    }
+    String low=text.toLowerCase(Locale.ROOT),needle=q.toLowerCase(Locale.ROOT);SpannableString s=new SpannableString(text);int from=0,i;
+    while((i=low.indexOf(needle,from))>=0){s.setSpan(new BackgroundColorSpan(mine?0xAAFFE5A8:0xFFFFE5A6),i,i+q.length(),Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);from=i+q.length();}
     return s;
   }
 
   private GradientDrawable bubbleBackground(boolean mine,boolean matched,boolean active){
-    GradientDrawable g=new GradientDrawable();
-    if(mine){
-      g.setColor(Color.rgb(45,124,246));
-      float r=dp(19),tight=dp(6);
-      g.setCornerRadii(new float[]{r,r,r,r,tight,tight,r,r});
-    }else{
-      g.setColor(0xD9FFFFFF);
-      float r=dp(19),tight=dp(6);
-      g.setCornerRadii(new float[]{r,r,r,r,r,r,tight,tight});
-      g.setStroke(1,0x66FFFFFF);
-    }
-    if(active)g.setStroke(dp(3),0xDDE09A30);
-    else if(matched)g.setStroke(dp(2),0xA8ECB758);
+    GradientDrawable g=makeColor(mine?Color.rgb(52,120,246):0xE8F2F2F7,dp(20));
+    float r=dp(20),small=dp(7);
+    if(mine)g.setCornerRadii(new float[]{r,r,r,r,small,small,r,r}); else g.setCornerRadii(new float[]{r,r,r,r,r,r,small,small});
+    if(active)g.setStroke(dp(3),0xDDE09A30);else if(matched)g.setStroke(dp(2),0xA8ECB758);else if(!mine)g.setStroke(1,0x44FFFFFF);
     return g;
   }
 
-  private TextView textView(float sp,int color){
-    TextView v=new TextView(c);v.setTextSize(sp);v.setTextColor(color);v.setIncludeFontPadding(false);return v;
-  }
-
+  private TextView textView(float sp,int color){TextView v=new TextView(c);v.setTextSize(sp);v.setTextColor(color);v.setIncludeFontPadding(false);return v;}
   private GradientDrawable makeColor(int color,float radius){GradientDrawable g=new GradientDrawable();g.setColor(color);g.setCornerRadius(radius);return g;}
   private int dp(float v){return Math.round(v*c.getResources().getDisplayMetrics().density);}
-
-  private String size(long n){
-    if(n<1024)return n+" B";
-    if(n<1048576)return String.format(Locale.US,"%.1f KB",n/1024f);
-    return String.format(Locale.US,"%.1f MB",n/1048576f);
-  }
+  private String size(long n){if(n<1024)return n+" B";if(n<1048576)return String.format(Locale.US,"%.1f KB",n/1024f);return String.format(Locale.US,"%.1f MB",n/1048576f);}
 
   public static String friendlyFileLabel(String name){
-    String n=name==null||name.trim().isEmpty()?"文件":name.trim();
-    String low=n.toLowerCase(Locale.ROOT);
+    String n=name==null||name.trim().isEmpty()?"文件":name.trim(),low=n.toLowerCase(Locale.ROOT);
     if(low.matches(".*\\.(jpg|jpeg|png|gif|webp|bmp|heic|heif)$")||n.matches("(?i)^(camera|img|screenshot|xhs)[_\\-].*"))return "图片";
     if(low.matches(".*\\.(mp4|mov|m4v|avi|mkv|webm)$"))return "视频";
     if(low.matches(".*\\.(mp3|m4a|wav|aac|flac|ogg)$"))return "音频";
     if(low.endsWith(".pdf"))return "PDF 文件";
-    if(n.length()<=34)return n;
-    return n.substring(0,18)+"…"+n.substring(n.length()-10);
+    return n.length()<=34?n:n.substring(0,18)+"…"+n.substring(n.length()-10);
   }
 
-  static class Holder extends RecyclerView.ViewHolder{
-    final LinearLayout bubble;
-    Holder(View item,LinearLayout bubble){super(item);this.bubble=bubble;}
-  }
+  static abstract class Holder extends RecyclerView.ViewHolder{final LinearLayout bubble;Holder(View v,LinearLayout b){super(v);bubble=b;}}
+  static class TextHolder extends Holder{final TextView body,state;TextHolder(View v,LinearLayout b,TextView body,TextView state){super(v,b);this.body=body;this.state=state;}}
+  static class FileHolder extends Holder{final FrameLayout iconBox;final ImageView icon;final TextView label,meta,save,state;FileHolder(View v,LinearLayout b,FrameLayout ib,ImageView i,TextView l,TextView m,TextView s,TextView st){super(v,b);iconBox=ib;icon=i;label=l;meta=m;save=s;state=st;}}
 }

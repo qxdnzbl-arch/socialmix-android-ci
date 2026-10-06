@@ -46,6 +46,9 @@ public class MainActivity extends Activity implements NativeMessageAdapter.Callb
   private PopupWindow contextPopup;
   private Bitmap wallpaperBitmap;
   private long wallpaperVersion=-1L;
+  private int wallpaperBlur=-1;
+  private long wallpaperLoadingKey=-1L;
+  private View headerView;
   private final Handler mainHandler=new Handler(Looper.getMainLooper());
   private boolean reloadQueued=false;
   private boolean reloadInFlight=false;
@@ -64,20 +67,17 @@ public class MainActivity extends Activity implements NativeMessageAdapter.Callb
 
   @Override public void onCreate(Bundle state){
     super.onCreate(state);
-    getWindow().setStatusBarColor(Color.rgb(249,249,251));
+    getWindow().setStatusBarColor(Color.TRANSPARENT);
     getWindow().setNavigationBarColor(Color.rgb(247,248,251));
+    int sys=View.SYSTEM_UI_FLAG_LAYOUT_STABLE|View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN|View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR;
+    if(Build.VERSION.SDK_INT>=26)sys|=View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR;
+    getWindow().getDecorView().setSystemUiVisibility(sys);
     if(Build.VERSION.SDK_INT>=30){
       WindowInsetsController wc=getWindow().getInsetsController();
       if(wc!=null) wc.setSystemBarsAppearance(
         WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS|WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS,
         WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS|WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS
       );
-    }else if(Build.VERSION.SDK_INT>=26){
-      getWindow().getDecorView().setSystemUiVisibility(
-        View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR|View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR
-      );
-    }else{
-      getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR);
     }
     getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
 
@@ -169,6 +169,9 @@ public class MainActivity extends Activity implements NativeMessageAdapter.Callb
     LinearLayout page=new LinearLayout(this);
     page.setOrientation(LinearLayout.VERTICAL);
     root.addView(page,new FrameLayout.LayoutParams(-1,-1));
+
+    headerView=buildHeader();
+    page.addView(headerView,new LinearLayout.LayoutParams(-1,-2));
     page.setOnApplyWindowInsetsListener((v,insets)->{
       int top=0,bottom=0;
       if(Build.VERSION.SDK_INT>=30){
@@ -180,12 +183,11 @@ public class MainActivity extends Activity implements NativeMessageAdapter.Callb
         top=insets.getSystemWindowInsetTop();
         bottom=insets.getSystemWindowInsetBottom();
       }
-      v.setPadding(0,top,0,bottom);
+      v.setPadding(0,0,0,bottom);
+      if(headerView!=null)headerView.setPadding(dp(18),top+dp(7),dp(14),dp(7));
       return insets;
     });
     page.requestApplyInsets();
-
-    page.addView(buildHeader(),new LinearLayout.LayoutParams(-1,-2));
 
     adapter=new NativeMessageAdapter(this,this);
     list=new RecyclerView(this);
@@ -392,7 +394,7 @@ public class MainActivity extends Activity implements NativeMessageAdapter.Callb
     return b;
   }
 
-  private LinearLayout.LayoutParams buttonLp(){ return new LinearLayout.LayoutParams(dp(32),dp(32)); }
+  private LinearLayout.LayoutParams buttonLp(){ return new LinearLayout.LayoutParams(dp(30),dp(30)); }
 
   private TextView smallAction(String text){
     TextView v=new TextView(this);
@@ -588,8 +590,8 @@ public class MainActivity extends Activity implements NativeMessageAdapter.Callb
     File f=new File(getFilesDir(),"chat-background.jpg");
     if(f.isFile())box.addView(settingRow("清除背景","恢复默认界面","清除",v->{clearBackground();d.dismiss();}));
 
-    box.addView(sliderRow("模糊","bg_blur",0,18,prefs.getInt("bg_blur",5),v->{prefs.edit().putInt("bg_blur",v).apply();applyBackgroundEffects();}));
-    box.addView(sliderRow("柔化","bg_dim",6,42,prefs.getInt("bg_dim",18),v->{prefs.edit().putInt("bg_dim",v).apply();applyBackgroundEffects();}));
+    box.addView(sliderRow("模糊","bg_blur",0,18,prefs.getInt("bg_blur",7),v->{prefs.edit().putInt("bg_blur",v).apply();scheduleBackgroundReload();}));
+    box.addView(sliderRow("柔化","bg_dim",6,42,prefs.getInt("bg_dim",26),v->{prefs.edit().putInt("bg_dim",v).apply();applyBackgroundEffects();}));
 
     TextView note=new TextView(this);note.setText("背景只保存在这台手机，没有预设背景。");note.setTextSize(11.5f);note.setTextColor(Color.rgb(126,129,135));note.setPadding(dp(11),dp(10),dp(11),dp(10));note.setBackground(makeColor(Color.argb(12,70,75,85),dp(13)));
     LinearLayout.LayoutParams nlp=new LinearLayout.LayoutParams(-1,-2);nlp.topMargin=dp(10);box.addView(note,nlp);
@@ -641,48 +643,69 @@ public class MainActivity extends Activity implements NativeMessageAdapter.Callb
   private void loadBackgroundAsync(){
     File f=new File(getFilesDir(),"chat-background.jpg");
     if(!f.isFile()){
+      wallpaperLoadingKey=-1L;
+      wallpaperVersion=-1L;
+      wallpaperBlur=-1;
       wallpaper.setImageDrawable(null);
+      if(wallpaperBitmap!=null&&!wallpaperBitmap.isRecycled())wallpaperBitmap.recycle();
+      wallpaperBitmap=null;
       wallpaper.setVisibility(View.GONE);
       wallpaperVeil.setVisibility(View.GONE);
       ambient.setAlpha(1f);
       return;
     }
     final long version=f.lastModified();
-    if(wallpaperVersion==version&&wallpaperBitmap!=null){
-      wallpaper.setVisibility(View.VISIBLE);
-      wallpaperVeil.setVisibility(View.VISIBLE);
-      ambient.setAlpha(.12f);
-      applyBackgroundEffects();
-      return;
-    }
+    final int blur=prefs.getInt("bg_blur",7);
+    final long key=version*31L+blur;
+    wallpaper.setVisibility(View.VISIBLE);
+    wallpaperVeil.setVisibility(View.VISIBLE);
+    ambient.setAlpha(.10f);
+    applyBackgroundEffects();
+    if(wallpaperVersion==version&&wallpaperBlur==blur&&wallpaperBitmap!=null)return;
+    if(wallpaperLoadingKey==key)return;
+    wallpaperLoadingKey=key;
     io.execute(()->{
       BitmapFactory.Options opts=new BitmapFactory.Options();
       opts.inPreferredConfig=Bitmap.Config.RGB_565;
-      Bitmap decoded=BitmapFactory.decodeFile(f.getAbsolutePath(),opts);
-      if(decoded==null)return;
+      Bitmap raw=BitmapFactory.decodeFile(f.getAbsolutePath(),opts);
+      if(raw==null){wallpaperLoadingKey=-1L;return;}
+      Bitmap ready=raw;
+      if(blur>0){
+        int factor=blur<=3?2:(blur<=8?4:6);
+        int w=Math.max(96,raw.getWidth()/factor),h=Math.max(96,raw.getHeight()/factor);
+        ready=Bitmap.createScaledBitmap(raw,w,h,true);
+        if(ready!=raw)raw.recycle();
+      }
+      final Bitmap decoded=ready;
       mainHandler.post(()->{
         if(isFinishing()||isDestroyed()){decoded.recycle();return;}
-        if(wallpaperBitmap!=null&&!wallpaperBitmap.isRecycled())wallpaperBitmap.recycle();
+        File current=new File(getFilesDir(),"chat-background.jpg");
+        int currentBlur=prefs.getInt("bg_blur",7);
+        long currentKey=current.lastModified()*31L+currentBlur;
+        if(currentKey!=key){decoded.recycle();wallpaperLoadingKey=-1L;return;}
+        Bitmap old=wallpaperBitmap;
         wallpaperBitmap=decoded;
         wallpaperVersion=version;
+        wallpaperBlur=blur;
+        wallpaperLoadingKey=-1L;
+        wallpaper.setRenderEffect(null);
         wallpaper.setImageBitmap(decoded);
-        wallpaper.setVisibility(View.VISIBLE);
-        wallpaperVeil.setVisibility(View.VISIBLE);
-        ambient.setAlpha(.12f);
-        applyBackgroundEffects();
+        if(old!=null&&old!=decoded&&!old.isRecycled())old.recycle();
       });
     });
   }
 
   private void applyBackgroundEffects(){
     if(wallpaper.getVisibility()!=View.VISIBLE)return;
-    int blur=prefs.getInt("bg_blur",5);
-    int dim=prefs.getInt("bg_dim",18);
-    if(Build.VERSION.SDK_INT>=31){
-      float radius=Math.max(.1f,blur*1.8f);
-      wallpaper.setRenderEffect(blur==0?null:RenderEffect.createBlurEffect(radius,radius,Shader.TileMode.CLAMP));
-    }
+    int dim=prefs.getInt("bg_dim",26);
+    wallpaper.setRenderEffect(null);
     wallpaperVeil.setBackgroundColor(Color.argb(Math.min(230,Math.round(255f*dim/100f)),250,250,252));
+  }
+
+  private final Runnable backgroundReload=()->loadBackgroundAsync();
+  private void scheduleBackgroundReload(){
+    mainHandler.removeCallbacks(backgroundReload);
+    mainHandler.postDelayed(backgroundReload,120);
   }
 
   @Override protected void onActivityResult(int requestCode,int resultCode,Intent data){
@@ -707,11 +730,11 @@ public class MainActivity extends Activity implements NativeMessageAdapter.Callb
   private void saveChatBackground(Uri uri)throws Exception{
     BitmapFactory.Options bounds=new BitmapFactory.Options();bounds.inJustDecodeBounds=true;
     try(InputStream in=getContentResolver().openInputStream(uri)){BitmapFactory.decodeStream(in,null,bounds);}
-    int max=Math.max(bounds.outWidth,bounds.outHeight),sample=1;while(max/sample>1800)sample*=2;
+    int max=Math.max(bounds.outWidth,bounds.outHeight),sample=1;while(max/sample>1400)sample*=2;
     BitmapFactory.Options opts=new BitmapFactory.Options();opts.inSampleSize=sample;
     Bitmap bmp;try(InputStream in=getContentResolver().openInputStream(uri)){bmp=BitmapFactory.decodeStream(in,null,opts);}
     if(bmp==null)throw new IOException("decode failed");
-    int w=bmp.getWidth(),h=bmp.getHeight();float scale=Math.min(1f,1800f/Math.max(w,h));Bitmap out=bmp;
+    int w=bmp.getWidth(),h=bmp.getHeight();float scale=Math.min(1f,1400f/Math.max(w,h));Bitmap out=bmp;
     if(scale<1f)out=Bitmap.createScaledBitmap(bmp,Math.round(w*scale),Math.round(h*scale),true);
     File dst=new File(getFilesDir(),"chat-background.jpg"),tmp=new File(getFilesDir(),"chat-background.tmp");
     try(FileOutputStream o=new FileOutputStream(tmp)){if(!out.compress(Bitmap.CompressFormat.JPEG,88,o))throw new IOException();o.getFD().sync();}
@@ -806,6 +829,7 @@ public class MainActivity extends Activity implements NativeMessageAdapter.Callb
   }
 
   private GradientDrawable makeColor(int color,float radius){GradientDrawable g=new GradientDrawable();g.setColor(color);g.setCornerRadius(radius);return g;}
+  private GradientDrawable makeGlass(int color,float radius,int stroke){GradientDrawable g=makeColor(color,radius);g.setStroke(1,stroke);return g;}
   private GradientDrawable makeGradient(int[] colors,GradientDrawable.Orientation o,float radius){GradientDrawable g=new GradientDrawable(o,colors);g.setCornerRadius(radius);return g;}
   private void toast(String s){Toast.makeText(this,s,Toast.LENGTH_SHORT).show();}
   private static void copy(InputStream in,OutputStream out)throws IOException{byte[] b=new byte[65536];int n;while((n=in.read(b))>0)out.write(b,0,n);}
