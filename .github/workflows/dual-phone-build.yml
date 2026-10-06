@@ -148,6 +148,10 @@ jobs:
             adb shell svc data disable || true
             adb shell svc wifi disable || true
             adb shell settings put secure show_ime_with_hard_keyboard 1 || true
+            IME="$(adb shell ime list -s | tr -d '\r' | head -1)"
+            test -n "$IME"
+            adb shell ime enable "$IME" || true
+            adb shell ime set "$IME" || true
             adb logcat -c
             adb shell am start -n com.qxdnzbl.shuangjichuan.offline/com.qxdnzbl.shuangjichuan.MainActivity --ez ciSend true
 
@@ -159,7 +163,8 @@ jobs:
             adb exec-out screencap -p > deliverable/01-native-chat.png
 
             adb shell input tap $(python3 -c "import re; s=open('deliverable/native.xml',errors='ignore').read(); m=re.search(r'class=\\\"android.widget.EditText\\\"[^>]*bounds=\\\"\\[(\\d+),(\\d+)\\]\\[(\\d+),(\\d+)\\]\\\"',s); assert m,s; x1,y1,x2,y2=map(int,m.groups()); print((x1+x2)//2,(y1+y2)//2)")
-            sleep 2
+            sleep 4
+            adb shell dumpsys input_method > deliverable/ime.txt || true
             adb logcat -d -s DualPhoneNative:I '*:S' > deliverable/keyboard.log
             python3 -c "import re; s=open('deliverable/keyboard.log',errors='ignore').read(); m=re.findall(r'visible=(\\d+) inputBottom=(\\d+)',s); assert m,s; v,b=map(int,m[-1]); assert v<2100,(v,b); assert b<=v+40,(v,b)"
             sh -c 'for i in $(seq 1 8); do adb logcat -d -s DualPhoneNative:I "*:S" > deliverable/send.log 2>/dev/null || true; grep -q "messages=1" deliverable/send.log && exit 0; sleep 1; done; exit 1'
