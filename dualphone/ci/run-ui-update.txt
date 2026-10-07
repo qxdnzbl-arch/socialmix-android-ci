@@ -1,1 +1,1 @@
-563 final candidate: compact one-tap photo save; right-column button alignment; restored chat search
+563 final candidate after screenshot evidence: compare darkening, not background brightening; all photo-save and search scenarios retained

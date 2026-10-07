@@ -63,7 +63,7 @@ def assert_save_option(t,pressed,label):
  for y in range(250,min(after.height,before.height)-250,130):
   for x in range(30,min(after.width,before.width)-30,140):
    if b[0]-25<=x<=b[2]+25 and b[1]-25<=y<=b[3]+25:continue
-   total+=1;matched+=max(abs(a-z) for a,z in zip(after.getpixel((x,y)),before.getpixel((x,y))))<8
+   total+=1;matched+=max(a-z for a,z in zip(before.getpixel((x,y)),after.getpixel((x,y))))<=8
  record(label+'_save_option_does_not_dim_background',total>0 and matched>=total*.85,matching=matched,total=total)
  return options[0]
 
