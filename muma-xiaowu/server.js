@@ -460,10 +460,116 @@ async function route(req, res) {
   send(res, 404, { error: "not found" });
 }
 
+async function runSelfTest() {
+  const base = `http://127.0.0.1:${PORT}`;
+  const startMessages = db.messages.length;
+  const created = { memory: null, wish: null, song: null };
+  let cookie = "";
+  const api = async (pathname, opts = {}) => {
+    const headers = { ...(opts.headers || {}) };
+    if (cookie) headers.cookie = cookie;
+    const r = await fetch(base + pathname, { ...opts, headers });
+    const text = await r.text();
+    return { r, text };
+  };
+  const ok = (cond, msg) => { if (!cond) throw new Error(msg); };
+  try {
+    console.log("[smoke] start");
+
+    let x = await api("/health");
+    ok(x.r.ok && x.text === "ok", "health");
+    console.log("[smoke] health ok");
+
+    x = await api("/api/login", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ password: process.env.APP_PASSWORD }),
+    });
+    ok(x.r.ok, "login: " + x.text);
+    cookie = (x.r.headers.get("set-cookie") || "").split(";")[0];
+    ok(cookie.includes("="), "cookie missing");
+    console.log("[smoke] login ok");
+
+    x = await api("/api/state");
+    const state = JSON.parse(x.text);
+    ok(x.r.ok && state.keyConfigured === true, "OpenRouter key");
+    ok(state.settings?.model === "openrouter/free", "default model not free");
+    console.log("[smoke] state ok");
+
+    x = await api("/api/memories", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ content: "__SMOKE_MEMORY__" }),
+    });
+    ok(x.r.ok, "memory create");
+    created.memory = JSON.parse(x.text).id;
+    x = await api("/api/memories");
+    ok(JSON.parse(x.text).some(v => v.id === created.memory), "memory readback");
+    console.log("[smoke] memory ok");
+
+    x = await api("/api/wishes", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ title: "__SMOKE_WISH__", detail: "test" }),
+    });
+    ok(x.r.ok, "wish create");
+    created.wish = JSON.parse(x.text).id;
+    console.log("[smoke] wish ok");
+
+    const wav = Buffer.from("524946462400000057415645666d74201000000001000100401f0000803e0000020010006461746100000000", "hex");
+    x = await api("/api/music?name=smoke.wav", {
+      method: "PUT",
+      headers: { "content-type": "audio/wav" },
+      body: wav,
+    });
+    ok(x.r.ok, "music upload: " + x.text);
+    created.song = JSON.parse(x.text).id;
+    x = await api("/media/" + created.song, { headers: { range: "bytes=0-7" } });
+    ok(x.r.status === 206 && x.text.length > 0, "music range");
+    console.log("[smoke] music ok");
+
+    x = await api("/api/chat", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ text: "这是自动验收测试。请只回复 SMOKE_OK，不要调用工具。" }),
+    });
+    ok(x.r.ok, "chat http");
+    ok(x.text.includes('"type":"done"'), "chat done missing");
+    ok(!x.text.includes('"type":"error"'), "chat error: " + x.text.slice(-800));
+    console.log("[smoke] real OpenRouter chat ok");
+
+    if (pool) {
+      save();
+      await new Promise(r => setTimeout(r, 350));
+      await saving;
+      const q = await pool.query("SELECT data FROM muma_state WHERE id=1");
+      ok(!!q.rows[0]?.data, "db persistence");
+      console.log("[smoke] postgres persistence ok");
+    }
+
+    console.log("[smoke] ALL_PASS");
+  } catch (e) {
+    console.error("[smoke] FAIL", e?.stack || e);
+  } finally {
+    if (created.memory) db.memories = db.memories.filter(v => v.id !== created.memory);
+    if (created.wish) db.wishes = db.wishes.filter(v => v.id !== created.wish);
+    if (created.song) {
+      db.songs = db.songs.filter(v => v.id !== created.song);
+      if (pool) await pool.query("DELETE FROM muma_music WHERE id=$1", [created.song]).catch(() => {});
+    }
+    db.messages.splice(startMessages);
+    save();
+  }
+}
+
 await loadDb();
-http.createServer((req, res) => {
+const server = http.createServer((req, res) => {
   route(req, res).catch((e) => {
     if (!res.headersSent) send(res, e.status || 500, { error: e.status ? e.message : "服务器出错了" });
     if (!e.status) console.error("[http]", e);
   });
-}).listen(PORT, HOST, () => console.log(`木马小屋 running on http://${HOST}:${PORT}`));
+});
+server.listen(PORT, HOST, () => {
+  console.log(`木马小屋 running on http://${HOST}:${PORT}`);
+  if (process.env.RUN_SMOKE_TEST === "1") setTimeout(() => runSelfTest(), 800);
+});
