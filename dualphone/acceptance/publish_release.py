@@ -39,13 +39,13 @@ if not json.loads((OUT/'core-result.json').read_text()).get('passed'):raise Runt
 apk=ROOT/'app/build/outputs/apk/release/app-release.apk';version=int(os.environ['RELEASE_VERSION_CODE']);name=os.environ['RELEASE_VERSION_NAME'];commit=os.environ['GITHUB_SHA'];tag='dualphone-v'+name.replace('-native','')+'-'+commit[:8]
 sha=hashlib.sha256(apk.read_bytes()).hexdigest();asset_name='ShuangJiChuan_'+str(version)+'.apk'
 release=find(tag)
-if release is None:release=api('/releases','POST',{'tag_name':tag,'target_commitish':commit,'name':'双机传 '+name,'body':'深灰实底界面、图片查看、最新消息滚动、光标退出和内置更新。','draft':True,'prerelease':False,'make_latest':'false'})
+if release is None:release=api('/releases','POST',{'tag_name':tag,'target_commitish':commit,'name':'双机传 '+name,'body':'图片长按保存并确认、文字长按直接复制、移除多余菜单和搜索、清除按钮左对齐。','draft':True,'prerelease':False,'make_latest':'false'})
 existing=next((a for a in release.get('assets',[]) if a['name']==asset_name),None)
 if existing is not None:
  if existing.get('digest') and existing['digest']!='sha256:'+sha:raise RuntimeError('Immutable versioned asset changed')
 else:api(release['upload_url'].split('{')[0]+'?name='+asset_name,'POST',apk.read_bytes(),True)
 if release.get('draft'):release=api('/releases/'+str(release['id']),'PATCH',{'draft':False,'make_latest':'false'})
-meta={'packageName':'com.qxdnzbl.shuangjichuan.offline','versionCode':version,'versionName':name,'sha256':sha,'apkUrl':'https://github.com/'+REPO+'/releases/download/'+tag+'/'+asset_name,'notes':'深灰实底界面；图片点开查看和保存；发送后跟到最新消息；退出输入光标消失；内置更新。'}
+meta={'packageName':'com.qxdnzbl.shuangjichuan.offline','versionCode':version,'versionName':name,'sha256':sha,'apkUrl':'https://github.com/'+REPO+'/releases/download/'+tag+'/'+asset_name,'notes':'图片点开直接查看，长按保存并确认；文字长按直接复制；移除多余菜单和搜索；清除按钮左对齐。'}
 # Validate the real public download, without forwarding a token to asset hosts.
 download=public_read(meta['apkUrl'])
 if hashlib.sha256(download).hexdigest()!=sha:raise RuntimeError('Public APK bytes mismatch')

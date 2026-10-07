@@ -5,7 +5,6 @@ import android.graphics.*;
 import android.graphics.drawable.*;
 import android.os.*;
 import android.text.*;
-import android.text.style.BackgroundColorSpan;
 import android.util.LruCache;
 import android.view.*;
 import android.widget.*;
@@ -22,15 +21,13 @@ public class NativeMessageAdapter extends RecyclerView.Adapter<NativeMessageAdap
   private final Context c;
   private final Callbacks cb;
   private final ArrayList<TransferDb.Msg> items=new ArrayList<>();
-  private final ArrayList<Integer> matches=new ArrayList<>();
-  private final HashSet<Integer> matchedPositions=new HashSet<>();
   private final ExecutorService images=Executors.newFixedThreadPool(2);
   private final Handler main=new Handler(Looper.getMainLooper());
   private final LruCache<String,Bitmap> thumbnails=new LruCache<String,Bitmap>(12*1024*1024){
     @Override protected int sizeOf(String key,Bitmap value){return value.getByteCount();}
   };
   private final Set<String> decoding=new HashSet<>();
-  private String query="",activeId=null,link="searching";
+  private String link="searching";
   private final int maxWidth;
   private int lastMine=-1;
   private boolean closed;
@@ -65,7 +62,6 @@ public class NativeMessageAdapter extends RecyclerView.Adapter<NativeMessageAdap
       if(oldLast>=0&&oldLast<items.size())notifyItemChanged(oldLast);
       if(lastMine>=0&&lastMine<items.size())notifyItemChanged(lastMine);
     }
-    rebuildMatches();
   }
   private boolean same(TransferDb.Msg a,TransferDb.Msg b){
     return a.mine==b.mine&&a.fileSize==b.fileSize&&a.createdAt==b.createdAt
@@ -73,18 +69,6 @@ public class NativeMessageAdapter extends RecyclerView.Adapter<NativeMessageAdap
       &&Objects.equals(a.fileName,b.fileName)&&Objects.equals(a.filePath,b.filePath)&&Objects.equals(a.status,b.status);
   }
   private int findLastMine(){for(int i=items.size()-1;i>=0;i--)if(items.get(i).mine)return i;return -1;}
-  public void setSearch(String q,String active){String next=q==null?"":q.trim();if(Objects.equals(query,next)&&Objects.equals(activeId,active))return;query=next;activeId=active;rebuildMatches();notifyDataSetChanged();}
-  public List<Integer> getMatchPositions(){return new ArrayList<>(matches);}
-  public String getItemIdAt(int p){return p>=0&&p<items.size()?items.get(p).id:null;}
-  private void rebuildMatches(){
-    matches.clear();matchedPositions.clear();if(query.isEmpty())return;
-    String q=query.toLowerCase(Locale.ROOT);
-    for(int i=0;i<items.size();i++){
-      TransferDb.Msg m=items.get(i);
-      String hay="file".equals(m.kind)?String.valueOf(m.fileName):String.valueOf(m.text);
-      if(hay.toLowerCase(Locale.ROOT).contains(q)){matches.add(i);matchedPositions.add(i);}
-    }
-  }
   @Override public long getItemId(int p){String id=items.get(p).id;return id==null?p:(((long)id.hashCode())<<32)^id.length();}
   @Override public int getItemViewType(int p){TransferDb.Msg m=items.get(p);return !"file".equals(m.kind)?TYPE_TEXT:PhotoImages.isPhoto(m.fileName)?TYPE_IMAGE:TYPE_FILE;}
   @Override public int getItemCount(){return items.size();}
@@ -128,15 +112,14 @@ public class NativeMessageAdapter extends RecyclerView.Adapter<NativeMessageAdap
   @Override public void onBindViewHolder(Holder holder,int position){
     TransferDb.Msg m=items.get(position);
     FrameLayout.LayoutParams lp=(FrameLayout.LayoutParams)holder.column.getLayoutParams();lp.gravity=m.mine?Gravity.END:Gravity.START;holder.column.setLayoutParams(lp);
-    boolean matched=!query.isEmpty()&&matchedPositions.contains(position),active=matched&&Objects.equals(m.id,activeId);
     boolean card=holder instanceof FileHolder;
-    holder.bubble.setBackground(bubbleBackground(m.mine,card,matched,active));
+    holder.bubble.setBackground(bubbleBackground(m.mine,card));
     holder.bubble.setOnLongClickListener(v->{cb.onLongPress(v,m);return true;});
     holder.bubble.setOnClickListener(null);
     bindState(holder.state,m,position);
     if(holder instanceof TextHolder){
       TextHolder h=(TextHolder)holder;h.body.setTextColor(m.mine?Color.WHITE:Color.rgb(35,38,43));
-      h.body.setText(highlight(m.text==null?"":m.text,query,m.mine));
+      h.body.setText(m.text==null?"":m.text);
     }else if(holder instanceof ImageHolder){
       ImageHolder h=(ImageHolder)holder;h.photo.setTag(m.filePath);h.photo.setContentDescription("图片："+m.fileName);
       h.photo.setScaleType(ImageView.ScaleType.CENTER_INSIDE);h.photo.setImageResource(android.R.drawable.ic_menu_gallery);holder.bubble.setOnClickListener(v->cb.onFileClick(m));
@@ -144,7 +127,7 @@ public class NativeMessageAdapter extends RecyclerView.Adapter<NativeMessageAdap
       if(cached!=null){h.photo.setScaleType(ImageView.ScaleType.CENTER_CROP);h.photo.setImageBitmap(cached);}else loadThumbnail(m.filePath);
     }else{
       FileHolder h=(FileHolder)holder;h.icon.setColorFilter(Color.rgb(62,68,77));
-      h.label.setText(highlight(friendlyFileLabel(m.fileName),query,false));
+      h.label.setText(friendlyFileLabel(m.fileName));
       h.meta.setText(size(m.fileSize)+(m.mine?"":"  ·  保存到下载"));
       holder.bubble.setOnClickListener(v->cb.onFileClick(m));
     }
@@ -168,15 +151,9 @@ public class NativeMessageAdapter extends RecyclerView.Adapter<NativeMessageAdap
     boolean show=m.mine&&position==lastMine;state.setVisibility(show?View.VISIBLE:View.GONE);
     if(show)state.setText("sent".equals(m.status)?"已送达":("nearby".equals(link)||"relay".equals(link))?"待发送":"等待连接");
   }
-  private CharSequence highlight(String text,String q,boolean mine){
-    if(q==null||q.isEmpty())return text;
-    String low=text.toLowerCase(Locale.ROOT),needle=q.toLowerCase(Locale.ROOT);SpannableString s=new SpannableString(text);int from=0,i;
-    while((i=low.indexOf(needle,from))>=0){s.setSpan(new BackgroundColorSpan(mine?0xFF94712E:0xFFF0D9AB),i,i+q.length(),Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);from=i+q.length();}
-    return s;
-  }
-  private GradientDrawable bubbleBackground(boolean mine,boolean card,boolean matched,boolean active){
+  private GradientDrawable bubbleBackground(boolean mine,boolean card){
     GradientDrawable g=makeColor(card?Color.rgb(238,240,243):mine?Color.rgb(48,51,58):Color.rgb(240,242,245),dp(13));
-    if(active)g.setStroke(dp(3),0xFFE09A30);else if(matched)g.setStroke(dp(2),0xFFBD8C35);else if(card||!mine)g.setStroke(dp(1),0xFFD0D4DB);
+    if(card||!mine)g.setStroke(dp(1),0xFFD0D4DB);
     return g;
   }
   private TextView textView(float sp,int color){TextView v=new TextView(c);v.setTextSize(sp);v.setTextColor(color);v.setIncludeFontPadding(false);return v;}

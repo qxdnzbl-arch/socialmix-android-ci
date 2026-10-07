@@ -45,6 +45,9 @@ def center(n):
 
 def tap(n):shell('input','tap',*map(str,center(n)));time.sleep(.4)
 
+def long_press(n):
+ x,y=center(n);shell('input','swipe',str(x),str(y),str(x),str(y),'850');time.sleep(.3)
+
 def database(name):
  # Copy a consistent SQLite snapshot instead of reading a file while its pages change.
  remote='/data/local/tmp/fixture-snapshot.db';shell('rm','-f',remote)
@@ -93,6 +96,11 @@ def insert(id,text,mine=False,kind='text',name=None,path=None,size=0,status=None
 
 def core(reuse=False):
  adb('root');time.sleep(.5);adb('wait-for-device')
+ manifest={'commit':os.environ.get('GITHUB_SHA'),'runner_image':os.environ.get('ImageVersion'),'runner_os':os.environ.get('RUNNER_OS'),'api':shell('getprop','ro.build.version.sdk').strip(),'build_fingerprint':shell('getprop','ro.build.fingerprint').strip(),'adb':adb('version').decode(),'java':subprocess.run(['java','-version'],capture_output=True,text=True).stderr,'python':sys.version,'inputs':{}}
+ for path in subprocess.check_output(['git','ls-files','dualphone/app','dualphone/build.gradle','dualphone/settings.gradle','dualphone/acceptance/ui_test.py','dualphone/acceptance/FixtureSql.java','dualphone/acceptance/publish_release.py','.github/workflows/dual-phone-ui-update.yml'],cwd=ROOT,text=True).splitlines():
+  f=ROOT/path
+  if f.is_file():manifest['inputs'][path]=hashlib.sha256(f.read_bytes()).hexdigest()
+ (OUT/'native-input-manifest.json').write_text(json.dumps(manifest,indent=2))
  adb('push',str(OUT/'fixture-dex/classes.dex'),'/data/local/tmp/fixture.dex')
  for key in ['window_animation_scale','transition_animation_scale','animator_duration_scale']:shell('settings','put','global',key,'0')
  shell('settings','put','secure','show_ime_with_hard_keyboard','1');shell('wm','dismiss-keyguard')
@@ -152,24 +160,32 @@ def core(reuse=False):
   insert('arrival-bottom','incoming-while-at-bottom');t,_=ui('bottom-incoming');record('incoming_follows_at_bottom',optional(t,text='incoming-while-at-bottom') is not None)
   tap(edit(t));t,_=ui('bottom-keyboard');record('latest_visible_above_ime',optional(t,text='incoming-while-at-bottom') is not None)
   shell('input','keyevent','4');time.sleep(.5)
-  # Both search and composer must use the same focus exit behavior.
-  t,_=ui('before-search');tap(node(t,desc='搜索'));t,_=ui('search-blank')
-  search=next(n for n in t.iter('node') if n.get('class')=='android.widget.EditText' and not n.get('resource-id','').endswith('/message'))
-  record('search_focuses_on_open',search.get('focused')=='true')
-  tap(node(t,text='我的两台手机'));t,_=ui('search-outside');search=next(n for n in t.iter('node') if n.get('class')=='android.widget.EditText' and not n.get('resource-id','').endswith('/message'));record('search_outside_tap_clears_cursor',search.get('focused')=='false')
-  tap(search);shell('input','text','load-');time.sleep(.4);t,_=ui('search-match');record('search_all_history',optional(t,text='1/1000') is not None)
-  tap(node(t,text='↓'));time.sleep(.5);t,_=ui('search-next');record('search_next',optional(t,text='2/1000') is not None)
-  tap(node(t,text='↑'));time.sleep(.4);t,_=ui('search-prev');record('search_previous',optional(t,text='1/1000') is not None)
-  tap(node(t,text='×'));t,_=ui('search-close');record('search_close_clears_focus',edit(t).get('focused')=='false')
-  tap(node(t,desc='回到最新'));t,_=ui('latest-button');record('return_to_latest_reaches_newest',optional(t,text='incoming-while-at-bottom') is not None)
-  target=node(t,text='incoming-while-at-bottom');x,y=center(target);shell('input','swipe',str(x),str(y),str(x),str(y),'850');t,_=ui('longpress');record('long_press_copy_and_search',optional(t,text='复制') is not None and optional(t,text='搜索') is not None);tap(node(t,text='复制'))
+  t,_=ui('simplified-chat');record('search_entry_removed',optional(t,desc='搜索') is None)
+  for i in range(2):shell('input','swipe','270','400','270','1100','180')
+  t,_=ui('latest-button-before');tap(node(t,desc='回到最新'));t,_=ui('latest-button');record('return_to_latest_reaches_newest',optional(t,text='incoming-while-at-bottom') is not None)
+  # Copy is immediate and preserves the exact Unicode/multiline text. Paste uses Android's clipboard.
+  for mine,value,label in [(False,'复制原文第一行\n第二行😊','received'),(True,'我的复制原文\n第二行','own')]:
+   insert('copy-'+label,value,mine=mine);t,_=ui('copy-'+label+'-before');long_press(node(t,text=value));t,_=ui('copy-'+label+'-after')
+   record(label+'_text_longpress_has_no_action_menu',not any(n.get('package')==PKG and n.get('text') in ('复制','复制文件名','搜索','保存') for n in t.iter('node')))
+   tap(edit(t));shell('input','keyevent','279');time.sleep(.3);t,_=ui('copy-'+label+'-paste')
+   record(label+'_text_longpress_copies_exact_content',edit(t).get('text')==value)
+   shell('input','keyevent','KEYCODE_MOVE_END');shell('input','keyevent',*['67']*(len(value)*2));shell('input','keyevent','4');time.sleep(.4)
   # Real received photo, asynchronous thumbnail, full viewer, gestures, save and close.
   private='/data/data/'+PKG+'/files/incoming/fixture-photo.png';adb('push',str(OUT/'fixture-photo.png'),private);shell('chown',uid+':'+uid,private);shell('restorecon',private)
   insert('photo-arrival',None,kind='file',name='fixture-photo.png',path=private,size=len(photo));time.sleep(.7);t,_=ui('photo-thumb')
   record('received_photo_is_thumbnail',optional(t,desc='图片：fixture-photo.png') is not None and optional(t,text='图片') is None)
-  tap(node(t,desc='图片：fixture-photo.png'));time.sleep(.5);t,_=ui('photo-viewer');record('native_photo_viewer_opens',optional(t,desc='图片预览') is not None and optional(t,text='保存到下载') is not None)
+  before_files=shell('find','/sdcard/Download','-type','f','-name','fixture-photo*').splitlines()
+  long_press(node(t,desc='图片：fixture-photo.png'));t,_=ui('photo-thumb-save-menu')
+  record('received_thumbnail_longpress_only_offers_save',optional(t,text='保存') is not None and optional(t,text='复制文件名') is None and optional(t,text='搜索') is None)
+  tap(node(t,text='保存'));t,_=ui('photo-thumb-save-confirm');record('photo_save_requires_confirmation',optional(t,text='保存图片？') is not None and optional(t,text='取消') is not None)
+  tap(node(t,text='取消'));t,_=ui('photo-save-cancel')
+  record('cancel_photo_save_writes_nothing',before_files==shell('find','/sdcard/Download','-type','f','-name','fixture-photo*').splitlines())
+  tap(node(t,desc='图片：fixture-photo.png'));time.sleep(.5);t,_=ui('photo-viewer')
+  record('native_photo_viewer_opens_directly_without_download_toolbar',optional(t,desc='图片预览') is not None and optional(t,text='保存到下载') is None and optional(t,text='复制文件名') is None and optional(t,text='fixture-photo.png') is None)
   screen('photo-viewer');shell('input','tap','500','750');shell('input','tap','500','750');shell('input','swipe','700','850','430','650','300');t,_=ui('photo-zoom');record('photo_zoom_pan_remains_responsive',optional(t,desc='关闭图片') is not None)
-  tap(node(t,text='保存到下载'));time.sleep(.6)
+  long_press(node(t,desc='图片预览'));t,_=ui('photo-viewer-save-menu')
+  record('viewer_longpress_only_offers_save',optional(t,text='保存') is not None and optional(t,text='复制文件名') is None and optional(t,text='搜索') is None)
+  tap(node(t,text='保存'));t,_=ui('photo-viewer-save-confirm');tap(node(t,text='保存'));time.sleep(.6)
   deadline=time.monotonic()+12;valid=False;paths=[];expected_hash=hashlib.sha256(photo).hexdigest()
   while time.monotonic()<deadline:
    paths=shell('find','/sdcard/Download','-type','f','-name','fixture-photo*').splitlines()
@@ -190,14 +206,23 @@ def core(reuse=False):
   tap(node(t,text='fixture-photo.png'));time.sleep(.7);t,_=ui('file-sent')
   record('file_picker_selects_and_returns',optional(t,text='我的两台手机') is not None)
   record('own_file_send_forces_latest',optional(t,desc='图片：fixture-photo.png') is not None and optional(t,desc='回到最新') is None)
-  thumbs=[n for n in t.iter('node') if n.get('content-desc')=='图片：fixture-photo.png'];tap(thumbs[-1]);t,_=ui('own-photo-viewer');record('own_photo_also_opens_viewer',optional(t,desc='关闭图片') is not None);tap(node(t,desc='关闭图片'));t,_=ui('own-photo-close')
+  thumbs=[n for n in t.iter('node') if n.get('content-desc')=='图片：fixture-photo.png'];long_press(thumbs[-1]);t,_=ui('own-photo-menu');record('own_thumbnail_longpress_only_offers_save',optional(t,text='保存') is not None and optional(t,text='复制文件名') is None and optional(t,text='搜索') is None)
+  shell('input','keyevent','4');t,_=ui('own-photo-after-menu');thumbs=[n for n in t.iter('node') if n.get('content-desc')=='图片：fixture-photo.png'];tap(thumbs[-1]);t,_=ui('own-photo-viewer');record('own_photo_also_opens_viewer',optional(t,desc='关闭图片') is not None)
+  long_press(node(t,desc='图片预览'));t,_=ui('own-viewer-menu');record('own_viewer_longpress_can_save',optional(t,text='保存') is not None);shell('input','keyevent','4');t,_=ui('own-viewer-after-menu');tap(node(t,desc='关闭图片'));t,_=ui('own-photo-close')
   c=database('file-sent-data');record('outgoing_file_queued_with_original_bytes',c.execute("SELECT COUNT(*) FROM messages WHERE mine=1 AND kind='file' AND file_name='fixture-photo.png' AND status='pending'").fetchone()[0]==1)
-  # Locate regular file by actual filename and save the real bytes.
-  tap(node(t,desc='搜索'));t,_=ui('file-search-open');search=next(n for n in t.iter('node') if n.get('class')=='android.widget.EditText' and not n.get('resource-id','').endswith('/message'));tap(search);shell('input','text','fixture.bin');time.sleep(.3);t,_=ui('file-search');tap(node(t,text='↓'));time.sleep(.5);t,_=ui('file-found');tap(node(t,text='×'));t,_=ui('file-ready');tap(node(t,text='fixture.bin'));time.sleep(.7)
+  # A new received regular file remains usable without a search or long-press menu.
+  insert('file-save-arrival',None,kind='file',name='fixture.bin',path='/data/data/'+PKG+'/files/incoming/fixture.bin',size=(OUT/'fixture.bin').stat().st_size)
+  t,_=ui('file-ready');before_files=shell('find','/sdcard/Download','-type','f','-name','fixture*.bin').splitlines();long_press(node(t,text='fixture.bin'));t,_=ui('file-longpress')
+  record('regular_file_has_no_longpress_menu',optional(t,text='复制文件名') is None and optional(t,text='搜索') is None and optional(t,text='保存') is None)
+  record('regular_file_longpress_writes_nothing',before_files==shell('find','/sdcard/Download','-type','f','-name','fixture*.bin').splitlines())
+  tap(node(t,text='fixture.bin'));time.sleep(.7)
   paths=shell('find','/sdcard/Download','-type','f','-name','fixture*.bin').splitlines();record('compact_file_saves_original_bytes',bool(paths) and adb('exec-out','cat',paths[-1])==(OUT/'fixture.bin').read_bytes())
   t,_=ui('before-background');tap(node(t,desc='聊天背景'));t,_=ui('background-dialog')
   record('background_controls_removed',optional(t,text='选择照片') is not None and not any(n.get('class')=='android.widget.SeekBar' or n.get('text') in ('模糊','柔化','背景只保存在这台手机，没有预设背景。') for n in t.iter('node')))
-  record('update_entry_visible',optional(t,text='检查更新') is not None);screen('background-dialog')
+  record('update_entry_visible',optional(t,text='检查更新') is not None)
+  clear_bounds=list(map(int,re.findall(r'\d+',node(t,text='清除').get('bounds'))));title_bounds=list(map(int,re.findall(r'\d+',node(t,text='清除背景').get('bounds'))));sub_bounds=list(map(int,re.findall(r'\d+',node(t,text='恢复默认界面').get('bounds'))))
+  record('clear_background_button_is_left_aligned_below_description',abs(clear_bounds[0]-title_bounds[0])<=3 and clear_bounds[1]>=sub_bounds[3],button=clear_bounds,title=title_bounds)
+  screen('background-dialog')
   tap(node(t,text='清除'));time.sleep(.5);t,_=ui('background-cleared');record('clear_background_returns',optional(t,text='我的两台手机') is not None)
   for attempt in range(3):
    tap(node(t,desc='聊天背景'));t,_=ui('cancel-check-settings');tap(node(t,text='检查更新'));time.sleep(.2);t,_=ui('cancel-check')
@@ -276,6 +301,7 @@ def update():
  expected=int(json.loads((OUT/'published-update.json').read_text())['versionCode'])
  details=shell('dumpsys','package',PKG);record('in_app_update_installs_final_release',('versionCode='+str(expected)+' ') in details)
  after=database('after-in-app-update').execute('SELECT COUNT(*) FROM messages').fetchone()[0];record('in_app_update_keeps_all_history',before==after,before=before,after=after)
+ record('final_search_entry_removed',optional(t,desc='搜索') is None)
  record('updated_app_opens_at_latest',optional(t,text='这个深灰实底先试试看。\n输入栏也有清楚的边界了。') is not None)
  record('in_app_update_keeps_unsent_draft',edit(t).get('text')=='Unsent_Update_Draft')
  record('in_app_update_keeps_photo_bytes',adb('exec-out','cat','/data/data/'+PKG+'/files/incoming/fixture-photo.png')==(OUT/'fixture-photo.png').read_bytes())

@@ -44,11 +44,6 @@ public class MainActivity extends Activity implements NativeMessageAdapter.Callb
   private boolean followLatest=true,imeWasVisible=false;
   private AppUpdater updater;
   private Dialog photoDialog;
-  private LinearLayout searchPanel;
-  private EditText searchInput;
-  private TextView searchCount;
-  private int searchCursor=0;
-  private PopupWindow contextPopup;
   private Bitmap wallpaperBitmap;
   private long wallpaperVersion=-1L;
   private long wallpaperLoadingKey=-1L;
@@ -237,7 +232,7 @@ public class MainActivity extends Activity implements NativeMessageAdapter.Callb
       boolean imeVisible=imeBottom>0;
       if(Build.VERSION.SDK_INT<30){Rect visible=new Rect();root.getWindowVisibleDisplayFrame(visible);imeVisible=root.getHeight()-visible.height()>dp(150);}
       if(imeWasVisible&&!imeVisible)clearInputFocus();
-      if(imeVisible!=imeWasVisible&&followLatest&&searchPanel.getVisibility()!=View.VISIBLE)scrollToLatest();
+      if(imeVisible!=imeWasVisible&&followLatest)scrollToLatest();
       imeWasVisible=imeVisible;
       int inputBottom=loc[1]+input.getHeight();
       if(imeBottom!=lastLoggedIme||Math.abs(inputBottom-lastLoggedInputBottom)>dp(8)){
@@ -293,10 +288,6 @@ public class MainActivity extends Activity implements NativeMessageAdapter.Callb
 
     LinearLayout actions=new LinearLayout(this);
     actions.setGravity(Gravity.CENTER);
-    ImageButton search=iconButton(R.drawable.ic_search);
-    search.setContentDescription("搜索");
-    search.setOnClickListener(v->openSearch());
-    actions.addView(search,new LinearLayout.LayoutParams(dp(34),dp(34)));
     ImageButton more=iconButton(R.drawable.ic_more);
     more.setContentDescription("聊天背景");
     more.setOnClickListener(v->showBackgroundDialog());
@@ -307,55 +298,6 @@ public class MainActivity extends Activity implements NativeMessageAdapter.Callb
 
     header.addView(top,new LinearLayout.LayoutParams(-1,dp(52)));
 
-    searchPanel=new LinearLayout(this);
-    searchPanel.setGravity(Gravity.CENTER_VERTICAL);
-    searchPanel.setPadding(dp(11),0,dp(4),0);
-    searchPanel.setBackground(solidPanel(Color.rgb(231,233,237),dp(12)));
-    searchPanel.setVisibility(View.GONE);
-
-    ImageView searchGlyph=new ImageView(this);
-    searchGlyph.setImageResource(R.drawable.ic_search);
-    searchGlyph.setColorFilter(Color.rgb(126,128,133));
-    searchGlyph.setPadding(dp(3),dp(3),dp(3),dp(3));
-    searchPanel.addView(searchGlyph,new LinearLayout.LayoutParams(dp(26),dp(38)));
-
-    searchInput=new EditText(this);
-    searchInput.setSingleLine(true);
-    searchInput.setTextSize(14);
-    searchInput.setHint("搜索聊天");
-    searchInput.setHintTextColor(Color.rgb(151,153,158));
-    searchInput.setTextColor(Color.rgb(34,35,38));
-    searchInput.setBackgroundColor(Color.TRANSPARENT);
-    searchInput.setPadding(dp(3),0,dp(4),0);
-    configureInput(searchInput);
-    searchPanel.addView(searchInput,new LinearLayout.LayoutParams(0,dp(38),1f));
-
-    searchCount=new TextView(this);
-    searchCount.setTextSize(11.5f);
-    searchCount.setTextColor(Color.rgb(127,130,136));
-    searchCount.setGravity(Gravity.CENTER);
-    searchPanel.addView(searchCount,new LinearLayout.LayoutParams(dp(40),dp(38)));
-
-    TextView prev=smallAction("↑");prev.setOnClickListener(v->moveSearch(-1));
-    TextView next=smallAction("↓");next.setOnClickListener(v->moveSearch(1));
-    TextView close=smallAction("×");close.setTextSize(19);close.setOnClickListener(v->closeSearch());
-    searchPanel.addView(prev,new LinearLayout.LayoutParams(dp(32),dp(32)));
-    searchPanel.addView(next,new LinearLayout.LayoutParams(dp(32),dp(32)));
-    searchPanel.addView(close,new LinearLayout.LayoutParams(dp(32),dp(32)));
-
-    LinearLayout.LayoutParams splp=new LinearLayout.LayoutParams(-1,-2);
-    splp.topMargin=dp(5);
-    header.addView(searchPanel,splp);
-
-    searchInput.addTextChangedListener(new TextWatcher(){
-      public void beforeTextChanged(CharSequence s,int st,int c,int a){}
-      public void onTextChanged(CharSequence s,int st,int before,int count){
-        searchCursor=0;
-        adapter.setSearch(s==null?"":s.toString(),null);
-        updateSearchCountOnly();
-      }
-      public void afterTextChanged(Editable e){}
-    });
     return header;
   }
 
@@ -397,7 +339,6 @@ public class MainActivity extends Activity implements NativeMessageAdapter.Callb
   }
   private void clearInputFocus(){
     if(input!=null){input.clearFocus();input.setCursorVisible(false);}
-    if(searchInput!=null){searchInput.clearFocus();searchInput.setCursorVisible(false);}
     if(root!=null)root.requestFocus();
   }
   private void endInput(){
@@ -414,7 +355,7 @@ public class MainActivity extends Activity implements NativeMessageAdapter.Callb
   }
   private boolean isAtLatest(){return list==null||adapter==null||adapter.getItemCount()==0||!list.canScrollVertically(1);}
   private void updateLatestButton(){
-    if(latestButton!=null)latestButton.setVisibility(!isAtLatest()&&searchPanel.getVisibility()!=View.VISIBLE?View.VISIBLE:View.GONE);
+    if(latestButton!=null)latestButton.setVisibility(!isAtLatest()?View.VISIBLE:View.GONE);
   }
   private void scrollToLatest(){
     followLatest=true;
@@ -471,9 +412,8 @@ public class MainActivity extends Activity implements NativeMessageAdapter.Callb
           if(isFinishing()||isDestroyed())return;
           adapter.setItems(items);
           updateStatus();
-          if(forceInitial||(followLatest&&searchPanel.getVisibility()!=View.VISIBLE))scrollToLatest();
+          if(forceInitial||followLatest)scrollToLatest();
           else list.post(this::updateLatestButton);
-          updateSearchUi();
           android.util.Log.i("DualPhoneNative","screen=chat messages="+items.size()+" link="+prefs.getString("link_state","searching"));
           reloadInFlight=false;
           if(reloadQueued){
@@ -533,85 +473,18 @@ public class MainActivity extends Activity implements NativeMessageAdapter.Callb
     });
   }
 
-  private void openSearch(){
-    endInput();
-    searchPanel.setVisibility(View.VISIBLE);
-    searchInput.requestFocus();
-    updateLatestButton();
-    ((InputMethodManager)getSystemService(INPUT_METHOD_SERVICE)).showSoftInput(searchInput,InputMethodManager.SHOW_IMPLICIT);
-  }
-
-  private void closeSearch(){
-    endInput();
-    searchInput.setText("");
-    searchPanel.setVisibility(View.GONE);
-    adapter.setSearch("",null);
-    updateLatestButton();
-    ((InputMethodManager)getSystemService(INPUT_METHOD_SERVICE)).hideSoftInputFromWindow(searchInput.getWindowToken(),0);
-  }
-
-  private void moveSearch(int delta){
-    List<Integer> matches=adapter.getMatchPositions();
-    if(matches.isEmpty()){ toast("没有找到"); return; }
-    searchCursor=(searchCursor+delta+matches.size())%matches.size();
-    String active=adapter.getItemIdAt(matches.get(searchCursor));
-    adapter.setSearch(searchInput.getText().toString(),active);
-    searchCount.setText((searchCursor+1)+"/"+matches.size());
-    followLatest=false;
-    list.smoothScrollToPosition(matches.get(searchCursor));
-  }
-
-  private void updateSearchCountOnly(){
-    if(searchPanel==null||searchPanel.getVisibility()!=View.VISIBLE)return;
-    List<Integer> m=adapter.getMatchPositions();
-    if(m.isEmpty()) searchCount.setText(searchInput.getText().length()==0?"":"0/0");
-    else{
-      if(searchCursor>=m.size())searchCursor=0;
-      searchCount.setText((searchCursor+1)+"/"+m.size());
-    }
-  }
-
-  private void updateSearchUi(){
-    updateSearchCountOnly();
-  }
-
   @Override public void onLongPress(View anchor,TransferDb.Msg msg){
     endInput();
-    if(contextPopup!=null)contextPopup.dismiss();
-    LinearLayout menu=new LinearLayout(this);
-    menu.setPadding(dp(5),dp(5),dp(5),dp(5));
-    menu.setGravity(Gravity.CENTER);
-    menu.setBackground(solidPanel(Color.rgb(244,245,247),dp(13)));
-    menu.setElevation(dp(10));
-
-    if(!"file".equals(msg.kind)){
-      menu.addView(menuButton("复制",v->{copy(msg.text);contextPopup.dismiss();}));
-    }else{
-      if(!msg.mine)menu.addView(menuButton("保存",v->{saveToDownloadsAsync(msg);contextPopup.dismiss();}));
-      menu.addView(menuButton("复制文件名",v->{copy(msg.fileName);contextPopup.dismiss();}));
-    }
-    menu.addView(menuButton("搜索",v->{
-      contextPopup.dismiss();openSearch();
-      searchInput.setText("file".equals(msg.kind)?NativeMessageAdapter.friendlyFileLabel(msg.fileName):msg.text);
-      searchInput.setSelection(searchInput.length());
-    }));
-
-    contextPopup=new PopupWindow(menu,-2,-2,true);
-    contextPopup.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
-    contextPopup.setOutsideTouchable(true);
-    contextPopup.setElevation(dp(12));
-    menu.measure(View.MeasureSpec.UNSPECIFIED,View.MeasureSpec.UNSPECIFIED);
-    int x=Math.max(0,(anchor.getWidth()-menu.getMeasuredWidth())/2);
-    contextPopup.showAsDropDown(anchor,x,-anchor.getHeight()-menu.getMeasuredHeight()-dp(6));
+    if(!"file".equals(msg.kind)){copy(msg.text);return;}
+    if(PhotoImages.isPhoto(msg.fileName))showPhotoSaveMenu(msg);
   }
 
-  private TextView menuButton(String t,View.OnClickListener click){
-    TextView v=new TextView(this);
-    v.setText(t);v.setTextSize(13.5f);v.setTextColor(Color.rgb(42,45,49));v.setGravity(Gravity.CENTER);
-    v.setPadding(dp(14),0,dp(14),0);
-    v.setOnClickListener(click);
-    v.setBackground(makeColor(Color.TRANSPARENT,dp(10)));
-    return v;
+  private void showPhotoSaveMenu(TransferDb.Msg msg){
+    new AlertDialog.Builder(this).setItems(new String[]{"保存"},(d,w)->
+      new AlertDialog.Builder(this).setTitle("保存图片？").setMessage("保存到手机的下载文件夹")
+        .setPositiveButton("保存",(confirm,which)->saveToDownloadsAsync(msg))
+        .setNegativeButton("取消",null).show()
+    ).show();
   }
 
   @Override public void onFileClick(TransferDb.Msg msg){
@@ -623,14 +496,13 @@ public class MainActivity extends Activity implements NativeMessageAdapter.Callb
   private void showPhoto(TransferDb.Msg msg){
     if(photoDialog!=null)photoDialog.dismiss();
     final Dialog dialog=new Dialog(this,android.R.style.Theme_Material_Light_NoActionBar_Fullscreen);photoDialog=dialog;
-    LinearLayout page=new LinearLayout(this);page.setOrientation(LinearLayout.VERTICAL);page.setBackgroundColor(Color.rgb(31,33,38));
-    LinearLayout toolbar=new LinearLayout(this);toolbar.setGravity(Gravity.CENTER_VERTICAL);toolbar.setPadding(dp(14),dp(8),dp(10),dp(8));
-    TextView title=new TextView(this);title.setText(msg.fileName);title.setTextColor(Color.WHITE);title.setTextSize(14);title.setSingleLine(true);title.setEllipsize(TextUtils.TruncateAt.MIDDLE);toolbar.addView(title,new LinearLayout.LayoutParams(0,dp(40),1));
-    TextView save=smallAction("保存到下载");save.setTextSize(13);save.setTextColor(Color.WHITE);save.setPadding(dp(12),0,dp(12),0);save.setOnClickListener(v->saveToDownloadsAsync(msg));toolbar.addView(save,new LinearLayout.LayoutParams(-2,dp(44)));
-    TextView close=smallAction("×");close.setContentDescription("关闭图片");close.setTextColor(Color.WHITE);close.setTextSize(24);close.setOnClickListener(v->dialog.dismiss());toolbar.addView(close,new LinearLayout.LayoutParams(dp(44),dp(44)));
-    page.addView(toolbar,new LinearLayout.LayoutParams(-1,-2));
-    FrameLayout content=new FrameLayout(this);ZoomImageView photo=new ZoomImageView(this);content.addView(photo,new FrameLayout.LayoutParams(-1,-1));
-    TextView loading=new TextView(this);loading.setText("加载中");loading.setTextColor(Color.WHITE);loading.setGravity(Gravity.CENTER);content.addView(loading,new FrameLayout.LayoutParams(-1,-1));page.addView(content,new LinearLayout.LayoutParams(-1,0,1));
+    FrameLayout page=new FrameLayout(this);page.setBackgroundColor(Color.rgb(31,33,38));
+    ZoomImageView photo=new ZoomImageView(this);page.addView(photo,new FrameLayout.LayoutParams(-1,-1));
+    photo.setOnLongClickListener(v->{showPhotoSaveMenu(msg);return true;});
+    TextView loading=new TextView(this);loading.setText("加载中");loading.setTextColor(Color.WHITE);loading.setGravity(Gravity.CENTER);
+    page.addView(loading,new FrameLayout.LayoutParams(-1,-1));
+    TextView close=smallAction("×");close.setContentDescription("关闭图片");close.setTextColor(Color.WHITE);close.setTextSize(24);close.setOnClickListener(v->dialog.dismiss());
+    FrameLayout.LayoutParams closeLp=new FrameLayout.LayoutParams(dp(44),dp(44),Gravity.TOP|Gravity.END);closeLp.topMargin=dp(8);closeLp.rightMargin=dp(8);page.addView(close,closeLp);
     final Bitmap[] shown={null};dialog.setContentView(page);dialog.setOnDismissListener(d->{photo.setImageDrawable(null);if(shown[0]!=null)shown[0].recycle();});dialog.show();
     if(dialog.getWindow()!=null)dialog.getWindow().setLayout(-1,-1);
     io.execute(()->{
@@ -679,7 +551,7 @@ public class MainActivity extends Activity implements NativeMessageAdapter.Callb
 
     box.addView(settingRow("照片","只使用你自己选择的照片","选择照片",v->{d.dismiss();pickBackground();}));
     File f=new File(getFilesDir(),"chat-background.jpg");
-    if(f.isFile())box.addView(settingRow("清除背景","恢复默认界面","清除",v->{clearBackground();d.dismiss();}));
+    if(f.isFile())box.addView(settingRow("清除背景","恢复默认界面","清除",v->{clearBackground();d.dismiss();},true));
 
     box.addView(settingRow("应用更新", "当前版本 "+BuildConfig.VERSION_NAME.replace("-native","").replace("-preview",""), "检查更新", v->{d.dismiss();updater.check(true);}));
 
@@ -695,13 +567,19 @@ public class MainActivity extends Activity implements NativeMessageAdapter.Callb
   }
 
   private View settingRow(String title,String sub,String action,View.OnClickListener l){
+    return settingRow(title,sub,action,l,false);
+  }
+  private View settingRow(String title,String sub,String action,View.OnClickListener l,boolean actionBelow){
     LinearLayout row=new LinearLayout(this);row.setGravity(Gravity.CENTER_VERTICAL);row.setPadding(0,dp(14),0,dp(14));
+    row.setOrientation(actionBelow?LinearLayout.VERTICAL:LinearLayout.HORIZONTAL);
     LinearLayout txt=new LinearLayout(this);txt.setOrientation(LinearLayout.VERTICAL);
     TextView t=new TextView(this);t.setText(title);t.setTextSize(14.5f);t.setTextColor(Color.rgb(37,39,43));t.setTypeface(Typeface.DEFAULT_BOLD);txt.addView(t);
     TextView s=new TextView(this);s.setText(sub);s.setTextSize(11.5f);s.setTextColor(Color.rgb(135,138,144));LinearLayout.LayoutParams slp=new LinearLayout.LayoutParams(-2,-2);slp.topMargin=dp(2);txt.addView(s,slp);
-    row.addView(txt,new LinearLayout.LayoutParams(0,-2,1f));
+    row.addView(txt,new LinearLayout.LayoutParams(actionBelow?-1:0,-2,actionBelow?0:1f));
     TextView a=new TextView(this);a.setText(action);a.setTextSize(13);a.setTextColor(Color.WHITE);a.setGravity(Gravity.CENTER);a.setPadding(dp(13),0,dp(13),0);a.setBackground(makeColor(Color.rgb(48,51,58),dp(10)));a.setOnClickListener(l);
-    row.addView(a,new LinearLayout.LayoutParams(-2,dp(36)));
+    LinearLayout.LayoutParams actionLp=new LinearLayout.LayoutParams(-2,dp(36));
+    if(actionBelow){actionLp.gravity=Gravity.START;actionLp.topMargin=dp(10);}
+    row.addView(a,actionLp);
     return row;
   }
 

@@ -20,6 +20,7 @@ final class ZoomImageView extends ImageView {
       @Override public boolean onDoubleTap(MotionEvent e){scale(zoom>1.2f?1f/zoom:2.5f,e.getX(),e.getY());return true;}
       @Override public boolean onScroll(MotionEvent a,MotionEvent b,float dx,float dy){if(!pinch.isInProgress()){matrix.postTranslate(-dx,-dy);constrain();}return true;}
       @Override public boolean onSingleTapConfirmed(MotionEvent e){performClick();return true;}
+      @Override public void onLongPress(MotionEvent e){performLongClick();}
     });
   }
   @Override public void setImageBitmap(Bitmap b){super.setImageBitmap(b);post(this::fit);}
