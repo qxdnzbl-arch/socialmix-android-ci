@@ -1,0 +1,41 @@
+name: kehua-native-android
+on:
+  workflow_dispatch:
+  push:
+    branches: [kehua-v1133-native-cleanroom]
+    paths:
+      - 'kehua_native_bundle_*.b64'
+      - 'kehua-native-bootstrap.sh'
+      - '.github/workflows/kehua-native-android.yml'
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: unpack canonical native source
+        run: |
+          bash kehua-native-bootstrap.sh
+          grep -F 'JSONObject obj(Object... kv)' kehua-native/android/app/src/main/java/com/kehua/revival/MainActivity.java
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+      - name: build APK directly from canonical source
+        working-directory: kehua-native/android
+        run: gradle :app:assembleRelease --stacktrace
+      - name: verify APK
+        run: |
+          test -s kehua-native/android/app/build/outputs/apk/release/app-release.apk
+          unzip -p kehua-native/android/app/build/outputs/apk/release/app-release.apk classes.dex | strings | grep -F 'https://kehua-api-production.up.railway.app'
+          ! unzip -p kehua-native/android/app/build/outputs/apk/release/app-release.apk classes.dex | strings | grep -E 'onrender\.com|render\.com'
+          sha256sum kehua-native/android/app/build/outputs/apk/release/app-release.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: kehua-1.13.3-android-apk
+          path: kehua-native/android/app/build/outputs/apk/release/app-release.apk
+
+
+
+
+# trigger-final-faithful-20260922

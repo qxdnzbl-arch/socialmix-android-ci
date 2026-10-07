@@ -1,0 +1,32 @@
+name: kehua-native-ios-simulator
+on:
+  workflow_dispatch:
+  push:
+    branches: [kehua-v1133-native-cleanroom]
+    paths:
+      - 'kehua-native/**'
+      - 'kehua_native_bundle_*.b64'
+      - 'kehua-native-bootstrap.sh'
+      - '.github/workflows/kehua-native-ios.yml'
+jobs:
+  build:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: unpack source
+        run: bash kehua-native-bootstrap.sh
+      - run: brew install xcodegen
+      - name: generate Xcode project
+        working-directory: kehua-native/ios
+        run: xcodegen generate
+      - name: compile iOS simulator app
+        working-directory: kehua-native/ios
+        run: xcodebuild -project Kehua.xcodeproj -scheme Kehua -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' CODE_SIGNING_ALLOWED=NO -derivedDataPath build build
+      - name: verify iOS app
+        run: test -d kehua-native/ios/build/Build/Products/Debug-iphonesimulator/Kehua.app
+      - uses: actions/upload-artifact@v4
+        with:
+          name: kehua-1.13.3-ios-simulator
+          path: kehua-native/ios/build/Build/Products/Debug-iphonesimulator/Kehua.app
+
+# trigger-faithful-build-20260922
