@@ -163,24 +163,25 @@ public class MainActivity extends Activity {
         ArrayList<Store.Note> found=new ArrayList<>();String q=query.toLowerCase(Locale.ROOT);
         for(Store.Note n:store.notes)if(!n.deleted&&(filter.equals("all")||filter.equals(n.category))&&(n.title+"\n"+n.body).toLowerCase(Locale.ROOT).contains(q))found.add(n);
         Collections.sort(found,(a,b)->Long.compare(b.updated,a.updated));
-        if(!filter.equals("all")){LinearLayout label=row();TextView kind=text(store.categoryName(filter),14,MUTED,true);label.addView(kind,new LinearLayout.LayoutParams(0,-2,1));list.addView(label);gap(list,10);}
         if(found.isEmpty()){
             LinearLayout empty=column();empty.setPadding(dp(20),dp(18),dp(20),dp(18));empty.setBackground(bg(homePanelColor(),20,LINE));
             empty.addView(text(query.isEmpty()?"把需要的，先收好。":"没有找到这条记录",18,INK,true));
             if(!query.isEmpty()){gap(empty,12);TextView hint=text("换个词试试，或清空搜索。",14,MUTED,false);empty.addView(hint);gap(empty,14);empty.addView(button("清空搜索",false,()->searchInput.setText("")));}
             list.addView(empty,lp(-1,-2));return;
         }
-        homeList.setAdapter(new BaseAdapter(){public int getCount(){return found.size();}public Object getItem(int p){return found.get(p);}public long getItemId(int p){return p;}public View getView(int p,View recycled,ViewGroup parent){LinearLayout wrap=column();wrap.setPadding(dp(20),0,dp(20),dp(12));wrap.addView(noteCard(found.get(p)),lp(-1,-2));return wrap;}});
+        homeList.setAdapter(new BaseAdapter(){public int getCount(){return found.size();}public Object getItem(int p){return found.get(p);}public long getItemId(int p){return p;}public View getView(int p,View recycled,ViewGroup parent){LinearLayout wrap=column();wrap.setPadding(dp(20),0,dp(20),dp(10));wrap.addView(noteCard(found.get(p)),lp(-1,-2));return wrap;}});
     }
     int categoryColor(String id){if(id.isEmpty())return ACCENT;int color=Math.floorMod(id.hashCode(),3);return color==0?0xff9d642c:color==1?0xff5568a1:ACCENT;}
     int categoryTint(String id){if(id.isEmpty())return 0xffe6f2f3;int color=Math.floorMod(id.hashCode(),3);return color==0?0xfffcf1e4:color==1?0xffeef0fb:0xffe6f2f3;}
+    boolean showCardCategory(){return filter.equals("all");}
+    boolean showCardBody(Store.Note n){String body=n.body.trim(),heading=n.heading().trim();return !body.isEmpty()&&!body.equals(heading);}
     LinearLayout noteCard(Store.Note n){
-        LinearLayout c=column();c.setPadding(dp(13),dp(11),dp(13),dp(9));c.setBackground(ripple(homePanelColor(),18,LINE));
-        LinearLayout meta=row();TextView tag=text(store.categoryName(n.category),12,categoryColor(n.category),true);tag.setPadding(dp(9),dp(4),dp(9),dp(4));tag.setBackground(bg(categoryTint(n.category),8,0));meta.addView(tag);c.addView(meta);gap(c,6);
+        boolean hasImage=!n.images.isEmpty();LinearLayout c=column();c.setPadding(dp(13),dp(hasImage?11:9),dp(13),dp(hasImage?9:7));c.setBackground(ripple(homePanelColor(),18,LINE));
+        if(showCardCategory()){LinearLayout meta=row();TextView tag=text(store.categoryName(n.category),12,categoryColor(n.category),true);tag.setPadding(dp(9),dp(4),dp(9),dp(4));tag.setBackground(bg(categoryTint(n.category),8,0));meta.addView(tag);c.addView(meta);gap(c,6);}
         TextView h=text(n.heading(),17,INK,true);h.setMaxLines(1);h.setEllipsize(TextUtils.TruncateAt.END);c.addView(h);
-        if(!n.body.trim().isEmpty()){gap(c,4);TextView body=text(n.body,15,MUTED,false);body.setMaxLines(2);body.setEllipsize(TextUtils.TruncateAt.END);c.addView(body);}
-        if(!n.images.isEmpty()){gap(c,7);ImageView image=thumbnail(n.images.get(0),1200);image.setScaleType(ImageView.ScaleType.CENTER_CROP);image.setContentDescription("首页预览图："+n.heading());c.addView(image,lp(-1,64));}
-        gap(c,7);LinearLayout bottom=row();String date=new SimpleDateFormat("M月d日",Locale.CHINA).format(new Date(n.updated));bottom.addView(text(date+(n.images.isEmpty()?"":"  ·  "+n.images.size()+" 张图"),13,MUTED,false),new LinearLayout.LayoutParams(0,-2,1));
+        if(showCardBody(n)){gap(c,4);TextView body=text(n.body,15,MUTED,false);body.setMaxLines(2);body.setEllipsize(TextUtils.TruncateAt.END);c.addView(body);}
+        if(hasImage){gap(c,7);ImageView image=thumbnail(n.images.get(0),1200);image.setScaleType(ImageView.ScaleType.CENTER_CROP);image.setContentDescription("首页预览图："+n.heading());c.addView(image,lp(-1,64));}
+        gap(c,hasImage?7:5);LinearLayout bottom=row();String date=new SimpleDateFormat("M月d日",Locale.CHINA).format(new Date(n.updated));bottom.addView(text(date+(n.images.isEmpty()?"":"  ·  "+n.images.size()+" 张图"),13,MUTED,false),new LinearLayout.LayoutParams(0,-2,1));
         TextView copy=text("复制文字",13,ACCENT,true);copy.setGravity(Gravity.CENTER);copy.setPadding(dp(11),dp(7),dp(11),dp(7));copy.setMinHeight(dp(36));copy.setBackground(ripple(0xffedf6f7,11,0));copy.setOnClickListener(v->copy(n));bottom.addView(copy);c.addView(bottom);
         c.setContentDescription("记录卡片："+n.heading());c.setOnLongClickListener(v->{hideKeyboard();confirmDelete(n);return true;});
         c.setOnClickListener(v->{scrollPosition=homeList.getFirstVisiblePosition();hideKeyboard();editorReturn="home";detail(n,false);});return c;
