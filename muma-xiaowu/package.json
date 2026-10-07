@@ -1,0 +1,19 @@
+{
+  "name": "muma-xiaowu",
+  "version": "0.2.0",
+  "private": true,
+  "type": "module",
+  "description": "3D 小屋聊天应用，OpenRouter + Railway",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.132.0",
+    "pg": "^8.13.1",
+    "three": "0.128.0"
+  }
+}
