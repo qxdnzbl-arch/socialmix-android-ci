@@ -3,11 +3,8 @@ on:
   push:
     branches: [dual-phone-transfer-build]
     paths:
-      - '.github/workflows/dual-phone-ui-update.yml'
-      - 'dualphone/app/**'
-      - 'dualphone/acceptance/ui_test.py'
-      - 'dualphone/acceptance/FixtureSql.java'
-      - 'dualphone/acceptance/publish_release.py'
+      - 'dualphone/ci/run-ui-update.txt'
+  workflow_dispatch:
 permissions:
   contents: write
   actions: read
@@ -16,6 +13,7 @@ concurrency:
   cancel-in-progress: true
 jobs:
   acceptance:
+    if: github.ref == 'refs/heads/dual-phone-transfer-build'
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
