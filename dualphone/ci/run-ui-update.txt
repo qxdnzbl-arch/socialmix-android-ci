@@ -1,1 +1,1 @@
-Native UI 5.6.1 final candidate: direct copy, image long-press save confirmation, left clear.
+Native UI 5.6.1 candidate: dismiss Android clipboard overlay before paste verification.

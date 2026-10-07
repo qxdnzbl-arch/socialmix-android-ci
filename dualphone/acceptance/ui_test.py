@@ -84,7 +84,10 @@ def optional(t,**kw):
  try:return node(t,**kw)
  except AssertionError:return None
 
-def edit(t):return node(t,cls='android.widget.EditText',desc='消息') if optional(t,cls='android.widget.EditText',desc='消息') is not None else next(n for n in t.iter('node') if n.get('class')=='android.widget.EditText' and (n.get('resource-id','').endswith('/message') or n.get('text') in ['消息','Draft_Keep','']))
+def edit(t):
+ for n in t.iter('node'):
+  if n.get('class')=='android.widget.EditText' and n.get('resource-id','').endswith('/message'):return n
+ raise AssertionError('Composer not in foreground; packages='+str(sorted({n.get('package') for n in t.iter('node')})))
 
 def insert(id,text,mine=False,kind='text',name=None,path=None,size=0,status=None):
  values=[id,int(mine),kind,text,name,path,size,int(time.time()*1000),status or ('sent' if mine else 'received')]
@@ -167,6 +170,7 @@ def core(reuse=False):
   for mine,value,label in [(False,'复制原文第一行\n第二行😊','received'),(True,'我的复制原文\n第二行','own')]:
    insert('copy-'+label,value,mine=mine);t,_=ui('copy-'+label+'-before');long_press(node(t,text=value));t,_=ui('copy-'+label+'-after')
    record(label+'_text_longpress_has_no_action_menu',not any(n.get('package')==PKG and n.get('text') in ('复制','复制文件名','搜索','保存') for n in t.iter('node')))
+   screen('copy-'+label+'-direct');tap(node(t,text='我的两台手机'));t,_=ui('copy-'+label+'-overlay-dismissed')
    tap(edit(t));shell('input','keyevent','279');time.sleep(.3);t,_=ui('copy-'+label+'-paste')
    record(label+'_text_longpress_copies_exact_content',edit(t).get('text')==value)
    shell('input','keyevent','KEYCODE_MOVE_END');shell('input','keyevent',*['67']*(len(value)*2));shell('input','keyevent','4');time.sleep(.4)
