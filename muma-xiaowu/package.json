@@ -15,5 +15,6 @@
     "@anthropic-ai/sdk": "^0.132.0",
     "pg": "^8.13.1",
     "three": "0.128.0"
-  }
+  },
+  "packageManager": "npm@10.8.2"
 }
