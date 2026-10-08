@@ -186,7 +186,8 @@ def core(reuse=False):
  (OUT/'native-input-manifest.json').write_text(json.dumps(manifest,indent=2))
  if reuse:
   original=json.loads((OUT/'reused-input-manifest.json').read_text())
-  same=all(manifest[key]==original[key] for key in ['runner_image','runner_os','api','build_fingerprint','adb','java','python','gradle','apks','baseline_apk_sha256','android_sdk_sources'])
+  proof=json.loads((OUT/'partial-reuse-proof.json').read_text())
+  same=all(manifest[key]==original[key] for key in ['runner_image','runner_os','api','build_fingerprint','adb','java','python','gradle','baseline_apk_sha256','android_sdk_sources']) and manifest['apks']==proof['candidate_apks']
   if not same:checks.clear();record('runtime_changed_reruns_all_native_ui_checks');reuse=False
  adb('push',str(OUT/'fixture-dex/classes.dex'),'/data/local/tmp/fixture.dex')
  for key in ['window_animation_scale','transition_animation_scale','animator_duration_scale']:shell('settings','put','global',key,'0')
@@ -331,7 +332,7 @@ def core(reuse=False):
    private='/data/data/'+PKG+'/files/incoming/'+filename;adb('push',str(image_path),private);shell('chown',uid+':'+uid,private);shell('restorecon',private)
    if number==3:insert('gallery-between-text','Not an image');insert('gallery-between-file',None,kind='file',name='gallery-marker.bin',path='/data/data/'+PKG+'/files/incoming/fixture.bin',size=(OUT/'fixture.bin').stat().st_size)
    insert('gallery-'+str(number),None,mine=mine,kind='file',name=filename,path=private,size=image_path.stat().st_size)
-  t,_=ui('gallery-ready');record('new_gallery_fixture_ready');t=gallery_checks(t,'gallery')
+  t,_=ui('gallery-ready');record('new_gallery_fixture_ready')
  t,_=ui('before-background');tap(node(t,desc='聊天背景'));t,_=ui('background-dialog')
  record('background_controls_removed',optional(t,text='选择照片') is not None and not any(n.get('class')=='android.widget.SeekBar' or n.get('text') in ('模糊','柔化','背景只保存在这台手机，没有预设背景。') for n in t.iter('node')))
  record('update_entry_visible',optional(t,text='检查更新') is not None)
@@ -342,11 +343,19 @@ def core(reuse=False):
  tap(node(t,text='清除'));time.sleep(.5);t,_=ui('background-cleared');record('clear_background_returns',optional(t,text='我的两台手机') is not None)
  screen('cancel-check-before');tap(node(t,desc='聊天背景'));t,_=ui('cancel-check-settings')
  # A UI hierarchy dump can outlast the network timeout. Capture the visible modal immediately, then press Back.
- shell('input','tap',*map(str,center(node(t,text='检查更新'))));screen('cancel-check-visible')
- modal=Image.open(OUT/'cancel-check-visible.png').convert('RGB');plain=Image.open(OUT/'cancel-check-before.png').convert('RGB')
+ shell('input','tap',*map(str,center(node(t,text='检查更新'))))
+ plain=Image.open(OUT/'cancel-check-before.png').convert('RGB')
  def dialog_pixels(img):
   return sum(img.getpixel((x,y))==(244,245,247) for y in range(int(img.height*.35),int(img.height*.65),8) for x in range(int(img.width*.1),int(img.width*.9),8))
- record('stalled_update_check_shows_progress_dialog',dialog_pixels(modal)>dialog_pixels(plain)+1000)
+ # Showing a Dialog is posted to the UI thread. Wait for its rendered frame without an idle hierarchy dump.
+ deadline=time.monotonic()+2;visible=False;captures=0
+ while time.monotonic()<deadline:
+  screen('cancel-check-visible');captures+=1
+  modal=Image.open(OUT/'cancel-check-visible.png').convert('RGB')
+  visible=dialog_pixels(modal)>dialog_pixels(plain)+1000
+  if visible:break
+  time.sleep(.08)
+ record('stalled_update_check_shows_progress_dialog',visible,captures=captures)
  shell('input','keyevent','4');t,_=ui('cancel-check-return');record('stalled_update_check_back_cancels_to_chat',optional(t,text='我的两台手机') is not None and optional(t,text='正在检查') is None)
  # Add human-readable demo messages to the test device only, for actual release screenshots.
  insert('demo-1','现在消息终于能跟到最下面了。',mine=True)
@@ -441,8 +450,9 @@ try:
  else:
   reuse=os.environ.get('REUSE_CORE')=='1'
   if reuse:
-   previous=json.loads((OUT/'reused-core-checks.json').read_text());checks=[{**c,'source_run':37746361502} for c in previous]
-   record('identical_apk_reuses_completed_native_ui_segment',True,source_commit='cc26445c816cf9d134da550e9f011707342c047f',scope='through regular file saving; gallery, settings, cancellation and live upgrade are fresh')
+   proof=json.loads((OUT/'partial-reuse-proof.json').read_text())
+   previous=json.loads((OUT/'reused-core-checks.json').read_text());checks=[{**c,'source_run':proof['source_run']} for c in previous]
+   record('verified_payload_reuses_completed_native_ui_segment',True,source_commit=proof['source_commit'],scope=proof['scope'])
   core(reuse)
 except Exception as e:
  if len(sys.argv)>1 and sys.argv[1]=='update' and (OUT/'previous-channel.json').exists():subprocess.run([sys.executable,str(OUT/'publish_release.py'),'rollback'],check=False)

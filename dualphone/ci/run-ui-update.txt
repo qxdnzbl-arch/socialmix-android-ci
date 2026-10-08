@@ -1,1 +1,1 @@
-563 final candidate: use a valid double-tap interval and verify real visible zoom; reuse only the hashed successful segment of the identical APK; rerun gallery, settings, cancellation and live upgrade
+5.6.2-native: wait for rendered update-dialog frame; validate compiled payload and signer to reuse passed native checks; fresh signed live upgrade.

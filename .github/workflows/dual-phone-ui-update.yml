@@ -58,8 +58,8 @@ jobs:
             gh run download 37473258717 -n shuangjichuan-v5-5-slow-network-acceptance -D previous-artifact
             cp previous-artifact/app/build/outputs/apk/release/app-release.apk previous-artifact/baseline.apk
           fi
-          git fetch --depth=1 origin cc26445c816cf9d134da550e9f011707342c047f
-          if gh run download 37746361502 -n shuangjichuan-v5-6-native-ui-update -D reused-core; then
+          git fetch --depth=1 origin 71bd58252c09e64f70cb4548b49259cc362070c6
+          if gh run download 37748508709 -n shuangjichuan-v5-6-native-ui-update -D reused-core; then
             if python3 dualphone/acceptance/verify_native_checkpoint.py reused-core; then
               echo 'REUSE_CORE=1' >> "$GITHUB_ENV"
             fi
