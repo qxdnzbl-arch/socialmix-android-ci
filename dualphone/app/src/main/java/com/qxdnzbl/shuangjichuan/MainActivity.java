@@ -615,25 +615,44 @@ public class MainActivity extends Activity implements NativeMessageAdapter.Callb
   }
   private void showPhoto(TransferDb.Msg msg){
     if(photoDialog!=null)photoDialog.dismiss();
+    final List<TransferDb.Msg> photos=adapter.getPhotos();
+    int selected=-1;for(int i=0;i<photos.size();i++)if(Objects.equals(photos.get(i).id,msg.id)){selected=i;break;}
+    if(selected<0){photos.add(msg);selected=photos.size()-1;}
+    final int[] index={selected},generation={0};
+    final ExecutorService decoder=Executors.newSingleThreadExecutor();
+    final Future<?>[] request={null};
     final Dialog dialog=new Dialog(this,android.R.style.Theme_Material_Light_NoActionBar_Fullscreen);photoDialog=dialog;
     FrameLayout page=new FrameLayout(this);page.setBackgroundColor(Color.rgb(31,33,38));
     ZoomImageView photo=new ZoomImageView(this);page.addView(photo,new FrameLayout.LayoutParams(-1,-1));
     photo.setOnTouchListener((v,e)->{if(e.getActionMasked()==MotionEvent.ACTION_DOWN){lastTouchX=e.getRawX();lastTouchY=e.getRawY();}return false;});
-    photo.setOnLongClickListener(v->{showPhotoSaveMenu(v,msg);return true;});
+    photo.setOnLongClickListener(v->{showPhotoSaveMenu(v,photos.get(index[0]));return true;});
     TextView loading=new TextView(this);loading.setText("加载中");loading.setTextColor(Color.WHITE);loading.setGravity(Gravity.CENTER);
     page.addView(loading,new FrameLayout.LayoutParams(-1,-1));
     TextView close=smallAction("×");close.setContentDescription("关闭图片");close.setTextColor(Color.WHITE);close.setTextSize(24);close.setOnClickListener(v->dialog.dismiss());
     FrameLayout.LayoutParams closeLp=new FrameLayout.LayoutParams(dp(44),dp(44),Gravity.TOP|Gravity.END);closeLp.topMargin=dp(8);closeLp.rightMargin=dp(8);page.addView(close,closeLp);
-    final Bitmap[] shown={null};dialog.setContentView(page);dialog.setOnDismissListener(d->{if(photoSavePopup!=null)photoSavePopup.dismiss();photo.setImageDrawable(null);if(shown[0]!=null)shown[0].recycle();});dialog.show();
-    if(dialog.getWindow()!=null)dialog.getWindow().setLayout(-1,-1);
-    io.execute(()->{
-      Bitmap decoded=PhotoImages.decode(msg.filePath,2048);
-      mainHandler.post(()->{
-        if(!dialog.isShowing()||isDestroyed()){if(decoded!=null)decoded.recycle();return;}
-        if(decoded==null){loading.setText("图片无法预览");return;}
-        shown[0]=decoded;photo.setImageBitmap(decoded);loading.setVisibility(View.GONE);
+    final Bitmap[] shown={null};
+    final Runnable display=()->{
+      final int revision=++generation[0];final TransferDb.Msg current=photos.get(index[0]);
+      if(request[0]!=null)request[0].cancel(true);
+      photo.setImageDrawable(null);if(shown[0]!=null){shown[0].recycle();shown[0]=null;}
+      photo.setContentDescription("图片预览，"+(index[0]+1)+"/"+photos.size());
+      loading.setText("加载中");loading.setVisibility(View.VISIBLE);
+      request[0]=decoder.submit(()->{
+        Bitmap decoded=PhotoImages.decode(current.filePath,2048);
+        mainHandler.post(()->{
+          if(!dialog.isShowing()||isDestroyed()||revision!=generation[0]){if(decoded!=null)decoded.recycle();return;}
+          if(decoded==null){loading.setText("图片无法预览");return;}
+          shown[0]=decoded;photo.setImageBitmap(decoded);loading.setVisibility(View.GONE);
+        });
       });
+    };
+    photo.setPhotoSwipeListener(direction->{
+      int next=index[0]+direction;if(next<0||next>=photos.size())return;
+      if(photoSavePopup!=null)photoSavePopup.dismiss();index[0]=next;display.run();
     });
+    dialog.setContentView(page);dialog.setOnDismissListener(d->{generation[0]++;decoder.shutdownNow();if(photoSavePopup!=null)photoSavePopup.dismiss();photo.setImageDrawable(null);if(shown[0]!=null){shown[0].recycle();shown[0]=null;}if(photoDialog==dialog)photoDialog=null;});dialog.show();
+    if(dialog.getWindow()!=null)dialog.getWindow().setLayout(-1,-1);
+    display.run();
   }
 
   private void copy(String s){

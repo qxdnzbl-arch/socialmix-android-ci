@@ -1,1 +1,1 @@
-563 final candidate after screenshot evidence: compare darkening, not background brightening; all photo-save and search scenarios retained
+563 final candidate: image gallery paging, compact one-tap save, restored chat search, right-column alignment; capture cancel dialog before idle-dump timeout

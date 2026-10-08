@@ -76,6 +76,11 @@ public class NativeMessageAdapter extends RecyclerView.Adapter<NativeMessageAdap
   public void setSearch(String q,String active){String next=q==null?"":q.trim();if(Objects.equals(query,next)&&Objects.equals(activeId,active))return;query=next;activeId=active;rebuildMatches();notifyDataSetChanged();}
   public List<Integer> getMatchPositions(){return new ArrayList<>(matches);}
   public String getItemIdAt(int p){return p>=0&&p<items.size()?items.get(p).id:null;}
+  public List<TransferDb.Msg> getPhotos(){
+    ArrayList<TransferDb.Msg> photos=new ArrayList<>();
+    for(TransferDb.Msg m:items)if("file".equals(m.kind)&&PhotoImages.isPhoto(m.fileName))photos.add(m);
+    return photos;
+  }
   private void rebuildMatches(){
     matches.clear();matchedPositions.clear();if(query.isEmpty())return;
     String q=query.toLowerCase(Locale.ROOT);

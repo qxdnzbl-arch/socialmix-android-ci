@@ -69,17 +69,45 @@ def assert_save_option(t,pressed,label):
 
 def photo_downloads():return set(shell('find','/sdcard/Download','-type','f','-name','fixture-photo*').splitlines())
 
-def tap_save_once(t,previous,label,viewer=False):
+def tap_save_once(t,previous,label,viewer=False,expected_path=None):
  tap(node(t,text='保存'));t,_=ui(label+'-saved-once')
  record(label+'_one_tap_without_confirmation',optional(t,text='保存图片？') is None and optional(t,text='取消') is None and optional(t,text='保存') is None and (optional(t,desc='关闭图片') is not None if viewer else optional(t,text='我的两台手机') is not None))
  deadline=time.monotonic()+12;fresh=set();valid=False
- expected=hashlib.sha256((OUT/'fixture-photo.png').read_bytes()).hexdigest()
+ expected=hashlib.sha256((expected_path or OUT/'fixture-photo.png').read_bytes()).hexdigest()
  while time.monotonic()<deadline:
   fresh=photo_downloads()-previous
   valid=bool(fresh) and all(shell('sha256sum '+shlex.quote(p)).startswith(expected) for p in fresh)
   if valid:break
   time.sleep(.3)
  record(label+'_saves_one_original_photo',valid and len(fresh)==1,files=sorted(fresh))
+ return t
+
+def preview(t):
+ return next(n for n in t.iter('node') if n.get('content-desc','').startswith('图片预览'))
+
+def gallery_checks(t,label):
+ from PIL import Image
+ tap(node(t,desc='图片：fixture-photo-gallery3.png'));t,_=ui(label+'-open')
+ def position(expected,step,color=None):
+  tree=ui(label+'-'+step)[0];screen(label+'-'+step)
+  correct=preview(tree).get('content-desc')=='图片预览，'+expected
+  if color is not None:
+   img=Image.open(OUT/(label+'-'+step+'.png')).convert('RGB');pixel=img.getpixel((img.width//2,img.height//2));correct=correct and max(abs(a-b) for a,b in zip(pixel,color))<8
+  record(label+'_'+step,correct);return tree
+ def swipe(direction):shell('input','swipe','800' if direction<0 else '250','1200','250' if direction<0 else '800','1200','400');time.sleep(.4)
+ position('4/4','opens_tapped_latest_photo',(170,100,90))
+ swipe(1);position('3/4','right_swipe_goes_to_previous_photo',(80,120,180))
+ swipe(1);position('2/4','skips_text_and_regular_files')
+ swipe(1);position('1/4','reaches_received_first_photo')
+ swipe(1);position('1/4','first_photo_does_not_wrap')
+ swipe(-1);position('2/4','left_swipe_returns_to_own_photo')
+ swipe(-1);t=position('3/4','left_swipe_returns_to_next_photo',(80,120,180))
+ pressed=preview(t);before_files=photo_downloads();screen(label+'-before-menu');long_press(pressed);t,_=ui(label+'-save-option');assert_save_option(t,pressed,label)
+ t=tap_save_once(t,before_files,label,viewer=True,expected_path=OUT/'fixture-photo-gallery2.png')
+ shell('input','tap','500','750');shell('input','tap','500','750');swipe(-1);position('3/4','zoomed_drag_does_not_change_photo',(80,120,180))
+ shell('input','tap','500','750');shell('input','tap','500','750');swipe(-1);position('4/4','swipe_after_zoom_reset_works',(170,100,90))
+ swipe(-1);t=position('4/4','last_photo_does_not_wrap',(170,100,90))
+ tap(node(t,desc='关闭图片'));t,_=ui(label+'-closed');record(label+'_close_returns_to_chat',optional(t,text='我的两台手机') is not None)
  return t
 
 def set_search(t,value):
@@ -247,9 +275,9 @@ def core(reuse=False):
   pressed=node(t,desc='图片：fixture-photo.png');screen('received-thumb-before-menu');long_press(pressed);t,_=ui('photo-thumb-save-option-again');assert_save_option(t,pressed,'received-thumb')
   t=tap_save_once(t,before_files,'received-thumb')
   tap(node(t,desc='图片：fixture-photo.png'));time.sleep(.5);t,_=ui('photo-viewer')
-  record('native_photo_viewer_opens_directly_without_download_toolbar',optional(t,desc='图片预览') is not None and optional(t,text='保存到下载') is None and optional(t,text='复制文件名') is None and optional(t,text='fixture-photo.png') is None)
+  record('native_photo_viewer_opens_directly_without_download_toolbar',preview(t) is not None and optional(t,text='保存到下载') is None and optional(t,text='复制文件名') is None and optional(t,text='fixture-photo.png') is None)
   screen('photo-viewer');shell('input','tap','500','750');shell('input','tap','500','750');shell('input','swipe','700','850','430','650','300');t,_=ui('photo-zoom');record('photo_zoom_pan_remains_responsive',optional(t,desc='关闭图片') is not None)
-  before_files=photo_downloads();pressed=node(t,desc='图片预览');screen('received-viewer-before-menu');long_press(pressed);t,_=ui('photo-viewer-save-option');assert_save_option(t,pressed,'received-viewer')
+  before_files=photo_downloads();pressed=preview(t);screen('received-viewer-before-menu');long_press(pressed);t,_=ui('photo-viewer-save-option');assert_save_option(t,pressed,'received-viewer')
   t=tap_save_once(t,before_files,'received-viewer',viewer=True)
   tap(node(t,desc='关闭图片'));t,_=ui('photo-close');record('viewer_returns_to_chat',optional(t,text='我的两台手机') is not None)
   # Real file picker selection must enqueue and land at latest, even from history.
@@ -267,7 +295,7 @@ def core(reuse=False):
   thumbs=[n for n in t.iter('node') if n.get('content-desc')=='图片：fixture-photo.png'];pressed=thumbs[-1];before_files=photo_downloads();screen('own-thumb-before-menu')
   long_press(pressed);t,_=ui('own-photo-save-option');assert_save_option(t,pressed,'own-thumb');t=tap_save_once(t,before_files,'own-thumb')
   thumbs=[n for n in t.iter('node') if n.get('content-desc')=='图片：fixture-photo.png'];tap(thumbs[-1]);t,_=ui('own-photo-viewer');record('own_photo_also_opens_viewer',optional(t,desc='关闭图片') is not None)
-  pressed=node(t,desc='图片预览');before_files=photo_downloads();screen('own-viewer-before-menu');long_press(pressed);t,_=ui('own-viewer-save-option');assert_save_option(t,pressed,'own-viewer');t=tap_save_once(t,before_files,'own-viewer',viewer=True)
+  pressed=preview(t);before_files=photo_downloads();screen('own-viewer-before-menu');long_press(pressed);t,_=ui('own-viewer-save-option');assert_save_option(t,pressed,'own-viewer');t=tap_save_once(t,before_files,'own-viewer',viewer=True)
   tap(node(t,desc='关闭图片'));t,_=ui('own-photo-close')
   c=database('file-sent-data');record('outgoing_file_queued_with_original_bytes',c.execute("SELECT COUNT(*) FROM messages WHERE mine=1 AND kind='file' AND file_name='fixture-photo.png' AND status='pending'").fetchone()[0]==1)
   # A new received regular file remains usable without a search or long-press menu.
@@ -277,6 +305,13 @@ def core(reuse=False):
   record('regular_file_longpress_writes_nothing',before_files==shell('find','/sdcard/Download','-type','f','-name','fixture*.bin').splitlines())
   tap(node(t,text='fixture.bin'));time.sleep(.7)
   paths=shell('find','/sdcard/Download','-type','f','-name','fixture*.bin').splitlines();record('compact_file_saves_original_bytes',bool(paths) and adb('exec-out','cat',paths[-1])==(OUT/'fixture.bin').read_bytes())
+  # Distinct private fixtures prove chronological paging, boundaries, zoom and saving the current image.
+  for number,mine,color in [(2,False,(80,120,180)),(3,True,(170,100,90))]:
+   filename='fixture-photo-gallery'+str(number)+'.png';image_path=OUT/filename;Image.new('RGB',(1080,1800),color).save(image_path)
+   private='/data/data/'+PKG+'/files/incoming/'+filename;adb('push',str(image_path),private);shell('chown',uid+':'+uid,private);shell('restorecon',private)
+   if number==3:insert('gallery-between-text','Not an image');insert('gallery-between-file',None,kind='file',name='gallery-marker.bin',path='/data/data/'+PKG+'/files/incoming/fixture.bin',size=(OUT/'fixture.bin').stat().st_size)
+   insert('gallery-'+str(number),None,mine=mine,kind='file',name=filename,path=private,size=image_path.stat().st_size)
+  t,_=ui('gallery-ready');t=gallery_checks(t,'gallery')
   t,_=ui('before-background');tap(node(t,desc='聊天背景'));t,_=ui('background-dialog')
   record('background_controls_removed',optional(t,text='选择照片') is not None and not any(n.get('class')=='android.widget.SeekBar' or n.get('text') in ('模糊','柔化','背景只保存在这台手机，没有预设背景。') for n in t.iter('node')))
   record('update_entry_visible',optional(t,text='检查更新') is not None)
@@ -285,12 +320,14 @@ def core(reuse=False):
   record('clear_and_photo_buttons_align_in_right_column',abs(clear_bounds[0]-photo_bounds[0])<=3 and abs(clear_bounds[2]-photo_bounds[2])<=3 and clear_bounds[0]>=title_bounds[2] and clear_bounds[1]<sub_bounds[3] and clear_bounds[3]>title_bounds[1] and abs(update_bounds[0]-photo_bounds[0])<=3,clear=clear_bounds,photo=photo_bounds,title=title_bounds,update=update_bounds)
   screen('background-dialog')
   tap(node(t,text='清除'));time.sleep(.5);t,_=ui('background-cleared');record('clear_background_returns',optional(t,text='我的两台手机') is not None)
-  for attempt in range(3):
-   tap(node(t,desc='聊天背景'));t,_=ui('cancel-check-settings');tap(node(t,text='检查更新'));time.sleep(.2);t,_=ui('cancel-check')
-   if optional(t,text='取消') is not None:tap(node(t,text='取消'));break
-   t,_=ui('cancel-retry-chat')
-  else:raise AssertionError('Unable to open cancellable update check')
-  t,_=ui('cancel-check-return');record('stalled_update_check_can_cancel_back_to_chat',optional(t,text='我的两台手机') is not None)
+  screen('cancel-check-before');tap(node(t,desc='聊天背景'));t,_=ui('cancel-check-settings')
+  # A UI hierarchy dump can outlast the network timeout. Capture the visible modal immediately, then press Back.
+  shell('input','tap',*map(str,center(node(t,text='检查更新'))));screen('cancel-check-visible')
+  modal=Image.open(OUT/'cancel-check-visible.png').convert('RGB');plain=Image.open(OUT/'cancel-check-before.png').convert('RGB')
+  def dialog_pixels(img):
+   return sum(img.getpixel((x,y))==(244,245,247) for y in range(int(img.height*.35),int(img.height*.65),8) for x in range(int(img.width*.1),int(img.width*.9),8))
+  record('stalled_update_check_shows_progress_dialog',dialog_pixels(modal)>dialog_pixels(plain)+1000)
+  shell('input','keyevent','4');t,_=ui('cancel-check-return');record('stalled_update_check_back_cancels_to_chat',optional(t,text='我的两台手机') is not None and optional(t,text='正在检查') is None)
  if reuse:
   private='/data/data/'+PKG+'/files/incoming/fixture-photo.png';adb('push',str(OUT/'fixture-photo.png'),private);shell('chown',uid+':'+uid,private);shell('restorecon',private)
   tap(node(t,desc='聊天背景'));t,_=ui('fast-background');tap(node(t,text='清除'));t,_=ui('fast-default-chat')
@@ -369,6 +406,8 @@ def update():
  tap(edit(t));shell('input','keyevent','KEYCODE_MOVE_END');shell('input','keyevent',*['67']*len('Unsent_Update_Draft'));shell('input','text','Update_Draft');shell('input','keyevent','4');time.sleep(.5);t,_=ui('updated-input');record('final_cursor_exit_and_draft_preserved',edit(t).get('focused')=='false' and edit(t).get('text')=='Update_Draft')
  tap(node(t,desc='发送'));time.sleep(.5);t,_=ui('updated-send');record('final_send_goes_to_latest',optional(t,text='Update_Draft') is not None)
  tap(node(t,desc='搜索'));t,_=ui('updated-search');t=set_search(t,'Update_Draft');record('final_search_really_finds_new_message',optional(t,text='1/1') is not None);tap(node(t,desc='下一个结果'));t,_=ui('updated-search-match');record('final_search_really_navigates',optional(t,text='Update_Draft') is not None);tap(node(t,desc='关闭搜索'));t,_=ui('updated-search-closed')
+ if optional(t,desc='回到最新') is not None:tap(node(t,desc='回到最新'));t,_=ui('updated-latest')
+ t=gallery_checks(t,'final-gallery')
  tap(node(t,desc='聊天背景'));t,_=ui('updated-settings');tap(node(t,text='检查更新'));time.sleep(3);t,_=ui('no-new-update');record('current_release_does_not_offer_same_version',not any(n.get('text','').startswith('有新版本') for n in t.iter('node')))
  log=adb('logcat','-d').decode(errors='replace');(OUT/'final-logcat.txt').write_text(log)
  record('download_verified_before_install','verified_version='+str(expected) in log and 'installer_opened' in log)
