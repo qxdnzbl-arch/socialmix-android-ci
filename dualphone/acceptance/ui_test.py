@@ -85,6 +85,10 @@ def tap_save_once(t,previous,label,viewer=False,expected_path=None):
 def preview(t):
  return next(n for n in t.iter('node') if n.get('content-desc','').startswith('图片预览'))
 
+def double_tap(x,y):
+ shell('input','tap',str(x),str(y));time.sleep(.09);shell('input','tap',str(x),str(y))
+ time.sleep(.2)
+
 def gallery_checks(t,label):
  from PIL import Image
  tap(node(t,desc='图片：fixture-photo-gallery3.png'));t,_=ui(label+'-open')
@@ -104,8 +108,10 @@ def gallery_checks(t,label):
  swipe(-1);t=position('3/4','left_swipe_returns_to_next_photo',(80,120,180))
  pressed=preview(t);before_files=photo_downloads();screen(label+'-before-menu');long_press(pressed);t,_=ui(label+'-save-option');assert_save_option(t,pressed,label)
  t=tap_save_once(t,before_files,label,viewer=True,expected_path=OUT/'fixture-photo-gallery2.png')
- shell('input','tap','500','750');shell('input','tap','500','750');swipe(-1);position('3/4','zoomed_drag_does_not_change_photo',(80,120,180))
- shell('input','tap','500','750');shell('input','tap','500','750');swipe(-1);position('4/4','swipe_after_zoom_reset_works',(170,100,90))
+ double_tap(500,750);screen(label+'-zoomed')
+ zoomed=Image.open(OUT/(label+'-zoomed.png')).convert('RGB');record(label+'_double_tap_zoom_is_visible',zoomed.getpixel((zoomed.width//2,100))==(80,120,180))
+ swipe(-1);position('3/4','zoomed_drag_does_not_change_photo',(80,120,180))
+ double_tap(500,750);swipe(-1);position('4/4','swipe_after_zoom_reset_works',(170,100,90))
  swipe(-1);t=position('4/4','last_photo_does_not_wrap',(170,100,90))
  tap(node(t,desc='关闭图片'));t,_=ui(label+'-closed');record(label+'_close_returns_to_chat',optional(t,text='我的两台手机') is not None)
  return t
@@ -167,7 +173,7 @@ def insert(id,text,mine=False,kind='text',name=None,path=None,size=0,status=None
 def core(reuse=False):
  adb('root');time.sleep(.5);adb('wait-for-device')
  manifest={'commit':os.environ.get('GITHUB_SHA'),'runner_image':os.environ.get('ImageVersion'),'runner_os':os.environ.get('RUNNER_OS'),'api':shell('getprop','ro.build.version.sdk').strip(),'build_fingerprint':shell('getprop','ro.build.fingerprint').strip(),'adb':adb('version').decode(),'java':subprocess.run(['java','-version'],capture_output=True,text=True).stderr,'python':sys.version,'inputs':{}}
- for path in subprocess.check_output(['git','ls-files','dualphone/app','dualphone/build.gradle','dualphone/settings.gradle','dualphone/gradle.properties','dualphone/keystore.b64','dualphone/acceptance/ui_test.py','dualphone/acceptance/FixtureSql.java','dualphone/acceptance/publish_release.py','.github/workflows/dual-phone-ui-update.yml'],cwd=ROOT,text=True).splitlines():
+ for path in subprocess.check_output(['git','ls-files','dualphone/app','dualphone/build.gradle','dualphone/settings.gradle','dualphone/gradle.properties','dualphone/keystore.b64','dualphone/acceptance/ui_test.py','dualphone/acceptance/FixtureSql.java','dualphone/acceptance/publish_release.py','dualphone/acceptance/verify_native_checkpoint.py','.github/workflows/dual-phone-ui-update.yml'],cwd=ROOT,text=True).splitlines():
   f=ROOT/path
   if f.is_file():manifest['inputs'][path]=hashlib.sha256(f.read_bytes()).hexdigest()
  manifest['gradle']=subprocess.run(['gradle','--version'],capture_output=True,text=True,timeout=30).stdout
@@ -178,6 +184,10 @@ def core(reuse=False):
   f=sdk/name
   if f.is_file():manifest['android_sdk_sources'][name]=f.read_text()
  (OUT/'native-input-manifest.json').write_text(json.dumps(manifest,indent=2))
+ if reuse:
+  original=json.loads((OUT/'reused-input-manifest.json').read_text())
+  same=all(manifest[key]==original[key] for key in ['runner_image','runner_os','api','build_fingerprint','adb','java','python','gradle','apks','baseline_apk_sha256','android_sdk_sources'])
+  if not same:checks.clear();record('runtime_changed_reruns_all_native_ui_checks');reuse=False
  adb('push',str(OUT/'fixture-dex/classes.dex'),'/data/local/tmp/fixture.dex')
  for key in ['window_animation_scale','transition_animation_scale','animator_duration_scale']:shell('settings','put','global',key,'0')
  shell('settings','put','secure','show_ime_with_hard_keyboard','1');shell('wm','dismiss-keyguard')
@@ -276,7 +286,7 @@ def core(reuse=False):
   t=tap_save_once(t,before_files,'received-thumb')
   tap(node(t,desc='图片：fixture-photo.png'));time.sleep(.5);t,_=ui('photo-viewer')
   record('native_photo_viewer_opens_directly_without_download_toolbar',preview(t) is not None and optional(t,text='保存到下载') is None and optional(t,text='复制文件名') is None and optional(t,text='fixture-photo.png') is None)
-  screen('photo-viewer');shell('input','tap','500','750');shell('input','tap','500','750');shell('input','swipe','700','850','430','650','300');t,_=ui('photo-zoom');record('photo_zoom_pan_remains_responsive',optional(t,desc='关闭图片') is not None)
+  screen('photo-viewer');double_tap(500,750);shell('input','swipe','700','850','430','650','300');t,_=ui('photo-zoom');record('photo_zoom_pan_remains_responsive',optional(t,desc='关闭图片') is not None)
   before_files=photo_downloads();pressed=preview(t);screen('received-viewer-before-menu');long_press(pressed);t,_=ui('photo-viewer-save-option');assert_save_option(t,pressed,'received-viewer')
   t=tap_save_once(t,before_files,'received-viewer',viewer=True)
   tap(node(t,desc='关闭图片'));t,_=ui('photo-close');record('viewer_returns_to_chat',optional(t,text='我的两台手机') is not None)
@@ -312,26 +322,32 @@ def core(reuse=False):
    if number==3:insert('gallery-between-text','Not an image');insert('gallery-between-file',None,kind='file',name='gallery-marker.bin',path='/data/data/'+PKG+'/files/incoming/fixture.bin',size=(OUT/'fixture.bin').stat().st_size)
    insert('gallery-'+str(number),None,mine=mine,kind='file',name=filename,path=private,size=image_path.stat().st_size)
   t,_=ui('gallery-ready');t=gallery_checks(t,'gallery')
-  t,_=ui('before-background');tap(node(t,desc='聊天背景'));t,_=ui('background-dialog')
-  record('background_controls_removed',optional(t,text='选择照片') is not None and not any(n.get('class')=='android.widget.SeekBar' or n.get('text') in ('模糊','柔化','背景只保存在这台手机，没有预设背景。') for n in t.iter('node')))
-  record('update_entry_visible',optional(t,text='检查更新') is not None)
-  clear_bounds=list(map(int,re.findall(r'\d+',node(t,text='清除').get('bounds'))));title_bounds=list(map(int,re.findall(r'\d+',node(t,text='清除背景').get('bounds'))));sub_bounds=list(map(int,re.findall(r'\d+',node(t,text='恢复默认界面').get('bounds'))))
-  photo_bounds=bounds(node(t,text='选择照片'));update_bounds=bounds(node(t,text='检查更新'))
-  record('clear_and_photo_buttons_align_in_right_column',abs(clear_bounds[0]-photo_bounds[0])<=3 and abs(clear_bounds[2]-photo_bounds[2])<=3 and clear_bounds[0]>=title_bounds[2] and clear_bounds[1]<sub_bounds[3] and clear_bounds[3]>title_bounds[1] and abs(update_bounds[0]-photo_bounds[0])<=3,clear=clear_bounds,photo=photo_bounds,title=title_bounds,update=update_bounds)
-  screen('background-dialog')
-  tap(node(t,text='清除'));time.sleep(.5);t,_=ui('background-cleared');record('clear_background_returns',optional(t,text='我的两台手机') is not None)
-  screen('cancel-check-before');tap(node(t,desc='聊天背景'));t,_=ui('cancel-check-settings')
-  # A UI hierarchy dump can outlast the network timeout. Capture the visible modal immediately, then press Back.
-  shell('input','tap',*map(str,center(node(t,text='检查更新'))));screen('cancel-check-visible')
-  modal=Image.open(OUT/'cancel-check-visible.png').convert('RGB');plain=Image.open(OUT/'cancel-check-before.png').convert('RGB')
-  def dialog_pixels(img):
-   return sum(img.getpixel((x,y))==(244,245,247) for y in range(int(img.height*.35),int(img.height*.65),8) for x in range(int(img.width*.1),int(img.width*.9),8))
-  record('stalled_update_check_shows_progress_dialog',dialog_pixels(modal)>dialog_pixels(plain)+1000)
-  shell('input','keyevent','4');t,_=ui('cancel-check-return');record('stalled_update_check_back_cancels_to_chat',optional(t,text='我的两台手机') is not None and optional(t,text='正在检查') is None)
  if reuse:
   private='/data/data/'+PKG+'/files/incoming/fixture-photo.png';adb('push',str(OUT/'fixture-photo.png'),private);shell('chown',uid+':'+uid,private);shell('restorecon',private)
-  tap(node(t,desc='聊天背景'));t,_=ui('fast-background');tap(node(t,text='清除'));t,_=ui('fast-default-chat')
-  record('new_update_fixture_ready',optional(t,text='我的两台手机') is not None)
+  insert('photo-arrival',None,kind='file',name='fixture-photo.png',path=private,size=len(photo))
+  insert('photo-own',None,mine=True,kind='file',name='fixture-photo.png',path=private,size=len(photo))
+  for number,mine,color in [(2,False,(80,120,180)),(3,True,(170,100,90))]:
+   filename='fixture-photo-gallery'+str(number)+'.png';image_path=OUT/filename;Image.new('RGB',(1080,1800),color).save(image_path)
+   private='/data/data/'+PKG+'/files/incoming/'+filename;adb('push',str(image_path),private);shell('chown',uid+':'+uid,private);shell('restorecon',private)
+   if number==3:insert('gallery-between-text','Not an image');insert('gallery-between-file',None,kind='file',name='gallery-marker.bin',path='/data/data/'+PKG+'/files/incoming/fixture.bin',size=(OUT/'fixture.bin').stat().st_size)
+   insert('gallery-'+str(number),None,mine=mine,kind='file',name=filename,path=private,size=image_path.stat().st_size)
+  t,_=ui('gallery-ready');record('new_gallery_fixture_ready');t=gallery_checks(t,'gallery')
+ t,_=ui('before-background');tap(node(t,desc='聊天背景'));t,_=ui('background-dialog')
+ record('background_controls_removed',optional(t,text='选择照片') is not None and not any(n.get('class')=='android.widget.SeekBar' or n.get('text') in ('模糊','柔化','背景只保存在这台手机，没有预设背景。') for n in t.iter('node')))
+ record('update_entry_visible',optional(t,text='检查更新') is not None)
+ clear_bounds=list(map(int,re.findall(r'\d+',node(t,text='清除').get('bounds'))));title_bounds=list(map(int,re.findall(r'\d+',node(t,text='清除背景').get('bounds'))));sub_bounds=list(map(int,re.findall(r'\d+',node(t,text='恢复默认界面').get('bounds'))))
+ photo_bounds=bounds(node(t,text='选择照片'));update_bounds=bounds(node(t,text='检查更新'))
+ record('clear_and_photo_buttons_align_in_right_column',abs(clear_bounds[0]-photo_bounds[0])<=3 and abs(clear_bounds[2]-photo_bounds[2])<=3 and clear_bounds[0]>=title_bounds[2] and clear_bounds[1]<sub_bounds[3] and clear_bounds[3]>title_bounds[1] and abs(update_bounds[0]-photo_bounds[0])<=3,clear=clear_bounds,photo=photo_bounds,title=title_bounds,update=update_bounds)
+ screen('background-dialog')
+ tap(node(t,text='清除'));time.sleep(.5);t,_=ui('background-cleared');record('clear_background_returns',optional(t,text='我的两台手机') is not None)
+ screen('cancel-check-before');tap(node(t,desc='聊天背景'));t,_=ui('cancel-check-settings')
+ # A UI hierarchy dump can outlast the network timeout. Capture the visible modal immediately, then press Back.
+ shell('input','tap',*map(str,center(node(t,text='检查更新'))));screen('cancel-check-visible')
+ modal=Image.open(OUT/'cancel-check-visible.png').convert('RGB');plain=Image.open(OUT/'cancel-check-before.png').convert('RGB')
+ def dialog_pixels(img):
+  return sum(img.getpixel((x,y))==(244,245,247) for y in range(int(img.height*.35),int(img.height*.65),8) for x in range(int(img.width*.1),int(img.width*.9),8))
+ record('stalled_update_check_shows_progress_dialog',dialog_pixels(modal)>dialog_pixels(plain)+1000)
+ shell('input','keyevent','4');t,_=ui('cancel-check-return');record('stalled_update_check_back_cancels_to_chat',optional(t,text='我的两台手机') is not None and optional(t,text='正在检查') is None)
  # Add human-readable demo messages to the test device only, for actual release screenshots.
  insert('demo-1','现在消息终于能跟到最下面了。',mine=True)
  insert('demo-2','收到。图片可以直接点开看。')
@@ -425,8 +441,8 @@ try:
  else:
   reuse=os.environ.get('REUSE_CORE')=='1'
   if reuse:
-   previous=json.loads((OUT/'reused-core-checks.json').read_text());checks=[{**c,'source_run':37494942937} for c in previous]
-   record('unchanged_app_reuses_verified_native_ui_checks',True,source_commit='0e90a758f78b34e5ac6f1f26f0f4aba9cf9ff4ec')
+   previous=json.loads((OUT/'reused-core-checks.json').read_text());checks=[{**c,'source_run':37746361502} for c in previous]
+   record('identical_apk_reuses_completed_native_ui_segment',True,source_commit='cc26445c816cf9d134da550e9f011707342c047f',scope='through regular file saving; gallery, settings, cancellation and live upgrade are fresh')
   core(reuse)
 except Exception as e:
  if len(sys.argv)>1 and sys.argv[1]=='update' and (OUT/'previous-channel.json').exists():subprocess.run([sys.executable,str(OUT/'publish_release.py'),'rollback'],check=False)

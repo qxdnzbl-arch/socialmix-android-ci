@@ -1,1 +1,1 @@
-563 final candidate: image gallery paging, compact one-tap save, restored chat search, right-column alignment; capture cancel dialog before idle-dump timeout
+563 final candidate: use a valid double-tap interval and verify real visible zoom; reuse only the hashed successful segment of the identical APK; rerun gallery, settings, cancellation and live upgrade

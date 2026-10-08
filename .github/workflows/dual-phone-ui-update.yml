@@ -58,17 +58,11 @@ jobs:
             gh run download 37473258717 -n shuangjichuan-v5-5-slow-network-acceptance -D previous-artifact
             cp previous-artifact/app/build/outputs/apk/release/app-release.apk previous-artifact/baseline.apk
           fi
-          git fetch --depth=1 origin 0e90a758f78b34e5ac6f1f26f0f4aba9cf9ff4ec
-          if git diff --quiet 0e90a758f78b34e5ac6f1f26f0f4aba9cf9ff4ec HEAD -- dualphone/app && gh run download 37494942937 -n shuangjichuan-v5-6-native-ui-update -D reused-core; then
-            python3 - <<'PY'
-          import json,pathlib
-          previous=pathlib.Path('reused-core/acceptance')
-          assert json.loads((previous/'core-result.json').read_text())['passed']
-          checks=json.loads((previous/'runtime-checks.json').read_text());stop=next(i for i,c in enumerate(checks) if c['check']=='core_acceptance_complete');checks=checks[:stop+1]
-          assert all(c['passed'] for c in checks)
-          pathlib.Path('dualphone/acceptance/reused-core-checks.json').write_text(json.dumps(checks,ensure_ascii=False,indent=2))
-          PY
-            echo 'REUSE_CORE=1' >> "$GITHUB_ENV"
+          git fetch --depth=1 origin cc26445c816cf9d134da550e9f011707342c047f
+          if gh run download 37746361502 -n shuangjichuan-v5-6-native-ui-update -D reused-core; then
+            if python3 dualphone/acceptance/verify_native_checkpoint.py reused-core; then
+              echo 'REUSE_CORE=1' >> "$GITHUB_ENV"
+            fi
           fi
       - name: Enable hardware acceleration
         run: sudo chmod 666 /dev/kvm
