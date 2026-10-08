@@ -28,7 +28,10 @@ public class MainActivity extends Activity {
     String screen="home",filter="all",query="",editorReturn="home",searchReturnFilter="all";
     int albumIndex=0;
     static class AlbumItem {Store.Note note;String file;int imageIndex;long time;AlbumItem(Store.Note n,String f,int i,long t){note=n;file=f;imageIndex=i;time=t;}}
-    boolean changing=false,draftWarning=false,searchOpen=false;
+    boolean changing=false,draftWarning=false,searchOpen=false,categoryDragMoved=false,suppressCategoryClick=false;
+    String draggingCategoryId=null;
+    View categoryDragView=null;
+    ArrayList<Store.Category> categoryDragOriginal=null;
     TextView categoryButton;
     final Handler handler=new Handler();
     Runnable draftTask;
@@ -118,11 +121,69 @@ public class MainActivity extends Activity {
     void normalizeFilter(){if(!filter.equals("all")){boolean exists=false;for(Store.Category c:store.categories)if(c.id.equals(filter))exists=true;if(!exists)filter="all";}}
     void home(){
         editing=null;normalizeFilter();if(!searchOpen)query="";base("home");searchBox=null;searchInput=null;if(searchOpen)searchHeader();else mainHeader("home");
-        if(!searchOpen&&!store.categories.isEmpty()){HorizontalScrollView tabs=new HorizontalScrollView(this);tabs.setHorizontalScrollBarEnabled(false);LinearLayout chips=row();chips.setPadding(dp(20),0,dp(12),dp(4));for(Store.Category c:store.categories)addFilter(chips,c.id,c.name);tabs.addView(chips);root.addView(tabs,lp(-1,48));}
+        if(!searchOpen)categoryTabs();
         list=column();list.setPadding(dp(20),dp(searchOpen?6:10),dp(20),dp(4));homeList=new ListView(this);homeList.setDivider(null);homeList.setVerticalScrollBarEnabled(false);homeList.setBackgroundColor(backgroundFile!=null&&backgroundFile.isFile()?Color.TRANSPARENT:BG);homeList.setClipToPadding(false);homeList.addHeaderView(list,null,false);root.addView(homeList,new LinearLayout.LayoutParams(-1,0,1));renderList();homeList.post(()->homeList.setSelection(scrollPosition));
         if(!searchOpen){LinearLayout footer=row();footer.setPadding(dp(20),dp(10),dp(20),dp(12));TextView categories=button("分类",false,this::categoriesDialog);footer.addView(categories,lp(76,54));TextView add=button("＋  记一条",true,()->newNote(null));LinearLayout.LayoutParams ap=new LinearLayout.LayoutParams(0,dp(54),1);ap.leftMargin=dp(12);footer.addView(add,ap);root.addView(footer);root.requestFocus();}
     }
-    void addFilter(LinearLayout chips,String id,String label){boolean active=filter.equals(id),albumMode="album".equals(screen);TextView t=text(label,15,active?WHITE:MUTED,active);t.setGravity(Gravity.CENTER);t.setPadding(dp(17),dp(10),dp(17),dp(10));t.setBackground(ripple(active?ACCENT:0,14,0));t.setOnClickListener(v->{filter=active?"all":id;scrollPosition=0;hideKeyboard();if(albumMode)album();else home();});LinearLayout.LayoutParams p=lp(-2,42);p.rightMargin=dp(6);chips.addView(t,p);}
+    void categoryTabs(){
+        if(store.categories.isEmpty())return;
+        HorizontalScrollView tabs=new HorizontalScrollView(this);tabs.setHorizontalScrollBarEnabled(false);tabs.setFillViewport(false);
+        LinearLayout chips=row();chips.setPadding(dp(20),0,dp(12),dp(4));for(Store.Category c:store.categories)addFilter(chips,c.id,c.name);
+        tabs.addView(chips);enableCategoryDrag(chips,tabs);root.addView(tabs,lp(-1,48));
+    }
+    int categoryIndex(String id){for(int i=0;i<store.categories.size();i++)if(store.categories.get(i).id.equals(id))return i;return -1;}
+    boolean moveCategoryInMemory(String id,int to){
+        int from=categoryIndex(id);if(from<0||store.categories.size()<2)return false;to=Math.max(0,Math.min(to,store.categories.size()-1));if(from==to)return false;
+        Store.Category c=store.categories.remove(from);store.categories.add(to,c);return true;
+    }
+    boolean persistCategoryOrder(){try{store.save();return true;}catch(Exception e){return false;}}
+    void beginCategoryDrag(TextView source,String id){
+        if(categoryIndex(id)<0||store.categories.size()<2)return;
+        categoryDragOriginal=new ArrayList<>(store.categories);draggingCategoryId=id;categoryDragView=source;categoryDragMoved=false;suppressCategoryClick=true;
+        source.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS);source.setAlpha(.68f);
+        ClipData data=ClipData.newPlainText("分类",id);View.DragShadowBuilder shadow=new View.DragShadowBuilder(source);
+        boolean started=Build.VERSION.SDK_INT>=24?source.startDragAndDrop(data,shadow,id,0):source.startDrag(data,shadow,id,0);
+        if(!started){source.setAlpha(1f);categoryDragOriginal=null;draggingCategoryId=null;categoryDragView=null;suppressCategoryClick=false;}
+    }
+    void finishCategoryDrag(boolean keep){
+        ArrayList<Store.Category> original=categoryDragOriginal;boolean moved=categoryDragMoved;
+        if(categoryDragView!=null)categoryDragView.setAlpha(1f);
+        categoryDragOriginal=null;draggingCategoryId=null;categoryDragView=null;categoryDragMoved=false;
+        if(original!=null&&(!keep||(moved&&!persistCategoryOrder()))){
+            store.categories.clear();store.categories.addAll(original);
+            handler.post(()->{if("album".equals(screen))album();else home();});
+            if(keep&&moved)error("分类顺序没有保存成功，请检查手机剩余空间后再试。");
+        }
+        suppressCategoryClick=true;handler.postDelayed(()->suppressCategoryClick=false,320);
+    }
+    void enableCategoryDrag(LinearLayout chips,HorizontalScrollView tabs){
+        chips.setOnDragListener((v,event)->{
+            Object local=event.getLocalState();if(!(local instanceof String))return false;String id=(String)local;
+            if(event.getAction()==DragEvent.ACTION_DRAG_STARTED)return categoryIndex(id)>=0;
+            if(event.getAction()==DragEvent.ACTION_DRAG_LOCATION){
+                if(!id.equals(draggingCategoryId))return false;
+                float visibleX=event.getX()-tabs.getScrollX();int edge=dp(58);
+                if(visibleX<edge)tabs.scrollBy(-dp(18),0);else if(visibleX>tabs.getWidth()-edge)tabs.scrollBy(dp(18),0);
+                int from=categoryIndex(id),to=0;View dragged=null;
+                for(int i=0;i<chips.getChildCount();i++){View child=chips.getChildAt(i);Object tag=child.getTag();if(id.equals(tag)){dragged=child;continue;}if(event.getX()>child.getLeft()+child.getWidth()/2f)to++;}
+                if(from>=0&&dragged!=null&&to!=from&&moveCategoryInMemory(id,to)){
+                    ViewGroup.LayoutParams params=dragged.getLayoutParams();chips.removeView(dragged);chips.addView(dragged,to,params);categoryDragMoved=true;
+                }
+                return true;
+            }
+            if(event.getAction()==DragEvent.ACTION_DROP){finishCategoryDrag(true);return true;}
+            if(event.getAction()==DragEvent.ACTION_DRAG_ENDED){if(categoryDragOriginal!=null)finishCategoryDrag(event.getResult());return true;}
+            return true;
+        });
+    }
+    void addFilter(LinearLayout chips,String id,String label){
+        boolean active=filter.equals(id),albumMode="album".equals(screen);TextView t=text(label,15,active?WHITE:MUTED,active);t.setGravity(Gravity.CENTER);t.setPadding(dp(17),dp(10),dp(17),dp(10));t.setBackground(ripple(active?ACCENT:0,14,0));t.setTag(id);t.setContentDescription("分类："+label+"，长按拖动排序");
+        t.setOnClickListener(v->{if(suppressCategoryClick)return;filter=active?"all":id;scrollPosition=0;hideKeyboard();if(albumMode)album();else home();});
+        final float[] down=new float[2];final Runnable[] hold=new Runnable[1];final boolean[] started={false};int slop=ViewConfiguration.get(this).getScaledTouchSlop();
+        hold[0]=()->{started[0]=true;beginCategoryDrag(t,id);};
+        t.setOnTouchListener((v,e)->{int action=e.getActionMasked();if(action==MotionEvent.ACTION_DOWN){down[0]=e.getX();down[1]=e.getY();started[0]=false;handler.postDelayed(hold[0],400);}else if(action==MotionEvent.ACTION_MOVE&&!started[0]){if(Math.abs(e.getX()-down[0])>slop||Math.abs(e.getY()-down[1])>slop)handler.removeCallbacks(hold[0]);}else if(action==MotionEvent.ACTION_UP||action==MotionEvent.ACTION_CANCEL)handler.removeCallbacks(hold[0]);return false;});
+        LinearLayout.LayoutParams p=lp(-2,42);p.rightMargin=dp(6);chips.addView(t,p);
+    }
     ArrayList<AlbumItem> albumItems(){
         ArrayList<AlbumItem> items=new ArrayList<>();
         for(Store.Note n:store.notes)if(!n.deleted&&(filter.equals("all")||filter.equals(n.category))){
@@ -132,7 +193,7 @@ public class MainActivity extends Activity {
     }
     void album(){
         editing=null;current=null;normalizeFilter();base("album");mainHeader("album");
-        if(!store.categories.isEmpty()){HorizontalScrollView tabs=new HorizontalScrollView(this);tabs.setHorizontalScrollBarEnabled(false);LinearLayout chips=row();chips.setPadding(dp(20),0,dp(12),dp(4));for(Store.Category c:store.categories)addFilter(chips,c.id,c.name);tabs.addView(chips);root.addView(tabs,lp(-1,48));}
+        categoryTabs();
         ArrayList<AlbumItem> items=albumItems();LinearLayout content=column();content.setPadding(dp(12),dp(8),dp(12),dp(12));ScrollView scroll=scroller(content);
         if(!filter.equals("all")){LinearLayout label=row();label.setPadding(dp(8),0,dp(8),dp(10));label.addView(text(store.categoryName(filter),14,MUTED,true),new LinearLayout.LayoutParams(0,-2,1));content.addView(label);}
         if(items.isEmpty()){
