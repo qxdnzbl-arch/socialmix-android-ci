@@ -34,10 +34,11 @@ public final class SyncJobService extends JobService {
                 if(!store.ready)return;
                 CloudSync sync=new CloudSync(this,store,new File(getFilesDir(),"background.img"));
                 if(!sync.enabled())return;
-                boolean dirty=sync.dirty();
+                boolean dirty=sync.dirty();long deliveredBefore=sync.deliveredRevision();
                 CloudSync.Result result=sync.syncNow(false);
                 if(result.ok){
                     if(result.changed)SyncNotifier.received(this,result.revision);
+                    if(sync.deliveredRevision()>deliveredBefore)SyncNotifier.delivered(this,sync.deliveredRevision());
                     if(dirty&&!sync.dirty())SyncNotifier.uploaded(this,result.revision);
                 }else SyncNotifier.failed(this,result.message);
             }catch(Exception e){
