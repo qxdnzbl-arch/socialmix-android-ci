@@ -210,7 +210,7 @@ public class TransferService extends Service {
       String frame=crypto.encrypt(pair);
       if(nearby!=null)for(String ep:endpoints)
         nearby.sendPayload(ep,Payload.fromBytes(frame.getBytes(StandardCharsets.UTF_8)));
-      if(!crypto.paired())relaySendText(frame,null);
+      relaySendText(frame,null);
     }catch(Exception e){Log.w("DualE2E","pair beacon "+e);}
   }
 
@@ -393,42 +393,14 @@ public class TransferService extends Service {
     private void handlePayloadReceived(String endpointId,Payload payload){
       try{
         if(payload.getType()==Payload.Type.BYTES){
-          JSONObject j=new JSONObject(
-            new String(payload.asBytes(),StandardCharsets.UTF_8));
-
-          if(!SECRET.equals(j.optString("auth"))) return;
-
-          String op=j.optString("op");
-          if("ack".equals(op)){
-            receivedAck(j.optString("id"));
-          }else if("text".equals(op)){
-            String id=j.getString("id");
-            boolean fresh=db.addText(id,false,j.optString("text"),
-              j.optLong("created",System.currentTimeMillis()),"received");
-            if(fresh){changed();notifyIncoming("text","");}
-            ackNearby(endpointId,id);
-          }else if("file_meta".equals(op)){
-            long pid=j.getLong("payloadId");
-            incomingPeers.put(pid,endpointId);
-            incomingMeta.put(
-              pid,
-              new FileMeta(
-                j.getString("id"),
-                safeName(j.optString("name","文件")),
-                j.optLong("created",System.currentTimeMillis()),
-                j.optLong("size",0)
-              )
-            );
-            tryFinalizeIncoming(pid);
-          }
+          String frame=new String(payload.asBytes(),StandardCharsets.UTF_8);
+          handleSecureFrame(frame,endpointId,null);
         }else if(payload.getType()==Payload.Type.FILE){
           incomingPeers.put(payload.getId(),endpointId);
           incomingFiles.put(payload.getId(),payload);
           tryFinalizeIncoming(payload.getId());
         }
-      }catch(Exception e){
-        Log.w("DualNearby","payload "+e);
-      }
+      }catch(Exception e){Log.w("DualNearby","encrypted payload "+e);}
     }
 
     @Override public void onPayloadTransferUpdate(
@@ -445,6 +417,7 @@ public class TransferService extends Service {
         String msgId=outgoing.remove(id);
         if(msgId!=null){
           inFlight.remove(msgId);
+          File temp=temporaryEncrypted.remove(id);if(temp!=null)temp.delete();
           db.markSent(msgId);
           changed();
           return;
@@ -457,7 +430,8 @@ public class TransferService extends Service {
         || update.getStatus()==PayloadTransferUpdate.Status.CANCELED
       ){
         String failedMsg=outgoing.remove(id);
-        if(failedMsg!=null) inFlight.remove(failedMsg);
+        if(failedMsg!=null)inFlight.remove(failedMsg);
+        File temp=temporaryEncrypted.remove(id);if(temp!=null)temp.delete();
         Payload p=incomingFiles.remove(id);
         incomingMeta.remove(id);
         incomingPeers.remove(id);
@@ -468,43 +442,43 @@ public class TransferService extends Service {
   };
 
   private void tryFinalizeIncoming(long pid){
-    if(!completedIncoming.contains(pid)) return;
-
-    FileMeta meta=incomingMeta.get(pid);
+    if(!completedIncoming.contains(pid))return;
+    FileMeta outer=incomingMeta.get(pid);
     Payload payload=incomingFiles.get(pid);
-    if(meta==null||payload==null) return;
-
+    if(outer==null||payload==null)return;
     try{
-      File dir=new File(getFilesDir(),"incoming");
-      dir.mkdirs();
-
-      File dst=new File(dir,meta.id+"_"+safeName(meta.name));
-      Uri uri=payload.asFile().asUri();
-      if(!db.hasMessage(meta.id)){
-        File tmp=new File(dir,meta.id+".receiving");
-        try(InputStream in=getContentResolver().openInputStream(uri);
-            OutputStream out=new FileOutputStream(tmp)){
-          copyLimited(in,out,500L*1024*1024);
-        }catch(Exception failure){tmp.delete();throw failure;}
-        if(tmp.length()!=meta.size){tmp.delete();throw new IOException("nearby file size mismatch");}
-        if(dst.exists()&&!dst.delete()){tmp.delete();throw new IOException("incoming path busy");}
-        if(!tmp.renameTo(dst)){tmp.delete();throw new IOException("incoming finalize failed");}
-        boolean fresh=db.addFile(meta.id,false,meta.name,dst.getAbsolutePath(),
-          dst.length(),meta.created,"received");
-        if(fresh){changed();notifyIncoming("file",meta.name);}
+      PairCrypto.ReceivedFile received;
+      try(InputStream in=getContentResolver().openInputStream(payload.asFile().asUri())){
+        received=crypto.decryptFile(this,in);
       }
-      try{getContentResolver().delete(uri,null,null);}catch(Exception ignored){}
+      JSONObject m=received.metadata;
+      String sender=m.optString("sender","");
+      String id=m.optString("id","");
+      String name=safeName(m.optString("name","文件"));
+      if(!crypto.fromPeer(sender)||!id.matches("[0-9a-fA-F-]{36}")
+          ||!id.equals(outer.id)||!name.equals(outer.name)||received.file.length()!=outer.size){
+        received.file.delete();throw new SecurityException("Nearby encrypted metadata mismatch");
+      }
+      commitReceivedFile(received,id,name,m.optLong("created"));
       String endpoint=incomingPeers.get(pid);
-      if(endpoint!=null)ackNearby(endpoint,meta.id);
-    }catch(Exception e){
-      Log.w("DualNearby","save file "+e);
-    }finally{
-      incomingFiles.remove(pid);
-      incomingMeta.remove(pid);
-      incomingPeers.remove(pid);
-      completedIncoming.remove(pid);
-      payload.close();
+      if(endpoint!=null)ackNearby(endpoint,id);
+      try{getContentResolver().delete(payload.asFile().asUri(),null,null);}catch(Exception ignored){}
+    }catch(Exception e){Log.w("DualE2E","nearby file rejected "+e);}
+    finally{
+      incomingFiles.remove(pid);incomingMeta.remove(pid);incomingPeers.remove(pid);
+      completedIncoming.remove(pid);payload.close();
     }
+  }
+
+  private void commitReceivedFile(PairCrypto.ReceivedFile receive,String id,String name,long created)throws Exception{
+    if(db.hasMessage(id)){receive.file.delete();return;}
+    File folder=new File(getFilesDir(),"incoming");folder.mkdirs();
+    File destination=new File(folder,id+"_"+safeName(name));
+    if(destination.exists()&&!destination.delete()){receive.file.delete();throw new IOException("destination busy");}
+    if(!receive.file.renameTo(destination)){receive.file.delete();throw new IOException("unable to commit file");}
+    boolean fresh=db.addFile(id,false,name,destination.getAbsolutePath(),
+      destination.length(),created,"received");
+    if(fresh){changed();notifyIncoming("file",name);}
   }
 
   private void requestFlush(){
@@ -549,58 +523,45 @@ public class TransferService extends Service {
   }
 
   private boolean sendNearby(String endpoint,TransferDb.Msg m){
-    if(inFlight.contains(m.id)) return true;
+    if(!crypto.paired())return false;
+    if(inFlight.contains(m.id))return true;
     try{
       if("text".equals(m.kind)){
-        JSONObject j=new JSONObject()
-          .put("auth",SECRET)
-          .put("op","text")
-          .put("id",m.id)
-          .put("created",m.createdAt)
+        JSONObject j=new JSONObject().put("op","text").put("sender",deviceId)
+          .put("id",m.id).put("created",m.createdAt)
           .put("text",m.text==null?"":m.text);
-
-        byte[] bytes=j.toString().getBytes(StandardCharsets.UTF_8);
-        if(bytes.length>30000) return false;
-
+        byte[] bytes=crypto.encrypt(j).getBytes(StandardCharsets.UTF_8);
+        if(bytes.length>30000)return false;
         Payload p=Payload.fromBytes(bytes);
-        inFlight.add(m.id);
-        outgoing.put(p.getId(),m.id);
-
+        inFlight.add(m.id);outgoing.put(p.getId(),m.id);
         nearby.sendPayload(endpoint,p)
           .addOnFailureListener(e->{outgoing.remove(p.getId());inFlight.remove(m.id);});
-
         return true;
       }
-
-      File file=new File(m.filePath==null?"":m.filePath);
-      if(!file.isFile()) return false;
-
-      Payload fp=Payload.fromFile(file);
-      fp.setFileName(safeName(m.fileName));
-
-      JSONObject meta=new JSONObject()
-        .put("auth",SECRET)
-        .put("op","file_meta")
-        .put("id",m.id)
-        .put("created",m.createdAt)
-        .put("name",safeName(m.fileName))
-        .put("size",file.length())
+      File src=new File(m.filePath==null?"":m.filePath);
+      if(!src.isFile())return false;
+      JSONObject info=new JSONObject().put("op","file").put("sender",deviceId)
+        .put("id",m.id).put("created",m.createdAt)
+        .put("name",safeName(m.fileName)).put("size",src.length())
+        .put("sha",PairCrypto.shaFile(src));
+      File encrypted=crypto.encryptFile(this,src,info);
+      Payload fp=Payload.fromFile(encrypted);
+      fp.setFileName("encrypted.sjc");
+      JSONObject meta=new JSONObject().put("op","file_meta").put("sender",deviceId)
+        .put("id",m.id).put("created",m.createdAt)
+        .put("name",safeName(m.fileName)).put("size",src.length())
         .put("payloadId",fp.getId());
-
-      nearby.sendPayload(
-        endpoint,
-        Payload.fromBytes(meta.toString().getBytes(StandardCharsets.UTF_8))
-      );
-
-      inFlight.add(m.id);
-      outgoing.put(fp.getId(),m.id);
+      String frame=crypto.encrypt(meta);
+      nearby.sendPayload(endpoint,Payload.fromBytes(frame.getBytes(StandardCharsets.UTF_8)));
+      inFlight.add(m.id);outgoing.put(fp.getId(),m.id);
+      temporaryEncrypted.put(fp.getId(),encrypted);
       nearby.sendPayload(endpoint,fp)
-        .addOnFailureListener(e->{outgoing.remove(fp.getId());inFlight.remove(m.id);});
-
+        .addOnFailureListener(e->{
+          outgoing.remove(fp.getId());inFlight.remove(m.id);
+          File temp=temporaryEncrypted.remove(fp.getId());if(temp!=null)temp.delete();
+        });
       return true;
-    }catch(Exception e){
-      return false;
-    }
+    }catch(Exception e){Log.w("DualE2E","Nearby send "+e);return false;}
   }
 
   private void relayReceiveLoop(String base){
