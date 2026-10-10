@@ -63,6 +63,7 @@ public class MainActivity extends Activity {
     @Override protected void onResume(){
         super.onResume();foreground=true;
         if(cloudSync!=null&&cloudSync.enabled()){
+            SyncNotifier.requestPermission(this);
             SyncJobService.schedule(this);
             if(!syncing&&cloudSync.lastSync()!=knownSync){
                 store=new Store(this);cloudSync=new CloudSync(this,store,backgroundFile);
@@ -137,7 +138,7 @@ public class MainActivity extends Activity {
             runOnUiThread(()->{
                 syncing=false;knownSync=task.lastSync();
                 if(result.ok){
-                    if(wasDirty&&!task.dirty()&&!foreground)SyncNotifier.uploaded(this,result.revision);
+                    if(wasDirty&&!task.dirty())SyncNotifier.uploaded(this,result.revision);
                     if(result.changed)SyncNotifier.received(this,result.revision);
                     if(manual)toast("同步完成");
                     if(result.changed){if("home".equals(screen))home();else if("album".equals(screen))album();}
