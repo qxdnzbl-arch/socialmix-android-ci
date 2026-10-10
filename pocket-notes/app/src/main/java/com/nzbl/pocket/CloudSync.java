@@ -13,8 +13,9 @@ import java.util.*;
 import org.json.*;
 
 final class CloudSync {
-    static final String ENDPOINT="https://nvwdtfnhsyfdopaxdylx.supabase.co/functions/v1/suishoucun-sync";
-    static final int MAX_ASSET=66*1024*1024,MAX_MANIFEST=8*1024*1024;
+    static final String RPC_BASE="https://nvwdtfnhsyfdopaxdylx.supabase.co/rest/v1/rpc/";
+    static final String API_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im52d2R0Zm5oc3lmZG9wYXhkeWx4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODgwMTExNTcsImV4cCI6MjEwMzU4NzE1N30.wXmcZ6KIQOt-eet6ONUgl9HI1eJhJAofdf2_JPD_0Ek";
+    static final int MAX_ASSET=66*1024*1024,MAX_MANIFEST=8*1024*1024,CHUNK_BYTES=256*1024;
     final Context context;
     final Store store;
     final File backgroundFile;
@@ -255,54 +256,78 @@ final class CloudSync {
         try(FileInputStream in=new FileInputStream(from);FileOutputStream out=new FileOutputStream(to)){copy(in,out,max);}
     }
 
-    Remote getManifest(String auth)throws Exception{
-        HttpURLConnection c=open(ENDPOINT,"GET",auth);
-        int status=c.getResponseCode();
-        if(status==404){c.disconnect();return new Remote(0,null);}
-        if(status!=200){String e=readError(c);throw new IOException("云端返回 "+status+" "+e);}
-        long rev=parseRevision(c);File out=new File(context.getCacheDir(),"sync-remote-"+UUID.randomUUID()+".bin");
-        try(InputStream in=c.getInputStream();FileOutputStream file=new FileOutputStream(out)){copy(in,file,MAX_MANIFEST+1024);}finally{c.disconnect();}
-        return new Remote(rev,out);
+    JSONObject rpc(String name,String auth,JSONObject body)throws Exception{
+        HttpURLConnection c=(HttpURLConnection)new URL(RPC_BASE+name).openConnection();
+        c.setConnectTimeout(12000);c.setReadTimeout(60000);c.setRequestMethod("POST");c.setDoOutput(true);c.setUseCaches(false);
+        c.setRequestProperty("apikey",API_KEY);c.setRequestProperty("Authorization","Bearer "+API_KEY);c.setRequestProperty("x-sync-auth",auth);
+        c.setRequestProperty("Content-Type","application/json");c.setRequestProperty("Accept","application/json");c.setRequestProperty("User-Agent","Suishoucun-Android");
+        byte[] request=body.toString().getBytes(StandardCharsets.UTF_8);c.setFixedLengthStreamingMode(request.length);
+        try(OutputStream out=c.getOutputStream()){out.write(request);}
+        int status=c.getResponseCode();InputStream in=status>=200&&status<300?c.getInputStream():c.getErrorStream();
+        String response="";if(in!=null){ByteArrayOutputStream out=new ByteArrayOutputStream();try{copy(in,out,1024*1024);}catch(Exception ignored){}response=out.toString("UTF-8");}
+        c.disconnect();
+        if(status<200||status>=300)throw new IOException("云端返回 "+status+" "+response);
+        if(response.trim().isEmpty())return new JSONObject();
+        return new JSONObject(response);
     }
-    long putManifest(String auth,long expected,File file)throws Exception{
-        HttpURLConnection c=open(ENDPOINT,"PUT",auth);c.setRequestProperty("x-sync-revision",String.valueOf(expected));
-        sendFile(c,file);
-        int status=c.getResponseCode();
-        if(status==409){long rev=parseRevision(c);c.disconnect();throw new Conflict(rev);}
-        if(status!=200){String e=readError(c);throw new IOException("云端返回 "+status+" "+e);}
-        long rev=parseRevision(c);c.disconnect();return rev;
+    JSONObject objectStatus(String auth,String object)throws Exception{
+        return rpc("suishoucun_sync_object_status_v2",auth,new JSONObject().put("p_object",object));
     }
-    boolean assetExists(String auth,String name)throws Exception{
-        HttpURLConnection c=open(assetUrl(name),"HEAD",auth);int status=c.getResponseCode();c.disconnect();
-        if(status==200)return true;if(status==404)return false;throw new IOException("检查图片失败 "+status);
+    void putObject(String auth,String object,File file)throws Exception{
+        long length=file.length();int chunks=(int)Math.max(1,(length+CHUNK_BYTES-1)/CHUNK_BYTES);
+        rpc("suishoucun_sync_prepare_object_v2",auth,new JSONObject().put("p_object",object).put("p_chunk_count",chunks));
+        try(FileInputStream in=new FileInputStream(file)){
+            byte[] buf=new byte[CHUNK_BYTES];
+            for(int i=0;i<chunks;i++){
+                int need=(int)Math.min(CHUNK_BYTES,Math.max(0,length-(long)i*CHUNK_BYTES)),off=0,n;
+                while(off<need&&(n=in.read(buf,off,need-off))>0)off+=n;
+                if(off!=need)throw new EOFException();
+                byte[] part=off==buf.length?buf:Arrays.copyOf(buf,off);
+                String encoded=Base64.encodeToString(part,Base64.NO_WRAP);
+                rpc("suishoucun_sync_put_chunk_v2",auth,new JSONObject().put("p_object",object).put("p_index",i).put("p_chunk_count",chunks).put("p_payload",encoded));
+            }
+        }
+        JSONObject status=objectStatus(auth,object);if(!status.optBoolean("complete",false))throw new IOException("云端文件上传不完整");
     }
-    void putAsset(String auth,String name,File file)throws Exception{
-        HttpURLConnection c=open(assetUrl(name),"PUT",auth);sendFile(c,file);int status=c.getResponseCode();
-        if(status!=200){String e=readError(c);throw new IOException("上传图片失败 "+status+" "+e);}c.disconnect();
-    }
-    File getAsset(String auth,String name)throws Exception{
-        HttpURLConnection c=open(assetUrl(name),"GET",auth);int status=c.getResponseCode();
-        if(status!=200){String e=readError(c);throw new IOException("下载图片失败 "+status+" "+e);}
-        File out=new File(context.getCacheDir(),"sync-download-"+UUID.randomUUID()+".bin");
-        try(InputStream in=c.getInputStream();FileOutputStream file=new FileOutputStream(out)){copy(in,file,MAX_ASSET+1024);}finally{c.disconnect();}
+    File getObject(String auth,String object,int max)throws Exception{
+        JSONObject status=objectStatus(auth,object);if(!status.optBoolean("complete",false))throw new FileNotFoundException("云端文件不存在");
+        int chunks=status.optInt("chunks",0);if(chunks<1||chunks>4096)throw new IOException("云端文件分片无效");
+        File out=new File(context.getCacheDir(),"sync-download-"+UUID.randomUUID()+".bin");long total=0;
+        try(FileOutputStream file=new FileOutputStream(out)){
+            for(int i=0;i<chunks;i++){
+                JSONObject part=rpc("suishoucun_sync_get_chunk_v2",auth,new JSONObject().put("p_object",object).put("p_index",i));
+                if(!part.optBoolean("found",false)||part.optInt("chunks",0)!=chunks)throw new IOException("云端文件分片缺失");
+                byte[] bytes=Base64.decode(part.getString("payload"),Base64.DEFAULT);total+=bytes.length;if(total>max)throw new IOException("同步文件过大");file.write(bytes);
+            }
+        }catch(Exception e){out.delete();throw e;}
         return out;
     }
+    Remote getManifest(String auth)throws Exception{
+        JSONObject head=rpc("suishoucun_sync_head_v2",auth,new JSONObject());long revision=head.optLong("revision",0);
+        if(revision<=0)return new Remote(0,null);
+        String object=head.optString("manifest","");if(object.isEmpty())throw new IOException("云端清单缺失");
+        return new Remote(revision,getObject(auth,object,MAX_MANIFEST+1024));
+    }
+    long putManifest(String auth,long expected,File file)throws Exception{
+        String object="manifest/"+UUID.randomUUID().toString().replace("-","");
+        putObject(auth,object,file);
+        JSONObject response=rpc("suishoucun_sync_commit_v2",auth,new JSONObject().put("p_expected",expected).put("p_manifest",object));
+        if(response.optBoolean("conflict",false)){
+            try{rpc("suishoucun_sync_delete_object_v2",auth,new JSONObject().put("p_object",object));}catch(Exception ignored){}
+            throw new Conflict(response.optLong("revision",0));
+        }
+        if(!response.optBoolean("ok",false))throw new IOException("云端提交失败");
+        return response.optLong("revision",0);
+    }
+    boolean assetExists(String auth,String name)throws Exception{
+        return objectStatus(auth,"asset/"+name).optBoolean("complete",false);
+    }
+    void putAsset(String auth,String name,File file)throws Exception{putObject(auth,"asset/"+name,file);}
+    File getAsset(String auth,String name)throws Exception{return getObject(auth,"asset/"+name,MAX_ASSET+1024);}
     void deleteRemote()throws Exception{
-        if(!enabled())return;String auth=authForCode(code());HttpURLConnection c=open(ENDPOINT,"DELETE",auth);int status=c.getResponseCode();
-        if(status!=200){String e=readError(c);throw new IOException("删除云端数据失败 "+status+" "+e);}c.disconnect();
+        if(!enabled())return;String auth=authForCode(code());JSONObject r=rpc("suishoucun_sync_delete_v2",auth,new JSONObject());
+        if(!r.optBoolean("ok",false))throw new IOException("删除云端数据失败");
     }
-    static HttpURLConnection open(String address,String method,String auth)throws Exception{
-        HttpURLConnection c=(HttpURLConnection)new URL(address).openConnection();c.setConnectTimeout(12000);c.setReadTimeout(60000);c.setRequestMethod(method);c.setRequestProperty("x-sync-auth",auth);c.setRequestProperty("User-Agent","Suishoucun-Android");c.setUseCaches(false);return c;
-    }
-    static void sendFile(HttpURLConnection c,File file)throws Exception{
-        c.setDoOutput(true);c.setRequestProperty("Content-Type","application/octet-stream");c.setFixedLengthStreamingMode(file.length());
-        try(OutputStream out=c.getOutputStream();FileInputStream in=new FileInputStream(file)){copy(in,out,Math.max(MAX_ASSET,MAX_MANIFEST)+2048L);}
-    }
-    static String readError(HttpURLConnection c){
-        try{InputStream in=c.getErrorStream();if(in==null)return "";ByteArrayOutputStream out=new ByteArrayOutputStream();copy(in,out,64*1024);return out.toString("UTF-8");}catch(Exception e){return "";}
-    }
-    static long parseRevision(HttpURLConnection c){try{return Long.parseLong(c.getHeaderField("x-sync-revision"));}catch(Exception e){return 0;}}
-    static String assetUrl(String name)throws Exception{return ENDPOINT+"?asset="+URLEncoder.encode(name,"UTF-8");}
 
     static String generateCode(){
         byte[] bytes=new byte[32];new SecureRandom().nextBytes(bytes);
