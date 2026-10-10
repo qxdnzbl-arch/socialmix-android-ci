@@ -50,6 +50,7 @@ public class TransferService extends Service {
 
   private volatile boolean running=true;
   private volatile boolean nearbyStarted=false;
+  private volatile long lastWaitingAlert=0L;
   private volatile long nearbyStartedAt=0L;
   private TransferDb db;
   private ConnectionsClient nearby;
@@ -218,7 +219,7 @@ public class TransferService extends Service {
 
   private synchronized void tryStartNearby(){
     if(!hasNearbyPermissions()){
-      setLinkState("permission");
+      // Missing Bluetooth consent must never disable cross-network delivery.
       return;
     }
     long now=System.currentTimeMillis();
@@ -421,7 +422,7 @@ public class TransferService extends Service {
         getContentResolver().delete(uri,null,null);
       }catch(Exception ignored){}
 
-      if(dst.length()!=meta.size)throw new IOException("nearby file size mismatch");
+      if(dst.length()!=meta.size){dst.delete();throw new IOException("nearby file size mismatch");}
       boolean fresh=db.addFile(meta.id,false,meta.name,dst.getAbsolutePath(),
         dst.length(),meta.created,"received");
       if(fresh){changed();notifyIncoming("file",meta.name);}
@@ -453,6 +454,12 @@ public class TransferService extends Service {
 
     List<TransferDb.Msg> pending=db.pending();
     if(pending.isEmpty()) return;
+    if(pending.get(0).createdAt<System.currentTimeMillis()-30000L
+        &&System.currentTimeMillis()-lastWaitingAlert>30*60*1000L){
+      lastWaitingAlert=System.currentTimeMillis();
+      eventNotification(WAITING_ID,RECEIPT_CHANNEL,"双机传 · 等待送达",
+        "对方尚未收到，内容已保存在本机，正在自动重试");
+    }
 
     boolean ciNearbyOnly=
       (getApplicationInfo().flags & android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE)!=0
@@ -544,6 +551,7 @@ public class TransferService extends Service {
 
         int code=c.getResponseCode();
         if(code==200){
+          if(endpoints.isEmpty())setLinkState("relay");
           String kind=c.getHeaderField("X-Dual-Kind");
           String id=c.getHeaderField("X-Dual-Id");
           long created=parseLong(
@@ -652,6 +660,8 @@ public class TransferService extends Service {
         int code=c.getResponseCode();
 
         if(code>=200&&code<300){
+          if(endpoints.isEmpty())setLinkState("relay");
+          getSystemService(NotificationManager.class).cancel(WAITING_ID);
           db.markSent(m.id);
           changed();
           return true;
