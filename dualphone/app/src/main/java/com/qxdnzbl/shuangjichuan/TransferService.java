@@ -163,28 +163,95 @@ public class TransferService extends Service {
   }
   private void ackNearby(String endpoint,String id){
     try{
-      JSONObject ack=new JSONObject().put("auth",SECRET).put("op","ack").put("id",id);
-      nearby.sendPayload(endpoint,Payload.fromBytes(ack.toString().getBytes(StandardCharsets.UTF_8)))
-        .addOnFailureListener(e->Log.w("DualDelivery","ack nearby "+e));
-    }catch(Exception e){Log.w("DualDelivery","ack near prepare "+e);}
+      JSONObject ack=new JSONObject().put("op","ack").put("sender",deviceId).put("id",id);
+      String frame=crypto.encrypt(ack);
+      nearby.sendPayload(endpoint,Payload.fromBytes(frame.getBytes(StandardCharsets.UTF_8)));
+    }catch(Exception e){Log.w("DualDelivery","encrypted Nearby ack "+e);}
   }
+
   private void ackRelay(String base,String id){
     io.execute(()->{
+      try{
+        JSONObject ack=new JSONObject().put("op","ack").put("sender",deviceId).put("id",id);
+        relaySendText(crypto.encrypt(ack),base);
+      }catch(Exception e){Log.w("DualDelivery","encrypted relay ack "+e);}
+    });
+  }
+
+  private boolean relaySendText(String frame,String preferred){
+    ArrayList<String> options=new ArrayList<>();
+    if(preferred!=null)options.add(preferred);
+    for(String relay:RELAYS)if(!options.contains(relay))options.add(relay);
+    for(String base:options){
       HttpURLConnection c=null;
       try{
-        c=(HttpURLConnection)new URL(base+"/api/dual/send/"+room+"/"+url(deviceId)).openConnection();
-        c.setRequestMethod("POST");c.setDoOutput(true);c.setConnectTimeout(5000);
-        c.setReadTimeout(12000);c.setRequestProperty("x-dual-token",SECRET);
+        URL url=new URL(base+"/api/dual/send/"+room+"/"+url(deviceId));
+        c=(HttpURLConnection)url.openConnection();
+        c.setRequestMethod("POST");c.setDoOutput(true);
+        c.setConnectTimeout(7000);c.setReadTimeout(18000);
+        c.setRequestProperty("x-dual-token",crypto.relayToken());
         c.setRequestProperty("x-dual-kind","text");
-        c.setRequestProperty("x-dual-id","ack-"+id);
+        c.setRequestProperty("x-dual-id",UUID.randomUUID().toString());
         c.setRequestProperty("x-dual-created",String.valueOf(System.currentTimeMillis()));
-        byte[] bytes=(ACK_PREFIX+id).getBytes(StandardCharsets.UTF_8);
+        byte[] bytes=frame.getBytes(StandardCharsets.UTF_8);
         c.setFixedLengthStreamingMode(bytes.length);
         try(OutputStream out=c.getOutputStream()){out.write(bytes);}
-        if(c.getResponseCode()!=200)Log.w("DualDelivery","ack status "+c.getResponseCode());
-      }catch(Exception e){Log.w("DualDelivery","ack relay failed "+e);}
+        if(c.getResponseCode()==200)return true;
+      }catch(Exception e){Log.w("DualE2E","relay control "+e);}
       finally{if(c!=null)c.disconnect();}
-    });
+    }
+    return false;
+  }
+
+  private void sendPairBeacon(){
+    if(!running||crypto==null||!crypto.configured())return;
+    try{
+      JSONObject pair=new JSONObject().put("op","pair").put("sender",deviceId);
+      String frame=crypto.encrypt(pair);
+      if(nearby!=null)for(String ep:endpoints)
+        nearby.sendPayload(ep,Payload.fromBytes(frame.getBytes(StandardCharsets.UTF_8)));
+      if(!crypto.paired())relaySendText(frame,null);
+    }catch(Exception e){Log.w("DualE2E","pair beacon "+e);}
+  }
+
+  private void handleSecureFrame(String frame,String nearbyEndpoint,String relayBase){
+    try{
+      JSONObject j=crypto.decrypt(frame);
+      String sender=j.optString("sender","");
+      String op=j.optString("op","");
+      if("pair".equals(op)){
+        boolean wasPaired=crypto.paired();
+        if(crypto.acceptPeer(sender)){
+          if(!wasPaired){
+            changed();
+            io.execute(this::sendPairBeacon);
+          }
+        }
+        return;
+      }
+      if(!crypto.fromPeer(sender)){
+        Log.w("DualE2E","Rejected message from non-paired sender");
+        return;
+      }
+      if("ack".equals(op)){
+        receivedAck(j.optString("id"));
+      }else if("text".equals(op)){
+        String id=j.getString("id");
+        if(!id.matches("[0-9a-fA-F-]{36}"))return;
+        boolean fresh=db.addText(id,false,j.optString("text"),
+          j.optLong("created",System.currentTimeMillis()),"received");
+        if(fresh){changed();notifyIncoming("text","");}
+        if(nearbyEndpoint!=null)ackNearby(nearbyEndpoint,id);
+        else if(relayBase!=null)ackRelay(relayBase,id);
+      }else if("file_meta".equals(op)&&nearbyEndpoint!=null){
+        long pid=j.getLong("payloadId");
+        incomingMeta.put(pid,new FileMeta(j.optString("id"),
+          safeName(j.optString("name","文件")),j.optLong("created"),
+          j.optLong("size")));
+        incomingPeers.put(pid,nearbyEndpoint);
+        tryFinalizeIncoming(pid);
+      }
+    }catch(Exception e){Log.w("DualE2E","Unreadable or tampered encrypted frame: "+e.getClass().getSimpleName());}
   }
 
   private void changed(){
