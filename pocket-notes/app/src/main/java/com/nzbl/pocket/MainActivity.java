@@ -133,13 +133,15 @@ public class MainActivity extends Activity {
         syncing=true;if(manual)toast("正在同步…");
         final CloudSync task=cloudSync;
         new Thread(()->{
-            boolean wasDirty=task.dirty();
+            boolean wasDirty=task.dirty();long deliveredBefore=task.deliveredRevision();
             CloudSync.Result result=task.syncNow(false);
             runOnUiThread(()->{
                 syncing=false;knownSync=task.lastSync();
                 if(result.ok){
                     if(wasDirty&&!task.dirty())SyncNotifier.uploaded(this,result.revision);
                     if(result.changed)SyncNotifier.received(this,result.revision);
+                    if(task.deliveredRevision()>deliveredBefore)
+                        SyncNotifier.delivered(this,task.deliveredRevision());
                     if(manual)toast("同步完成");
                     if(result.changed){if("home".equals(screen))home();else if("album".equals(screen))album();}
                     if(task.dirty())handler.postDelayed(()->syncCloud(false),500);
