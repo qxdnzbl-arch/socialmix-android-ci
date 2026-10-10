@@ -29,7 +29,6 @@ def post(kind,data):
     if kind=="file": headers["x-dual-file-name"]=base64.b64encode(b"encrypted.sjc").decode()
     req=urllib.request.Request(BASE+"/api/dual/send/"+ROOM+"/qa-remote-device",
       method="POST",data=data,headers=headers)
-    import urllib.error
     for attempt in range(35):
         try:
             with urllib.request.urlopen(req,timeout=75) as r:
