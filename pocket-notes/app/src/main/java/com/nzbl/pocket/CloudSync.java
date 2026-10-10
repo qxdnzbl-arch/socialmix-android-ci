@@ -139,7 +139,7 @@ final class CloudSync {
             }catch(Conflict conflict){
                 prefs.edit().putLong("revision",Math.min(revision(),conflict.revision)).commit();
             }catch(Exception e){
-                return new Result(false,changed,"[cloud diagnostic] "+e.getClass().getSimpleName()+": "+String.valueOf(e.getMessage()),revision());
+                return new Result(false,changed,readableError(e),revision());
             }finally{if(remoteFile!=null)remoteFile.delete();}
         }
         return new Result(false,changed,"云端数据刚刚有变化，请再同步一次。",revision());
