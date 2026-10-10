@@ -35,7 +35,10 @@ public class MainActivity extends Activity {
     ArrayList<Store.Category> categoryDragOriginal=null;
     TextView categoryButton;
     final Handler handler=new Handler();
-    Runnable draftTask,syncTask;
+    Runnable draftTask,syncTask,syncPoll;
+    static volatile boolean foreground=false;
+    boolean syncing=false;
+    long knownSync=0;
     int scrollPosition=0;
     ListView homeList;
     public int dp(float n){return Math.round(n*getResources().getDisplayMetrics().density);}
@@ -52,13 +55,33 @@ public class MainActivity extends Activity {
         super.onCreate(saved);getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
         getWindow().setStatusBarColor(BG);getWindow().setNavigationBarColor(BG);
         getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR|View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR);
-        backgroundFile=new File(getFilesDir(),"background.img");downloadedUpdate=new File(getCacheDir(),"update.apk");store=new Store(this);cloudSync=new CloudSync(this,store,backgroundFile);home();handler.postDelayed(this::maybeAutoCheckUpdate,1800);if(cloudSync.enabled())handler.postDelayed(()->syncCloud(false),900);
+        backgroundFile=new File(getFilesDir(),"background.img");downloadedUpdate=new File(getCacheDir(),"update.apk");store=new Store(this);cloudSync=new CloudSync(this,store,backgroundFile);knownSync=cloudSync.lastSync();home();handler.postDelayed(this::maybeAutoCheckUpdate,1800);if(cloudSync.enabled())handler.postDelayed(()->syncCloud(false),900);
         if(saved!=null){filter=saved.getString("filter","all");query=saved.getString("query","");searchOpen=saved.getBoolean("searchOpen",false);searchReturnFilter=saved.getString("searchReturnFilter","all");String s=saved.getString("screen","home");if("edit".equals(s)&&store.draft!=null)editor(store.draft.copy());else if("album".equals(s))album();else home();}
         if(!store.ready)new AlertDialog.Builder(this).setTitle("记录读取异常").setMessage(store.loadError).setPositiveButton("导出原文件",(d,w)->exportPicker()).setNegativeButton("关闭",null).show();
     }
     @Override public void onSaveInstanceState(Bundle out){captureDraft();out.putString("screen",screen);out.putString("filter",filter);out.putString("query",query);out.putBoolean("searchOpen",searchOpen);out.putString("searchReturnFilter",searchReturnFilter);if(current!=null)out.putString("id",current.id);super.onSaveInstanceState(out);}
-    @Override protected void onResume(){super.onResume();if(cloudSync!=null&&cloudSync.enabled())handler.postDelayed(()->syncCloud(false),500);}
-    @Override public void onPause(){captureDraft();if(cloudSync!=null&&cloudSync.enabled())syncCloud(false);super.onPause();}
+    @Override protected void onResume(){
+        super.onResume();foreground=true;
+        if(cloudSync!=null&&cloudSync.enabled()){
+            SyncJobService.schedule(this);
+            if(!syncing&&cloudSync.lastSync()!=knownSync){
+                store=new Store(this);cloudSync=new CloudSync(this,store,backgroundFile);
+                knownSync=cloudSync.lastSync();home();
+            }
+            if(syncPoll!=null)handler.removeCallbacks(syncPoll);
+            syncPoll=new Runnable(){@Override public void run(){
+                if(!foreground||cloudSync==null||!cloudSync.enabled())return;
+                syncCloud(false);
+                handler.postDelayed(this,4000);
+            }};
+            handler.postDelayed(syncPoll,500);
+        }
+    }
+    @Override public void onPause(){
+        foreground=false;if(syncPoll!=null)handler.removeCallbacks(syncPoll);
+        captureDraft();if(cloudSync!=null&&cloudSync.enabled())syncCloud(false);
+        super.onPause();
+    }
     @Override public void onBackPressed(){
         if("albumPhoto".equals(screen)){album();return;}
         if("photo".equals(screen)){if(editing!=null)editor(editing);else if(current!=null)detail(current,false);else home();return;}
@@ -101,15 +124,30 @@ public class MainActivity extends Activity {
     boolean commit(Runnable r){if(store.change(r)){markSyncDirty(false);return true;}error("保存失败，原记录仍保留。请检查手机剩余空间后再试。");return false;}
     void markSyncDirty(boolean background){
         if(cloudSync==null||!cloudSync.enabled())return;cloudSync.markDirty(background);
-        if(syncTask!=null)handler.removeCallbacks(syncTask);syncTask=()->syncCloud(false);handler.postDelayed(syncTask,2500);
+        if(syncTask!=null)handler.removeCallbacks(syncTask);syncTask=()->syncCloud(false);handler.postDelayed(syncTask,350);
     }
     void syncCloud(boolean manual){
-        if(cloudSync==null||!cloudSync.enabled())return;if(manual)toast("正在同步…");
-        new Thread(()->{CloudSync.Result result=cloudSync.syncNow(false);runOnUiThread(()->{
-            if(isFinishing())return;
-            if(result.ok){if(manual)toast("同步完成");if(result.changed){if("home".equals(screen))home();else if("album".equals(screen))album();}}
-            else if(manual)error(result.message);
-        });}).start();
+        if(cloudSync==null||!cloudSync.enabled())return;
+        if(syncing){if(manual)toast("正在同步…");return;}
+        syncing=true;if(manual)toast("正在同步…");
+        final CloudSync task=cloudSync;
+        new Thread(()->{
+            boolean wasDirty=task.dirty();
+            CloudSync.Result result=task.syncNow(false);
+            runOnUiThread(()->{
+                syncing=false;knownSync=task.lastSync();
+                if(result.ok){
+                    if(wasDirty&&!task.dirty()&&!foreground)SyncNotifier.uploaded(this,result.revision);
+                    if(result.changed)SyncNotifier.received(this,result.revision);
+                    if(manual)toast("同步完成");
+                    if(result.changed){if("home".equals(screen))home();else if("album".equals(screen))album();}
+                    if(task.dirty())handler.postDelayed(()->syncCloud(false),500);
+                }else {
+                    if(manual)error(result.message);
+                    else SyncNotifier.failed(this,result.message);
+                }
+            });
+        },"Suishoucun-Sync").start();
     }
 
     void mainHeader(String mode){
@@ -333,18 +371,18 @@ public class MainActivity extends Activity {
             .setItems(new String[]{"立即同步","查看同步码","断开这台手机"},(d,w)->{
                 if(w==0)syncCloud(true);else if(w==1)showSyncCode();else new AlertDialog.Builder(this).setTitle("断开这台手机？")
                     .setMessage("只会停止这台手机同步，云端数据和其他手机不会删除。")
-                    .setPositiveButton("断开",(x,y)->{cloudSync.disconnect();toast("这台手机已断开同步");})
+                    .setPositiveButton("断开",(x,y)->{cloudSync.disconnect();SyncJobService.cancel(this);toast("这台手机已断开同步");})
                     .setNegativeButton("取消",null).show();
             }).setNegativeButton("关闭",null).show();
     }
     void enableCloudSync(){
-        cloudSync.beginNew();
+        SyncNotifier.requestPermission(this);cloudSync.beginNew();SyncJobService.schedule(this);
         busy("正在开启多端同步…",()->{CloudSync.Result result=cloudSync.syncNow(false);runOnUiThread(()->{if(result.ok)showSyncCode();else error(result.message);});});
     }
     void connectCloudSyncDialog(){
         EditText e=input("粘贴同步码",16,false);e.setPadding(dp(22),dp(14),dp(22),dp(14));
         AlertDialog d=new AlertDialog.Builder(this).setTitle("连接已有同步").setMessage("如果这台手机已经有记录，会和云端内容合并，不会直接清空。").setView(e).setPositiveButton("连接",null).setNegativeButton("取消",null).create();
-        d.setOnShowListener(v->d.getButton(-1).setOnClickListener(b->{String code=e.getText().toString();if(!CloudSync.validCode(code)){e.setError("同步码不正确");return;}d.dismiss();busy("正在同步数据…",()->{CloudSync.Result result=cloudSync.connectExisting(code);runOnUiThread(()->{if(result.ok){filter="all";query="";home();toast("已连接并同步完成");}else error(result.message);});});}));
+        d.setOnShowListener(v->d.getButton(-1).setOnClickListener(b->{String code=e.getText().toString();if(!CloudSync.validCode(code)){e.setError("同步码不正确");return;}d.dismiss();SyncNotifier.requestPermission(this);busy("正在同步数据…",()->{CloudSync.Result result=cloudSync.connectExisting(code);runOnUiThread(()->{if(result.ok){SyncJobService.schedule(this);knownSync=cloudSync.lastSync();if(result.changed)SyncNotifier.received(this,result.revision);filter="all";query="";home();toast("已连接并同步完成");}else error(result.message);});});}));
         d.getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);d.show();
     }
     void showSyncCode(){
