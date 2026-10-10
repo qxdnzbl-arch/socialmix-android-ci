@@ -13,7 +13,7 @@ import java.util.*;
 import org.json.*;
 
 final class CloudSync {
-    static final String RPC_BASE="https://nvwdtfnhsyfdopaxdylx.supabase.co/rest/v1/rpc/";
+    static final String SYNC_URL="https://suishoucun-sync.floot.app/_api/sync";
     static final String API_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im52d2R0Zm5oc3lmZG9wYXhkeWx4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODgwMTExNTcsImV4cCI6MjEwMzU4NzE1N30.wXmcZ6KIQOt-eet6ONUgl9HI1eJhJAofdf2_JPD_0Ek";
     static final int MAX_ASSET=66*1024*1024,MAX_MANIFEST=8*1024*1024,CHUNK_BYTES=256*1024;
     final Context context;
@@ -95,7 +95,7 @@ final class CloudSync {
         for(int attempt=0;attempt<3;attempt++){
             File remoteFile=null;
             try{
-                Remote remote=getManifest(auth);
+                Remote remote=getManifest(auth,revision());
                 remoteFile=remote.encrypted;
                 long localRevision=revision();
                 boolean localDirty=dirty(),bgDirty=backgroundDirty();
@@ -257,18 +257,21 @@ final class CloudSync {
     }
 
     JSONObject rpc(String name,String auth,JSONObject body)throws Exception{
-        HttpURLConnection c=(HttpURLConnection)new URL(RPC_BASE+name).openConnection();
-        c.setConnectTimeout(12000);c.setReadTimeout(60000);c.setRequestMethod("POST");c.setDoOutput(true);c.setUseCaches(false);
-        c.setRequestProperty("apikey",API_KEY);c.setRequestProperty("Authorization","Bearer "+API_KEY);c.setRequestProperty("x-sync-auth",auth);
-        c.setRequestProperty("Content-Type","application/json");c.setRequestProperty("Accept","application/json");c.setRequestProperty("User-Agent","Suishoucun-Android");
-        byte[] request=body.toString().getBytes(StandardCharsets.UTF_8);c.setFixedLengthStreamingMode(request.length);
+        HttpURLConnection c=(HttpURLConnection)new URL(SYNC_URL).openConnection();
+        c.setConnectTimeout(12000);c.setReadTimeout(60000);c.setRequestMethod("POST");
+        c.setDoOutput(true);c.setUseCaches(false);
+        c.setRequestProperty("x-sync-auth",auth);
+        c.setRequestProperty("Content-Type","application/json");c.setRequestProperty("Accept","application/json");
+        c.setRequestProperty("User-Agent","Suishoucun-Android");
+        JSONObject requestBody=new JSONObject(body.toString());requestBody.put("action",name);
+        byte[] request=requestBody.toString().getBytes(StandardCharsets.UTF_8);c.setFixedLengthStreamingMode(request.length);
         try(OutputStream out=c.getOutputStream()){out.write(request);}
         int status=c.getResponseCode();InputStream in=status>=200&&status<300?c.getInputStream():c.getErrorStream();
-        String response="";if(in!=null){ByteArrayOutputStream out=new ByteArrayOutputStream();try{copy(in,out,1024*1024);}catch(Exception ignored){}response=out.toString("UTF-8");}
+        String response="";
+        if(in!=null){ByteArrayOutputStream out=new ByteArrayOutputStream();try{copy(in,out,4*1024*1024);}finally{in.close();}response=out.toString("UTF-8");}
         c.disconnect();
         if(status<200||status>=300)throw new IOException("云端返回 "+status+" "+response);
-        if(response.trim().isEmpty())return new JSONObject();
-        return new JSONObject(response);
+        return response.trim().isEmpty()?new JSONObject():new JSONObject(response);
     }
     JSONObject objectStatus(String auth,String object)throws Exception{
         return rpc("suishoucun_sync_object_status_v2",auth,new JSONObject().put("p_object",object));
@@ -277,36 +280,50 @@ final class CloudSync {
         long length=file.length();int chunks=(int)Math.max(1,(length+CHUNK_BYTES-1)/CHUNK_BYTES);
         rpc("suishoucun_sync_prepare_object_v2",auth,new JSONObject().put("p_object",object).put("p_chunk_count",chunks));
         try(FileInputStream in=new FileInputStream(file)){
-            byte[] buf=new byte[CHUNK_BYTES];
+            byte[] buf=new byte[CHUNK_BYTES];JSONArray group=new JSONArray();
             for(int i=0;i<chunks;i++){
                 int need=(int)Math.min(CHUNK_BYTES,Math.max(0,length-(long)i*CHUNK_BYTES)),off=0,n;
                 while(off<need&&(n=in.read(buf,off,need-off))>0)off+=n;
                 if(off!=need)throw new EOFException();
-                byte[] part=off==buf.length?buf:Arrays.copyOf(buf,off);
-                String encoded=Base64.encodeToString(part,Base64.NO_WRAP);
-                rpc("suishoucun_sync_put_chunk_v2",auth,new JSONObject().put("p_object",object).put("p_index",i).put("p_chunk_count",chunks).put("p_payload",encoded));
+                String encoded=Base64.encodeToString(off==buf.length?buf:Arrays.copyOf(buf,off),Base64.NO_WRAP);
+                group.put(new JSONObject().put("index",i).put("payload",encoded));
+                if(group.length()==3||i==chunks-1){
+                    rpc("suishoucun_sync_put_batch_v3",auth,new JSONObject().put("p_object",object)
+                        .put("p_chunk_count",chunks).put("p_chunks",group));
+                    group=new JSONArray();
+                }
             }
         }
-        JSONObject status=objectStatus(auth,object);if(!status.optBoolean("complete",false))throw new IOException("云端文件上传不完整");
+        if(!objectStatus(auth,object).optBoolean("complete",false))throw new IOException("云端文件上传不完整");
     }
     File getObject(String auth,String object,int max)throws Exception{
         JSONObject status=objectStatus(auth,object);if(!status.optBoolean("complete",false))throw new FileNotFoundException("云端文件不存在");
         int chunks=status.optInt("chunks",0);if(chunks<1||chunks>4096)throw new IOException("云端文件分片无效");
         File out=new File(context.getCacheDir(),"sync-download-"+UUID.randomUUID()+".bin");long total=0;
         try(FileOutputStream file=new FileOutputStream(out)){
-            for(int i=0;i<chunks;i++){
-                JSONObject part=rpc("suishoucun_sync_get_chunk_v2",auth,new JSONObject().put("p_object",object).put("p_index",i));
-                if(!part.optBoolean("found",false)||part.optInt("chunks",0)!=chunks)throw new IOException("云端文件分片缺失");
-                byte[] bytes=Base64.decode(part.getString("payload"),Base64.DEFAULT);total+=bytes.length;if(total>max)throw new IOException("同步文件过大");file.write(bytes);
+            for(int i=0;i<chunks;i+=3){
+                JSONArray indices=new JSONArray();
+                for(int j=i;j<Math.min(chunks,i+3);j++)indices.put(j);
+                JSONObject batch=rpc("suishoucun_sync_get_batch_v3",auth,new JSONObject()
+                    .put("p_object",object).put("p_indices",indices));
+                if(!batch.optBoolean("found",false)||batch.optInt("chunks",0)!=chunks)throw new IOException("云端文件分片缺失");
+                JSONArray parts=batch.getJSONArray("parts");
+                if(parts.length()!=indices.length())throw new IOException("云端文件分片数量错误");
+                for(int k=0;k<parts.length();k++){
+                    JSONObject part=parts.getJSONObject(k);
+                    if(part.getInt("index")!=indices.getInt(k))throw new IOException("云端文件分片顺序错误");
+                    byte[] bytes=Base64.decode(part.getString("payload"),Base64.DEFAULT);
+                    total+=bytes.length;if(total>max)throw new IOException("同步文件过大");file.write(bytes);
+                }
             }
         }catch(Exception e){out.delete();throw e;}
         return out;
     }
-    Remote getManifest(String auth)throws Exception{
+    Remote getManifest(String auth,long localRevision)throws Exception{
         JSONObject head=rpc("suishoucun_sync_head_v2",auth,new JSONObject());long revision=head.optLong("revision",0);
         if(revision<=0)return new Remote(0,null);
         String object=head.optString("manifest","");if(object.isEmpty())throw new IOException("云端清单缺失");
-        return new Remote(revision,getObject(auth,object,MAX_MANIFEST+1024));
+        return new Remote(revision,revision>localRevision?getObject(auth,object,MAX_MANIFEST+1024):null);
     }
     long putManifest(String auth,long expected,File file)throws Exception{
         String object="manifest/"+UUID.randomUUID().toString().replace("-","");
