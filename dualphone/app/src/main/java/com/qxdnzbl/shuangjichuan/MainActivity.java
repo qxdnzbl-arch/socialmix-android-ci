@@ -101,6 +101,9 @@ public class MainActivity extends Activity implements NativeMessageAdapter.Callb
     prefs.edit().remove("token").remove("account").apply();
 
     if(isDebuggable()){
+      String testCode=getIntent().getStringExtra("ciPairCode");
+      String testPeer=getIntent().getStringExtra("ciPairPeer");
+      if(testCode!=null&&pairing.joinCode(testCode)&&testPeer!=null)pairing.acceptPeer(testPeer);
       prefs.edit().putBoolean("ci_nearby_only",getIntent().getBooleanExtra("ciNearbyOnly",false)).apply();
       ciLoadCount=Math.min(600,Math.max(0,getIntent().getIntExtra("ciLoadMessages",0)));
       if(getIntent().getBooleanExtra("ciSend",false)){
