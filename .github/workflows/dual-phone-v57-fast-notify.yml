@@ -1,0 +1,97 @@
+name: Dual Phone v5.7 Fast Delivery and Notification QA
+on:
+  push:
+    branches: [dualphone-v57-fast-notify]
+    paths:
+      - 'dualphone/app/**'
+      - '.github/workflows/dual-phone-v57-fast-notify.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: dual-phone-v57-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  verify:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+      - name: Build same-signer Android release and debug APKs
+        working-directory: dualphone
+        run: |
+          base64 -d keystore.b64 > app/shuangjichuan-release.jks
+          gradle --no-daemon :app:assembleRelease :app:assembleDebug
+          APKSIGNER=$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -1)
+          "$APKSIGNER" verify --verbose app/build/outputs/apk/release/app-release.apk
+          mkdir -p accepted
+          cp app/build/outputs/apk/release/app-release.apk accepted/ShuangJiChuan_v5.7_fast_notify.apk
+          sha256sum accepted/ShuangJiChuan_v5.7_fast_notify.apk > accepted/SHA256.txt
+      - name: Real isolated 4.9MB image and receipt transport over Render
+        run: |
+          python3 - <<'PY'
+          import secrets,hashlib,urllib.request,threading,time,base64,os
+          token=secrets.token_hex(32);room=hashlib.sha256(token.encode()).hexdigest()[:32]
+          base="https://oppo-iphone-transfer-qr.onrender.com"
+          payload=os.urandom(4900000);got={}
+          def recv():
+              url=f"{base}/api/dual/receive/{room}/deviceB"
+              req=urllib.request.Request(url,headers={"x-dual-token":token})
+              with urllib.request.urlopen(req,timeout=70) as r:
+                  got["body"]=r.read();got["id"]=r.headers.get("X-Dual-Id");got["name"]=r.headers.get("X-Dual-File-Name")
+          t=threading.Thread(target=recv,daemon=True);t.start();time.sleep(0.5)
+          headers={"x-dual-token":token,"x-dual-kind":"file","x-dual-id":"ci-49-photo","x-dual-created":str(int(time.time()*1000)),"x-dual-file-name":base64.b64encode(b"4.9MB.jpg").decode()}
+          req=urllib.request.Request(f"{base}/api/dual/send/{room}/deviceA",data=payload,headers=headers,method="POST")
+          started=time.monotonic()
+          with urllib.request.urlopen(req,timeout=45) as r:assert r.status==200
+          t.join(70)
+          assert not t.is_alive(),"receiver did not complete"
+          assert got["body"]==payload,"binary image not identical"
+          assert got["id"]=="ci-49-photo","wrong message ID"
+          assert base64.b64decode(got["name"])==b"4.9MB.jpg"
+          print("PASS 4,900,000 byte lossless cross-network delivery elapsed_seconds=",round(time.monotonic()-started,3))
+          PY
+      - name: Boot Android and test independent notifications and unchanged chat
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          target: google_apis
+          profile: pixel_6
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none
+          script: |
+            set -eu
+            PKG=com.qxdnzbl.shuangjichuan.offline
+            adb install -r dualphone/app/build/outputs/apk/debug/app-debug.apk
+            adb shell pm grant $PKG android.permission.POST_NOTIFICATIONS
+            adb shell am start -W -n $PKG/com.qxdnzbl.shuangjichuan.MainActivity
+            sleep 5
+            adb shell uiautomator dump /sdcard/dual57.xml
+            adb pull /sdcard/dual57.xml dualphone/accepted/dual57.xml
+            grep -q '我的两台手机' dualphone/accepted/dual57.xml
+            adb shell dumpsys notification --noredact > dualphone/accepted/notifications.txt
+            grep -q 'transfer' dualphone/accepted/notifications.txt
+            adb shell am force-stop $PKG
+            adb shell am start -W -n $PKG/com.qxdnzbl.shuangjichuan.MainActivity
+            sleep 2
+            adb shell uiautomator dump /sdcard/dual57-restart.xml
+            adb pull /sdcard/dual57-restart.xml dualphone/accepted/dual57-restart.xml
+            grep -q '我的两台手机' dualphone/accepted/dual57-restart.xml
+            adb logcat -d -s AndroidRuntime:E > dualphone/accepted/android-crash.txt
+            ! grep -q 'FATAL EXCEPTION' dualphone/accepted/android-crash.txt
+            adb exec-out screencap -p > dualphone/accepted/dual57-screen.png
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: DualPhone-v5.7-Android-Tested
+          path: dualphone/accepted/
+          retention-days: 3
+          if-no-files-found: warn
