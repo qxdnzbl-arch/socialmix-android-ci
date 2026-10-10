@@ -82,6 +82,41 @@ check(a.store.categories.isEmpty(),"fresh install has no preset categories");che
             CloudSync sync=a.cloudSync;sync.disconnect();String syncCode=sync.beginNew();check(CloudSync.validCode(syncCode)&&CloudSync.decodeCode(syncCode).length==32,"sync code is high-entropy and valid");String syncAuth=CloudSync.authForCode(syncCode);check(!syncAuth.equals(syncCode)&&syncAuth.length()>32,"sync transport auth is derived separately from encryption key");
             int cloudNotes=a.store.notes.size();CloudSync.Result cloudFirst=sync.syncNow(false);check(cloudFirst.ok&&cloudFirst.revision>0&&!sync.dirty(),"cloud sync uploads current records and photos to the real backend");
             CloudSync.Remote cloudRemote=sync.getManifest(syncAuth);check(cloudRemote.revision==cloudFirst.revision&&cloudRemote.encrypted!=null&&cloudRemote.encrypted.length()>0,"cloud manifest is retrievable from the real backend");JSONObject cloudManifest=sync.decryptManifest(cloudRemote.encrypted,syncCode);cloudRemote.encrypted.delete();check("suishoucun-cloud".equals(cloudManifest.optString("format"))&&cloudManifest.getJSONObject("collection").getJSONArray("notes").length()==cloudNotes,"encrypted cloud manifest round-trips the full collection");
+            // Independent second-device filesystem and preferences: blank install pulls real encrypted records and photos.
+            final Context deviceOne=getTargetContext();
+            Context deviceTwo=new ContextWrapper(deviceOne){
+                final File rootDir=new File(dir,"independent-device-two");
+                @Override public File getFilesDir(){File out=new File(rootDir,"files");out.mkdirs();return out;}
+                @Override public File getCacheDir(){File out=new File(rootDir,"cache");out.mkdirs();return out;}
+                @Override public SharedPreferences getSharedPreferences(String name,int mode){
+                    return deviceOne.getSharedPreferences("qa-device-two-"+name,mode);
+                }
+            };
+            Store secondStore=new Store(deviceTwo);
+            check(secondStore.ready&&secondStore.notes.isEmpty(),"second device begins as a genuinely empty local store");
+            CloudSync secondSync=new CloudSync(deviceTwo,secondStore,new File(deviceTwo.getFilesDir(),"background.img"));
+            CloudSync.Result secondDownload=secondSync.connectExisting(syncCode);
+            check(secondDownload.ok&&secondStore.notes.size()==cloudNotes,"new second device downloads all existing notes from cloud");
+            boolean allPhotosPresent=true;
+            for(Store.Note note:secondStore.notes)for(String photoName:note.images){
+                File photo=new File(secondStore.photos,photoName);
+                if(!photo.isFile()||photo.length()==0)allPhotosPresent=false;
+            }
+            check(allPhotosPresent,"new second device downloads every original photo attachment");
+            final String sharedNoteId=secondStore.notes.get(0).id;
+            final String newText="第二台手机同步写回 "+System.currentTimeMillis();
+            check(secondStore.change(()->{
+                Store.Note note=secondStore.find(sharedNoteId);
+                note.title=newText;note.updated=System.currentTimeMillis()+200;
+            }),"second-device edit saves in its own isolated local store");
+            secondSync.markDirty(false);
+            CloudSync.Result uploadFromSecond=secondSync.syncNow(false);
+            check(uploadFromSecond.ok&&uploadFromSecond.revision>cloudFirst.revision,
+                  "second device uploads its changes as a new cloud revision");
+            CloudSync.Result backToFirst=sync.syncNow(false);
+            check(backToFirst.ok&&newText.equals(a.store.find(sharedNoteId).title),
+                  "first device automatically retrieves edits made on second device");
+            secondSync.disconnect();
             sync.disconnect();CloudSync.Result cloudReconnect=sync.connectExisting(syncCode);check(cloudReconnect.ok&&sync.enabled()&&a.store.notes.size()==cloudNotes,"second-device pairing path reconnects to the same cloud data without losing records");
             sync.deleteRemote();sync.disconnect();check(!sync.enabled(),"cloud sync can be disconnected cleanly");
             // Save evidence from an actual second small-screen density setting in the runner as well.
