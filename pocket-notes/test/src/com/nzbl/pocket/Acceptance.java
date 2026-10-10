@@ -98,7 +98,32 @@ check(a.store.categories.isEmpty(),"fresh install has no preset categories");che
             final String[] copiedCode=new String[1];
             main(()->copiedCode[0]=((android.content.ClipboardManager)a.getSystemService(Context.CLIPBOARD_SERVICE)).getPrimaryClip().getItemAt(0).coerceToText(a).toString());
             check(syncCode.equals(copiedCode[0]),"copy pairing code matches key actually used for cloud upload");
-            CloudSync.Remote cloudRemote=sync.getManifest(syncAuth);check(cloudRemote.revision==cloudFirst.revision&&cloudRemote.encrypted!=null&&cloudRemote.encrypted.length()>0,"cloud manifest is retrievable from the real backend");JSONObject cloudManifest=sync.decryptManifest(cloudRemote.encrypted,syncCode);cloudRemote.encrypted.delete();check("suishoucun-cloud".equals(cloudManifest.optString("format"))&&cloudManifest.getJSONObject("collection").getJSONArray("notes").length()==cloudNotes,"encrypted cloud manifest round-trips the full collection");
+            CloudSync.Remote cloudRemote=sync.getManifest(syncAuth);check(cloudRemote.revision==cloudFirst.revision&&cloudRemote.encrypted!=null&&cloudRemote.encrypted.length()>0,"cloud manifest is retrievable from the real backend");
+            CloudSync.Remote sameVersion=sync.getManifest(syncAuth,cloudFirst.revision);
+            check(sameVersion.revision==cloudFirst.revision&&sameVersion.encrypted==null,
+                "unchanged cloud revisions avoid redundant manifest downloads");
+            final String bigName="asset/qa-batched-"+UUID.randomUUID().toString().replace("-","");
+            File large=new File(a.getCacheDir(),"qa-large-encrypted.bin"),retrieved=null;
+            try{
+                byte[] block=new byte[1024*1024+310000];new java.security.SecureRandom().nextBytes(block);
+                try(FileOutputStream out=new FileOutputStream(large)){out.write(block);}
+                sync.putObject(syncAuth,bigName,large);
+                retrieved=sync.getObject(syncAuth,bigName,block.length+1024);
+                check(large.length()==retrieved.length()&&CloudSync.fileHash(large).equals(CloudSync.fileHash(retrieved)),
+                      "batched upload and download roundtrip a real 1.3 MB binary asset exactly");
+            }finally{
+                large.delete();if(retrieved!=null)retrieved.delete();
+                try{sync.rpc("suishoucun_sync_delete_object_v2",syncAuth,new JSONObject().put("p_object",bigName));}catch(Exception ignored){}
+            }
+            File bgPhoto=new File(a.store.photos,savedHair.images.get(0));
+            try(FileInputStream in=new FileInputStream(bgPhoto);FileOutputStream out=new FileOutputStream(a.backgroundFile)){
+                Store.copy(in,out,1024*1024);
+            }
+            final String bgHash=CloudSync.fileHash(a.backgroundFile);
+            sync.applyRemoteBackground("invalid-unused-auth",syncCode,true,bgHash);
+            check(a.backgroundFile.exists()&&bgHash.equals(CloudSync.fileHash(a.backgroundFile)),
+                "unchanged background is reused locally without a cloud download");
+JSONObject cloudManifest=sync.decryptManifest(cloudRemote.encrypted,syncCode);cloudRemote.encrypted.delete();check("suishoucun-cloud".equals(cloudManifest.optString("format"))&&cloudManifest.getJSONObject("collection").getJSONArray("notes").length()==cloudNotes,"encrypted cloud manifest round-trips the full collection");
             // Independent second-device filesystem and preferences: blank install pulls real encrypted records and photos.
             final Context deviceOne=getTargetContext();
             Context deviceTwo=new ContextWrapper(deviceOne){
