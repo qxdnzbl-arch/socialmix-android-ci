@@ -50,9 +50,12 @@ assert len(r['checks'])>=35
 print('ANDROID ACCEPTANCE PASSED',len(r['checks']))
 PY
 # Force-stop and relaunch verifies that the actual installed app reads saved bytes.
+adb logcat -c || true
 adb shell am force-stop com.nzbl.pocket
 adb shell am start -n com.nzbl.pocket/.MainActivity
-sleep 1
+sleep 2
+adb logcat -d -s AndroidRuntime:E > out/qa/relaunch-crash-log.txt || true
+cat out/qa/relaunch-crash-log.txt
 adb shell uiautomator dump /sdcard/window.xml
 adb pull /sdcard/window.xml out/qa/relaunch.xml
 python3 - <<'PY'
