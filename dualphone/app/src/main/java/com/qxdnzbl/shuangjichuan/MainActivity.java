@@ -26,7 +26,8 @@ import java.util.concurrent.*;
 public class MainActivity extends Activity implements NativeMessageAdapter.Callbacks {
   private static final int PICK_FILES=7070, PERMS=7071, PICK_BG=7072, NOTIFICATION_PERMS=7073;
   public static volatile boolean chatForeground=false;
-  private static final String SECRET="6686986c94d4a4d34fd705665b962491078a94688d3f730b568d36a2c526c470";
+  private PairCrypto pairing;
+  private boolean pairingDialogVisible=false;
 
   private final ExecutorService io=Executors.newCachedThreadPool();
   private SharedPreferences prefs;
@@ -90,13 +91,14 @@ public class MainActivity extends Activity implements NativeMessageAdapter.Callb
 
     prefs=getSharedPreferences("dual",MODE_PRIVATE);
     db=new TransferDb(this);
+    pairing=new PairCrypto(this);
 
     String device=prefs.getString("device","");
     if(device.isEmpty()){
       device=UUID.randomUUID().toString();
       prefs.edit().putString("device",device).apply();
     }
-    prefs.edit().putString("token",SECRET).putString("account","__private__").apply();
+    prefs.edit().remove("token").remove("account").apply();
 
     if(isDebuggable()){
       prefs.edit().putBoolean("ci_nearby_only",getIntent().getBooleanExtra("ciNearbyOnly",false)).apply();
@@ -123,8 +125,8 @@ public class MainActivity extends Activity implements NativeMessageAdapter.Callb
     updater=new AppUpdater(this);
     if(ciLoadCount>0)loadCiMessagesAsync(ciLoadCount);
 
-    requestNearbyPermissions();
-    TransferService.start(this);
+    if(pairing.configured())TransferService.start(this);
+    if(!pairing.configured())root.postDelayed(this::showPairingWizard,550);
   }
 
   @Override protected void onStart(){
@@ -142,7 +144,7 @@ public class MainActivity extends Activity implements NativeMessageAdapter.Callb
   @Override protected void onResume(){
     super.onResume();chatForeground=true;
     TransferService.wake(this);
-    if(hasNearbyPermissions())mainHandler.postDelayed(this::requestNotificationPermission,700);
+    mainHandler.postDelayed(this::requestNotificationPermission,700);
     scheduleReload(false);
     updateStatus();
     if(updater!=null)updater.onResume();
@@ -292,6 +294,8 @@ public class MainActivity extends Activity implements NativeMessageAdapter.Callb
     srlp.gravity=Gravity.CENTER_HORIZONTAL;
     srlp.topMargin=dp(5);
     titleBox.addView(statusRow,srlp);
+    statusRow.setContentDescription("设备私密配对");
+    statusRow.setOnClickListener(v->showPairingWizard());
 
     FrameLayout.LayoutParams tlp=new FrameLayout.LayoutParams(-2,-2,Gravity.CENTER);
     top.addView(titleBox,tlp);
@@ -513,18 +517,119 @@ public class MainActivity extends Activity implements NativeMessageAdapter.Callb
 
   private void updateStatus(){
     if(status==null)return;
+    if(pairing==null)pairing=new PairCrypto(this);
+    if(!pairing.paired()){
+      status.setText(pairing.configured()?"等待专属配对 · 点此查看":"未配对 · 点此设置");
+      status.setTextColor(Color.rgb(150,106,58));
+      if(statusDot!=null)statusDot.setBackground(makeColor(Color.rgb(201,143,72),dp(99)));
+      return;
+    }
     String s=prefs.getString("link_state","searching");
     if(adapter!=null)adapter.setLinkState(s);
     String label;
     int fg;
-    if("nearby".equals(s)){label="已直连";fg=Color.rgb(70,130,101);}
-    else if("relay".equals(s)){label="已同步";fg=Color.rgb(70,130,101);}
+    if("nearby".equals(s)){label="已直连 · 私密加密";fg=Color.rgb(70,130,101);}
+    else if("relay".equals(s)){label="已配对 · 私密加密";fg=Color.rgb(70,130,101);}
     else if("connecting".equals(s)){label="连接中";fg=Color.rgb(84,122,159);}
     else if("permission".equals(s)){label="需要权限";fg=Color.rgb(158,112,53);}
-    else {label="自动同步";fg=Color.rgb(80,132,108);}
+    else {label="已配对 · 自动同步";fg=Color.rgb(80,132,108);}
     status.setText(label);
     status.setTextColor(fg);
     if(statusDot!=null)statusDot.setBackground(makeColor(fg,dp(99)));
+  }
+
+  private void pairingReady(){
+    stopService(new Intent(this,TransferService.class));
+    mainHandler.postDelayed(()->{
+      TransferService.start(this);
+      updateStatus();
+    },350);
+    updateStatus();
+  }
+
+  private void showPairingWizard(){
+    if(isFinishing()||isDestroyed()||pairingDialogVisible)return;
+    pairingDialogVisible=true;
+    AlertDialog dialog;
+    if(pairing.paired()){
+      dialog=new AlertDialog.Builder(this)
+        .setTitle("两台手机已安全配对")
+        .setMessage("已绑定唯一接收设备，聊天和文件均使用端到端加密。\n\n换另一台手机时，需要重新配对。")
+        .setPositiveButton("知道了",null)
+        .setNeutralButton("更换设备",(d,w)->confirmNewPair())
+        .create();
+    }else if(pairing.configured()){
+      dialog=new AlertDialog.Builder(this)
+        .setTitle("等待另一台手机连接")
+        .setMessage("将下面的专属配对码输入另一台已安装新版双机传的手机：\n\n"
+          +PairCrypto.format(pairing.code())+"\n\n此码只给自己的另一台手机。")
+        .setPositiveButton("复制配对码",(d,w)->copyPairingCode())
+        .setNegativeButton("改为输入配对码",(d,w)->enterPairingCode())
+        .setNeutralButton("关闭",null)
+        .create();
+    }else{
+      dialog=new AlertDialog.Builder(this)
+        .setTitle("首次安全配对")
+        .setMessage("在第一台手机创建配对码，在另一台手机输入同一个配对码。\n配对成功后，只有这两台设备能互传，内容全程加密。")
+        .setPositiveButton("创建配对码",(d,w)->createPairingCode())
+        .setNegativeButton("输入配对码",(d,w)->enterPairingCode())
+        .setNeutralButton("稍后",null)
+        .create();
+    }
+    dialog.setOnDismissListener(d->pairingDialogVisible=false);
+    dialog.show();
+  }
+
+  private void createPairingCode(){
+    pairing.createCode();
+    pairingReady();
+    new AlertDialog.Builder(this)
+      .setTitle("第一台手机的专属配对码")
+      .setMessage(PairCrypto.format(pairing.code())
+        +"\n\n在第二台手机打开新版双机传，点「输入配对码」，输入这串字符。\n请勿分享给其他人。")
+      .setPositiveButton("复制配对码",(d,w)->copyPairingCode())
+      .setNegativeButton("关闭",null).show();
+  }
+
+  private void copyPairingCode(){
+    ((android.content.ClipboardManager)getSystemService(CLIPBOARD_SERVICE)).setPrimaryClip(
+      ClipData.newPlainText("双机传配对码",PairCrypto.format(pairing.code())));
+    toast("配对码已复制");
+  }
+
+  private void enterPairingCode(){
+    EditText code=new EditText(this);
+    code.setSingleLine(true);
+    code.setTextSize(17);
+    code.setHint("输入20位专属配对码");
+    code.setInputType(android.text.InputType.TYPE_CLASS_TEXT|android.text.InputType.TYPE_TEXT_FLAG_CAP_CHARACTERS);
+    code.setFilters(new InputFilter[]{new InputFilter.LengthFilter(30)});
+    LinearLayout wrap=new LinearLayout(this);wrap.setPadding(dp(24),dp(8),dp(24),0);
+    wrap.addView(code,new LinearLayout.LayoutParams(-1,-2));
+    AlertDialog dialog=new AlertDialog.Builder(this)
+      .setTitle("输入另一台手机的配对码")
+      .setMessage("只输入你自己第一台手机显示的配对码。")
+      .setView(wrap)
+      .setNegativeButton("取消",null)
+      .setPositiveButton("开始配对",null).create();
+    dialog.setOnShowListener(d->dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v->{
+      if(!pairing.joinCode(code.getText().toString())){
+        code.setError("请输入完整的20位配对码");return;
+      }
+      dialog.dismiss();
+      pairingReady();
+      toast("已加入专属配对，等待另一台手机确认");
+    }));
+    dialog.show();
+  }
+
+  private void confirmNewPair(){
+    new AlertDialog.Builder(this).setTitle("重新配对另一台手机？")
+      .setMessage("原设备将无法接收新消息，已有本地记录不会删除。")
+      .setNegativeButton("取消",null)
+      .setPositiveButton("重新配对",(d,w)->{
+        pairing.createCode();pairingReady();showPairingWizard();
+      }).show();
   }
 
   private void sendText(){
