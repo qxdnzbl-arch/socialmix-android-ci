@@ -49,7 +49,7 @@ final class SyncNotifier {
             PendingIntent.FLAG_UPDATE_CURRENT|PendingIntent.FLAG_IMMUTABLE);
         Notification notification=new Notification.Builder(app,CHANNEL)
             .setSmallIcon(android.R.drawable.ic_dialog_info).setContentTitle(title).setContentText(text)
-            .setAutoCancel(true).setContentIntent(pending)
+            .setAutoCancel(true).setOnlyAlertOnce(type==UPLOADED).setContentIntent(pending)
             .setCategory(Notification.CATEGORY_STATUS).build();
         nm.notify(type,notification);
         if(type!=FAILURE)p.edit().putLong(lastKey,version).apply();
