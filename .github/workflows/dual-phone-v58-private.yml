@@ -1,5 +1,6 @@
 name: Dual Phone v5.8 Private Pairing and E2E Acceptance
 on:
+  workflow_dispatch:
   push:
     branches: [dualphone-v58-private-pairing]
     paths:
