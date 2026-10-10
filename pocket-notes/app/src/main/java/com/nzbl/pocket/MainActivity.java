@@ -20,6 +20,7 @@ public class MainActivity extends Activity {
     public static final int BG=0xfff4f7fa,INK=0xff22343e,MUTED=0xff667987,ACCENT=0xff22646d,LINE=0xffdce5ec,WHITE=0xffffffff;
     Store store;
     File backgroundFile,downloadedUpdate;
+    CloudSync cloudSync;
     ImageView backdropView;
     LinearLayout root,list,photoStrip;
     View searchBox;
@@ -34,7 +35,7 @@ public class MainActivity extends Activity {
     ArrayList<Store.Category> categoryDragOriginal=null;
     TextView categoryButton;
     final Handler handler=new Handler();
-    Runnable draftTask;
+    Runnable draftTask,syncTask;
     int scrollPosition=0;
     ListView homeList;
     public int dp(float n){return Math.round(n*getResources().getDisplayMetrics().density);}
@@ -51,12 +52,13 @@ public class MainActivity extends Activity {
         super.onCreate(saved);getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
         getWindow().setStatusBarColor(BG);getWindow().setNavigationBarColor(BG);
         getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR|View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR);
-        backgroundFile=new File(getFilesDir(),"background.img");downloadedUpdate=new File(getCacheDir(),"update.apk");store=new Store(this);home();handler.postDelayed(this::maybeAutoCheckUpdate,1800);
+        backgroundFile=new File(getFilesDir(),"background.img");downloadedUpdate=new File(getCacheDir(),"update.apk");store=new Store(this);cloudSync=new CloudSync(this,store,backgroundFile);home();handler.postDelayed(this::maybeAutoCheckUpdate,1800);if(cloudSync.enabled())handler.postDelayed(()->syncCloud(false),900);
         if(saved!=null){filter=saved.getString("filter","all");query=saved.getString("query","");searchOpen=saved.getBoolean("searchOpen",false);searchReturnFilter=saved.getString("searchReturnFilter","all");String s=saved.getString("screen","home");if("edit".equals(s)&&store.draft!=null)editor(store.draft.copy());else if("album".equals(s))album();else home();}
         if(!store.ready)new AlertDialog.Builder(this).setTitle("记录读取异常").setMessage(store.loadError).setPositiveButton("导出原文件",(d,w)->exportPicker()).setNegativeButton("关闭",null).show();
     }
     @Override public void onSaveInstanceState(Bundle out){captureDraft();out.putString("screen",screen);out.putString("filter",filter);out.putString("query",query);out.putBoolean("searchOpen",searchOpen);out.putString("searchReturnFilter",searchReturnFilter);if(current!=null)out.putString("id",current.id);super.onSaveInstanceState(out);}
-    @Override public void onPause(){captureDraft();super.onPause();}
+    @Override protected void onResume(){super.onResume();if(cloudSync!=null&&cloudSync.enabled())handler.postDelayed(()->syncCloud(false),500);}
+    @Override public void onPause(){captureDraft();if(cloudSync!=null&&cloudSync.enabled())syncCloud(false);super.onPause();}
     @Override public void onBackPressed(){
         if("albumPhoto".equals(screen)){album();return;}
         if("photo".equals(screen)){if(editing!=null)editor(editing);else if(current!=null)detail(current,false);else home();return;}
@@ -96,7 +98,19 @@ public class MainActivity extends Activity {
     void toast(String s){Toast.makeText(this,s,Toast.LENGTH_SHORT).show();}
     void error(String s){new AlertDialog.Builder(this).setTitle("没有完成").setMessage(s).setPositiveButton("知道了",null).show();}
     void hideKeyboard(){View v=getCurrentFocus();if(v!=null)((InputMethodManager)getSystemService(INPUT_METHOD_SERVICE)).hideSoftInputFromWindow(v.getWindowToken(),0);root.requestFocus();}
-    boolean commit(Runnable r){if(store.change(r))return true;error("保存失败，原记录仍保留。请检查手机剩余空间后再试。");return false;}
+    boolean commit(Runnable r){if(store.change(r)){markSyncDirty(false);return true;}error("保存失败，原记录仍保留。请检查手机剩余空间后再试。");return false;}
+    void markSyncDirty(boolean background){
+        if(cloudSync==null||!cloudSync.enabled())return;cloudSync.markDirty(background);
+        if(syncTask!=null)handler.removeCallbacks(syncTask);syncTask=()->syncCloud(false);handler.postDelayed(syncTask,2500);
+    }
+    void syncCloud(boolean manual){
+        if(cloudSync==null||!cloudSync.enabled())return;if(manual)toast("正在同步…");
+        new Thread(()->{CloudSync.Result result=cloudSync.syncNow(false);runOnUiThread(()->{
+            if(isFinishing())return;
+            if(result.ok){if(manual)toast("同步完成");if(result.changed){if("home".equals(screen))home();else if("album".equals(screen))album();}}
+            else if(manual)error(result.message);
+        });}).start();
+    }
 
     void mainHeader(String mode){
         LinearLayout switcher=row();switcher.setPadding(dp(20),dp(8),dp(12),dp(4));
@@ -136,7 +150,7 @@ public class MainActivity extends Activity {
         int from=categoryIndex(id);if(from<0||store.categories.size()<2)return false;to=Math.max(0,Math.min(to,store.categories.size()-1));if(from==to)return false;
         Store.Category c=store.categories.remove(from);store.categories.add(to,c);return true;
     }
-    boolean persistCategoryOrder(){try{store.save();return true;}catch(Exception e){return false;}}
+    boolean persistCategoryOrder(){try{store.save();markSyncDirty(false);return true;}catch(Exception e){return false;}}
     void beginCategoryDrag(TextView source,String id){
         if(categoryIndex(id)<0||store.categories.size()<2)return;
         categoryDragOriginal=new ArrayList<>(store.categories);draggingCategoryId=id;categoryDragView=source;categoryDragMoved=false;suppressCategoryClick=true;
@@ -268,7 +282,7 @@ public class MainActivity extends Activity {
         changing=false;TextWatcher watcher=new TextWatcher(){public void beforeTextChanged(CharSequence s,int a,int c,int f){}public void onTextChanged(CharSequence s,int a,int b,int c){if(!changing){if(draftTask!=null)handler.removeCallbacks(draftTask);draftTask=()->captureDraft();handler.postDelayed(draftTask,350);}}public void afterTextChanged(Editable e){}};titleInput.addTextChangedListener(watcher);bodyInput.addTextChangedListener(watcher);root.requestFocus();
     }
     void updateEditing(){if(editing!=null&&"edit".equals(screen)&&titleInput!=null){editing.title=titleInput.getText().toString();editing.body=bodyInput.getText().toString();}}
-    void captureDraft(){if(editing==null||!"edit".equals(screen)||changing||!store.ready)return;updateEditing();Store.Note d=editing.hasContent()?editing.copy():null;if(!store.change(()->store.draft=d)&&!draftWarning){draftWarning=true;toast("草稿没有保存成功，请检查手机剩余空间。");}}
+    void captureDraft(){if(editing==null||!"edit".equals(screen)||changing||!store.ready)return;updateEditing();if(editing.hasContent())editing.updated=System.currentTimeMillis();Store.Note d=editing.hasContent()?editing.copy():null;if(store.change(()->store.draft=d))markSyncDirty(false);else if(!draftWarning){draftWarning=true;toast("草稿没有保存成功，请检查手机剩余空间。");}}
     String categoryLabel(String id){return Store.UNFILED.equals(id)?"选择分类":store.categoryName(id);}
     void selectCategory(String id){editing.category=id;categoryButton.setText(categoryLabel(id)+"  ▾");categoryButton.setTextColor(categoryColor(id));categoryButton.setBackground(ripple(categoryTint(id),10,0));captureDraft();}
     void pickCategory(){updateEditing();String[] names=new String[store.categories.size()+2];names[0]="暂不分类";for(int i=0;i<store.categories.size();i++)names[i+1]=store.categories.get(i).name;names[names.length-1]="＋ 新建分类";new AlertDialog.Builder(this).setTitle("放在哪个分类").setItems(names,(d,w)->{if(w==names.length-1)categoryNameDialog(null,c->selectCategory(c.id));else selectCategory(w==0?Store.UNFILED:store.categories.get(w-1).id);}).setNegativeButton("取消",null).show();}
@@ -305,8 +319,40 @@ public class MainActivity extends Activity {
     void fullPhoto(int index){base("photo");root.setBackgroundColor(0xff18232b);getWindow().setStatusBarColor(0xff18232b);getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR);LinearLayout bar=row();bar.setPadding(dp(12),dp(8),dp(12),dp(8));TextView back=button("返回",false,()->{restoreSystemBars();detail(current,false);});bar.addView(back,lp(70,48));TextView number=text((index+1)+" / "+current.images.size(),16,WHITE,true);number.setGravity(Gravity.CENTER);bar.addView(number,new LinearLayout.LayoutParams(0,dp(48),1));root.addView(bar);Bitmap bitmap=decode(new File(store.photos,current.images.get(index)),2800);if(bitmap!=null)root.addView(new ZoomImage(bitmap),new LinearLayout.LayoutParams(-1,0,1));else{TextView unavailable=text("图片无法读取",18,WHITE,false);unavailable.setGravity(Gravity.CENTER);root.addView(unavailable,new LinearLayout.LayoutParams(-1,0,1));}LinearLayout nav=row();nav.setPadding(dp(20),dp(10),dp(20),dp(16));if(index>0)nav.addView(button("上一张",false,()->fullPhoto(index-1)),new LinearLayout.LayoutParams(0,dp(50),1));else nav.addView(new View(this),new LinearLayout.LayoutParams(0,dp(50),1));gapHorizontal(nav,12);if(index+1<current.images.size())nav.addView(button("下一张",false,()->fullPhoto(index+1)),new LinearLayout.LayoutParams(0,dp(50),1));else nav.addView(new View(this),new LinearLayout.LayoutParams(0,dp(50),1));root.addView(nav);}
     void gapHorizontal(LinearLayout row,int w){row.addView(new View(this),lp(w,1));}
     void restoreSystemBars(){getWindow().setStatusBarColor(BG);getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR|View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR);}
-    String[] moreMenuItems(){return new String[]{"管理分类","背景图","导出备份（含图片）","导入备份","回收站","关于","检查更新"};}
-    void more(){new AlertDialog.Builder(this).setTitle("随手存").setItems(moreMenuItems(),(d,w)->{if(w==0)categoriesDialog();else if(w==1)backgroundDialog();else if(w==2)exportPicker();else if(w==3)importPicker();else if(w==4)trash();else if(w==5)new AlertDialog.Builder(this).setTitle("随手存 "+appVersionName()).setMessage("文字和图片，按你的分类收好。\n\n记录保存在这台手机。换手机或卸载前，请导出备份。\n\n新版本可在应用内检查并安装。").setPositiveButton("知道了",null).show();else checkUpdate(true);}).show();}
+    String[] moreMenuItems(){return new String[]{"管理分类","背景图","多端同步","导出备份（含图片）","导入备份","回收站","关于","检查更新"};}
+    void more(){new AlertDialog.Builder(this).setTitle("随手存").setItems(moreMenuItems(),(d,w)->{if(w==0)categoriesDialog();else if(w==1)backgroundDialog();else if(w==2)cloudSyncDialog();else if(w==3)exportPicker();else if(w==4)importPicker();else if(w==5)trash();else if(w==6)new AlertDialog.Builder(this).setTitle("随手存 "+appVersionName()).setMessage("文字、图片、分类和背景都保存在本机。\n\n开启「多端同步」后，可在另一台手机用同一个同步码取回并继续同步。\n\n导出备份仍可作为额外的本地备份。").setPositiveButton("知道了",null).show();else checkUpdate(true);}).show();}
+    void cloudSyncDialog(){
+        if(cloudSync==null)return;
+        if(!cloudSync.enabled()){
+            new AlertDialog.Builder(this).setTitle("多端同步").setMessage("不用注册账号。第一台手机开启后会生成一个同步码；另一台手机输入同一个码，记录、分类、图片和背景会同步过去。")
+                .setItems(new String[]{"开启多端同步","连接已有同步"},(d,w)->{if(w==0)enableCloudSync();else connectCloudSyncDialog();})
+                .setNegativeButton("取消",null).show();
+            return;
+        }
+        new AlertDialog.Builder(this).setTitle("多端同步").setMessage("已开启 · "+cloudSync.lastSyncLabel())
+            .setItems(new String[]{"立即同步","查看同步码","断开这台手机"},(d,w)->{
+                if(w==0)syncCloud(true);else if(w==1)showSyncCode();else new AlertDialog.Builder(this).setTitle("断开这台手机？")
+                    .setMessage("只会停止这台手机同步，云端数据和其他手机不会删除。")
+                    .setPositiveButton("断开",(x,y)->{cloudSync.disconnect();toast("这台手机已断开同步");})
+                    .setNegativeButton("取消",null).show();
+            }).setNegativeButton("关闭",null).show();
+    }
+    void enableCloudSync(){
+        cloudSync.beginNew();
+        busy("正在开启多端同步…",()->{CloudSync.Result result=cloudSync.syncNow(false);runOnUiThread(()->{if(result.ok)showSyncCode();else error(result.message);});});
+    }
+    void connectCloudSyncDialog(){
+        EditText e=input("粘贴同步码",16,false);e.setPadding(dp(22),dp(14),dp(22),dp(14));
+        AlertDialog d=new AlertDialog.Builder(this).setTitle("连接已有同步").setMessage("如果这台手机已经有记录，会和云端内容合并，不会直接清空。").setView(e).setPositiveButton("连接",null).setNegativeButton("取消",null).create();
+        d.setOnShowListener(v->d.getButton(-1).setOnClickListener(b->{String code=e.getText().toString();if(!CloudSync.validCode(code)){e.setError("同步码不正确");return;}d.dismiss();busy("正在同步数据…",()->{CloudSync.Result result=cloudSync.connectExisting(code);runOnUiThread(()->{if(result.ok){filter="all";query="";home();toast("已连接并同步完成");}else error(result.message);});});}));
+        d.getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);d.show();
+    }
+    void showSyncCode(){
+        String raw=cloudSync.code();TextView code=text(CloudSync.displayCode(raw),16,INK,true);code.setTextIsSelectable(true);code.setPadding(dp(22),dp(18),dp(22),dp(18));
+        new AlertDialog.Builder(this).setTitle("同步码").setMessage("在另一台手机安装随手存后：··· → 多端同步 → 连接已有同步，再粘贴这个码。\n\n同步码相当于这份数据的钥匙，不要公开发给别人。")
+            .setView(code).setPositiveButton("复制同步码",(d,w)->{((android.content.ClipboardManager)getSystemService(CLIPBOARD_SERVICE)).setPrimaryClip(ClipData.newPlainText("随手存同步码",raw));toast("同步码已复制");})
+            .setNegativeButton("关闭",null).show();
+    }
 
     static class UpdateInfo {long code;String name,url;UpdateInfo(long c,String n,String u){code=c;name=n;url=u;}}
     String appVersionName(){try{return getPackageManager().getPackageInfo(getPackageName(),0).versionName;}catch(Exception e){return "";}}
@@ -334,7 +380,7 @@ public class MainActivity extends Activity {
         if(Build.VERSION.SDK_INT>=26&&!getPackageManager().canRequestPackageInstalls()){try{Intent permission=new Intent(android.provider.Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,Uri.parse("package:"+getPackageName()));startActivityForResult(permission,40);toast("请允许「安装未知应用」，返回后会继续更新");}catch(Exception e){error("无法打开安装权限设置。");}return;}
         try{Uri uri=Uri.parse("content://"+getPackageName()+".update/update.apk");Intent install=new Intent(Intent.ACTION_VIEW);install.setDataAndType(uri,"application/vnd.android.package-archive");install.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION|Intent.FLAG_ACTIVITY_NEW_TASK);startActivity(install);}catch(Exception e){error("无法打开系统安装器。");}
     }
-    void backgroundDialog(){if(backgroundFile!=null&&backgroundFile.isFile())new AlertDialog.Builder(this).setTitle("背景图").setItems(new String[]{"更换背景图","恢复默认背景"},(d,w)->{if(w==0)backgroundPicker();else{backgroundFile.delete();home();}}).setNegativeButton("取消",null).show();else backgroundPicker();}
+    void backgroundDialog(){if(backgroundFile!=null&&backgroundFile.isFile())new AlertDialog.Builder(this).setTitle("背景图").setItems(new String[]{"更换背景图","恢复默认背景"},(d,w)->{if(w==0)backgroundPicker();else{backgroundFile.delete();markSyncDirty(true);home();}}).setNegativeButton("取消",null).show();else backgroundPicker();}
     void backgroundPicker(){Intent i=new Intent(Intent.ACTION_OPEN_DOCUMENT);i.setType("image/*");i.addCategory(Intent.CATEGORY_OPENABLE);try{startActivityForResult(i,30);}catch(ActivityNotFoundException e){error("手机未提供图片选择器。");}}
     void categoriesDialog(){boolean albumMode="album".equals(screen);Runnable refresh=albumMode?this::album:this::home;String[] options=new String[store.categories.size()+1];for(int i=0;i<store.categories.size();i++)options[i]=store.categories.get(i).name;options[options.length-1]="＋ 新建分类";new AlertDialog.Builder(this).setTitle("管理分类").setItems(options,(d,w)->{if(w==options.length-1)categoryNameDialog(null,c->refresh.run());else{Store.Category c=store.categories.get(w);new AlertDialog.Builder(this).setTitle(c.name).setItems(new String[]{"重命名","删除分类"},(dd,ww)->{if(ww==0)categoryNameDialog(c,x->refresh.run());else new AlertDialog.Builder(this).setTitle("删除分类？").setMessage("分类里的记录会保留为未分类，图片和草稿也会保留。").setPositiveButton("删除分类",(a,b)->{if(commit(()->{for(Store.Note n:store.notes)if(n.category.equals(c.id))n.category=Store.UNFILED;if(store.draft!=null&&store.draft.category.equals(c.id))store.draft.category=Store.UNFILED;store.categories.remove(c);})){filter="all";refresh.run();}}).setNegativeButton("取消",null).show();}).show();}}).setNegativeButton("关闭",null).show();}
     void categoryNameDialog(Store.Category category){categoryNameDialog(category,c->home());}
@@ -347,10 +393,10 @@ public class MainActivity extends Activity {
         if(request==10&&editing!=null){ArrayList<Uri> uris=new ArrayList<>();if(data.getClipData()!=null)for(int i=0;i<data.getClipData().getItemCount();i++)uris.add(data.getClipData().getItemAt(i).getUri());else if(data.getData()!=null)uris.add(data.getData());Store.Note note=editing;
             busy("正在保存图片…",()->{int failed=0;ArrayList<String> success=new ArrayList<>();for(Uri uri:uris){File target=new File(store.photos,UUID.randomUUID()+".img");try{InputStream in=getContentResolver().openInputStream(uri);if(in==null)throw new IOException();Store.copy(in,new FileOutputStream(target),64*1024*1024);BitmapFactory.Options o=new BitmapFactory.Options();o.inJustDecodeBounds=true;BitmapFactory.decodeFile(target.toString(),o);if(o.outWidth<=0||o.outHeight<=0)throw new IOException();success.add(target.getName());}catch(Exception e){target.delete();failed++;}}int errors=failed;runOnUiThread(()->{long now=System.currentTimeMillis();for(int i=0;i<success.size();i++){note.images.add(success.get(i));note.imageTimes.add(now+i);}captureDraft();renderEditorPhotos();if(errors>0)error(errors+" 张图片没能读取，其他图片已保存。");});});
         }else if(request==11){ArrayList<Uri> uris=new ArrayList<>();if(data.getClipData()!=null)for(int i=0;i<data.getClipData().getItemCount();i++)uris.add(data.getClipData().getItemAt(i).getUri());else if(data.getData()!=null)uris.add(data.getData());String targetCategory=filter.equals("all")?Store.UNFILED:filter;
-            busy("正在加入相册…",()->{int failed=0;ArrayList<Store.Note> added=new ArrayList<>();ArrayList<File> copied=new ArrayList<>();long now=System.currentTimeMillis();for(int u=0;u<uris.size();u++){Uri uri=uris.get(u);File target=new File(store.photos,UUID.randomUUID()+".img");try{InputStream in=getContentResolver().openInputStream(uri);if(in==null)throw new IOException();Store.copy(in,new FileOutputStream(target),64*1024*1024);BitmapFactory.Options o=new BitmapFactory.Options();o.inJustDecodeBounds=true;BitmapFactory.decodeFile(target.toString(),o);if(o.outWidth<=0||o.outHeight<=0)throw new IOException();Store.Note n=new Store.Note();n.category=targetCategory;n.updated=now+u;n.images.add(target.getName());n.imageTimes.add(now+u);added.add(n);copied.add(target);}catch(Exception e){target.delete();failed++;}}int errors=failed;runOnUiThread(()->{if(added.isEmpty()){if(errors>0)error("图片没有加入，请换一张再试。");return;}if(store.change(()->store.notes.addAll(added))){album();toast("已加入 "+added.size()+" 张照片");if(errors>0)error(errors+" 张图片没能读取，其他图片已加入。");}else{for(File file:copied)file.delete();error("照片没有保存成功，请检查手机剩余空间。");}});});
-        }else if(request==30&&data.getData()!=null){Uri uri=data.getData();busy("正在设置背景图…",()->{File temp=new File(getFilesDir(),"background.tmp");try{InputStream in=getContentResolver().openInputStream(uri);if(in==null)throw new IOException();Store.copy(in,new FileOutputStream(temp),64*1024*1024);BitmapFactory.Options o=new BitmapFactory.Options();o.inJustDecodeBounds=true;BitmapFactory.decodeFile(temp.toString(),o);if(o.outWidth<=0||o.outHeight<=0)throw new IOException();if(backgroundFile.exists()&&!backgroundFile.delete())throw new IOException();if(!temp.renameTo(backgroundFile))throw new IOException();runOnUiThread(()->{home();toast("背景图已设置");});}catch(Exception e){temp.delete();runOnUiThread(()->error("背景图没有设置成功。"));}});
+            busy("正在加入相册…",()->{int failed=0;ArrayList<Store.Note> added=new ArrayList<>();ArrayList<File> copied=new ArrayList<>();long now=System.currentTimeMillis();for(int u=0;u<uris.size();u++){Uri uri=uris.get(u);File target=new File(store.photos,UUID.randomUUID()+".img");try{InputStream in=getContentResolver().openInputStream(uri);if(in==null)throw new IOException();Store.copy(in,new FileOutputStream(target),64*1024*1024);BitmapFactory.Options o=new BitmapFactory.Options();o.inJustDecodeBounds=true;BitmapFactory.decodeFile(target.toString(),o);if(o.outWidth<=0||o.outHeight<=0)throw new IOException();Store.Note n=new Store.Note();n.category=targetCategory;n.updated=now+u;n.images.add(target.getName());n.imageTimes.add(now+u);added.add(n);copied.add(target);}catch(Exception e){target.delete();failed++;}}int errors=failed;runOnUiThread(()->{if(added.isEmpty()){if(errors>0)error("图片没有加入，请换一张再试。");return;}if(store.change(()->store.notes.addAll(added))){markSyncDirty(false);album();toast("已加入 "+added.size()+" 张照片");if(errors>0)error(errors+" 张图片没能读取，其他图片已加入。");}else{for(File file:copied)file.delete();error("照片没有保存成功，请检查手机剩余空间。");}});});
+        }else if(request==30&&data.getData()!=null){Uri uri=data.getData();busy("正在设置背景图…",()->{File temp=new File(getFilesDir(),"background.tmp");try{InputStream in=getContentResolver().openInputStream(uri);if(in==null)throw new IOException();Store.copy(in,new FileOutputStream(temp),64*1024*1024);BitmapFactory.Options o=new BitmapFactory.Options();o.inJustDecodeBounds=true;BitmapFactory.decodeFile(temp.toString(),o);if(o.outWidth<=0||o.outHeight<=0)throw new IOException();if(backgroundFile.exists()&&!backgroundFile.delete())throw new IOException();if(!temp.renameTo(backgroundFile))throw new IOException();runOnUiThread(()->{markSyncDirty(true);home();toast("背景图已设置");});}catch(Exception e){temp.delete();runOnUiThread(()->error("背景图没有设置成功。"));}});
         }else if(request==20&&data.getData()!=null){Uri uri=data.getData();busy("正在导出文字和图片…",()->{try{OutputStream out=getContentResolver().openOutputStream(uri);if(out==null)throw new IOException();store.exportZip(out);runOnUiThread(()->toast("备份已保存"));}catch(Exception e){runOnUiThread(()->error("备份没有保存成功。请检查可用空间后重试。"));}});
-        }else if(request==21&&data.getData()!=null){Uri uri=data.getData();new AlertDialog.Builder(this).setTitle("导入这份备份？").setMessage("合并到现有记录，不清空手机上的内容。相同记录保留更新的一份。").setPositiveButton("导入",(d,w)->busy("正在导入…",()->{try{InputStream in=getContentResolver().openInputStream(uri);if(in==null)throw new IOException();int count=store.importZip(in);runOnUiThread(()->{filter="all";query="";home();toast("已导入 "+count+" 条记录");});}catch(Exception e){runOnUiThread(()->error("导入失败，原记录没有改变。请使用本软件导出的完整 ZIP 备份。"));}})).setNegativeButton("取消",null).show();}
+        }else if(request==21&&data.getData()!=null){Uri uri=data.getData();new AlertDialog.Builder(this).setTitle("导入这份备份？").setMessage("合并到现有记录，不清空手机上的内容。相同记录保留更新的一份。").setPositiveButton("导入",(d,w)->busy("正在导入…",()->{try{InputStream in=getContentResolver().openInputStream(uri);if(in==null)throw new IOException();int count=store.importZip(in);runOnUiThread(()->{markSyncDirty(false);filter="all";query="";home();toast("已导入 "+count+" 条记录");});}catch(Exception e){runOnUiThread(()->error("导入失败，原记录没有改变。请使用本软件导出的完整 ZIP 备份。"));}})).setNegativeButton("取消",null).show();}
     }
     class Glyph extends Drawable {
         String kind;int color,size;Paint p=new Paint(3);

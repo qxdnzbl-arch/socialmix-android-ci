@@ -1,0 +1,333 @@
+package com.nzbl.pocket;
+
+import android.content.*;
+import android.util.Base64;
+import javax.crypto.*;
+import javax.crypto.spec.*;
+import java.io.*;
+import java.net.*;
+import java.nio.charset.StandardCharsets;
+import java.security.*;
+import java.text.SimpleDateFormat;
+import java.util.*;
+import org.json.*;
+
+final class CloudSync {
+    static final String ENDPOINT="https://nvwdtfnhsyfdopaxdylx.supabase.co/functions/v1/suishoucun-sync";
+    static final int MAX_ASSET=66*1024*1024,MAX_MANIFEST=8*1024*1024;
+    final Context context;
+    final Store store;
+    final File backgroundFile;
+    final SharedPreferences prefs;
+
+    static final class Result {
+        final boolean ok,changed;
+        final String message;
+        final long revision;
+        Result(boolean o,boolean c,String m,long r){ok=o;changed=c;message=m;revision=r;}
+    }
+    static final class Remote {
+        final long revision;
+        final File encrypted;
+        Remote(long r,File f){revision=r;encrypted=f;}
+    }
+    static final class Conflict extends IOException {
+        final long revision;
+        Conflict(long r){super("revision conflict");revision=r;}
+    }
+
+    CloudSync(Context c,Store s,File background){
+        context=c.getApplicationContext();store=s;backgroundFile=background;
+        prefs=context.getSharedPreferences("cloud_sync",Context.MODE_PRIVATE);
+    }
+    boolean enabled(){return validCode(code());}
+    String code(){return prefs.getString("code","");}
+    long revision(){return prefs.getLong("revision",0);}
+    long lastSync(){return prefs.getLong("last_sync",0);}
+    boolean dirty(){return prefs.getBoolean("dirty",false);}
+    boolean backgroundDirty(){return prefs.getBoolean("background_dirty",false);}
+    String lastSyncLabel(){
+        long t=lastSync();if(t<=0)return "还没有完成同步";
+        return "最近同步 "+new SimpleDateFormat("M月d日 HH:mm",Locale.CHINA).format(new Date(t));
+    }
+    boolean hasLocalData(){
+        synchronized(store){return !store.categories.isEmpty()||!store.notes.isEmpty()||store.draft!=null||(backgroundFile!=null&&backgroundFile.isFile());}
+    }
+    void markDirty(boolean background){
+        if(!enabled())return;
+        SharedPreferences.Editor e=prefs.edit().putBoolean("dirty",true);
+        if(background)e.putBoolean("background_dirty",true);
+        e.apply();
+    }
+    String beginNew(){
+        String c=generateCode();
+        prefs.edit().putString("code",c).putLong("revision",0).putBoolean("dirty",true)
+            .putBoolean("background_dirty",backgroundFile!=null&&backgroundFile.isFile()).putLong("last_sync",0).apply();
+        return c;
+    }
+    void disconnect(){
+        prefs.edit().clear().apply();
+    }
+    Result connectExisting(String raw){
+        String next=normalizeCode(raw);
+        if(!validCode(next))return new Result(false,false,"同步码不正确。",0);
+        String oldCode=code();long oldRev=revision(),oldLast=lastSync();
+        boolean oldDirty=dirty(),oldBg=backgroundDirty();
+        prefs.edit().putString("code",next).putLong("revision",0)
+            .putBoolean("dirty",hasLocalData()).putBoolean("background_dirty",backgroundFile!=null&&backgroundFile.isFile())
+            .putLong("last_sync",0).commit();
+        Result result=syncNow(true);
+        if(!result.ok){
+            SharedPreferences.Editor e=prefs.edit().clear();
+            if(validCode(oldCode))e.putString("code",oldCode).putLong("revision",oldRev).putLong("last_sync",oldLast)
+                .putBoolean("dirty",oldDirty).putBoolean("background_dirty",oldBg);
+            e.commit();
+        }
+        return result;
+    }
+
+    synchronized Result syncNow(boolean requireExisting){
+        if(!enabled())return new Result(false,false,"尚未开启多端同步。",0);
+        String syncCode=code(),auth;
+        try{auth=authForCode(syncCode);}catch(Exception e){return new Result(false,false,"同步码无效。",0);}
+        boolean changed=false;
+        for(int attempt=0;attempt<3;attempt++){
+            File remoteFile=null;
+            try{
+                Remote remote=getManifest(auth);
+                remoteFile=remote.encrypted;
+                long localRevision=revision();
+                boolean localDirty=dirty(),bgDirty=backgroundDirty();
+
+                if(requireExisting&&remote.revision==0){
+                    return new Result(false,false,"没有找到这份云端数据，请检查同步码。",0);
+                }
+                if(remote.revision<localRevision){
+                    prefs.edit().putLong("revision",remote.revision).putBoolean("dirty",true).commit();
+                    localRevision=remote.revision;localDirty=true;
+                }
+                if(remote.revision>localRevision){
+                    JSONObject manifest=decryptManifest(remote.encrypted,syncCode);
+                    JSONObject collection=manifest.getJSONObject("collection");
+                    ensureRemotePhotos(auth,syncCode,collection);
+                    synchronized(store){
+                        if(localDirty)store.mergeSync(collection);else store.replaceSync(collection);
+                    }
+                    if(!bgDirty)applyRemoteBackground(auth,syncCode,manifest.optBoolean("background",false));
+                    localRevision=remote.revision;changed=true;
+                    prefs.edit().putLong("revision",localRevision).commit();
+                    if(!localDirty){
+                        prefs.edit().putBoolean("dirty",false).putBoolean("background_dirty",false)
+                            .putLong("last_sync",System.currentTimeMillis()).commit();
+                        return new Result(true,true,"同步完成",localRevision);
+                    }
+                }
+                if(localDirty||remote.revision==0){
+                    uploadLocalAssets(auth,syncCode,bgDirty||remote.revision==0);
+                    JSONObject manifest=localManifest();
+                    File encrypted=encryptManifest(manifest,syncCode);
+                    try{
+                        long next=putManifest(auth,remote.revision,encrypted);
+                        prefs.edit().putLong("revision",next).putBoolean("dirty",false)
+                            .putBoolean("background_dirty",false).putLong("last_sync",System.currentTimeMillis()).commit();
+                        return new Result(true,changed,"同步完成",next);
+                    }finally{encrypted.delete();}
+                }
+                prefs.edit().putLong("last_sync",System.currentTimeMillis()).commit();
+                return new Result(true,changed,"同步完成",remote.revision);
+            }catch(Conflict conflict){
+                prefs.edit().putLong("revision",Math.min(revision(),conflict.revision)).commit();
+            }catch(Exception e){
+                return new Result(false,changed,readableError(e),revision());
+            }finally{if(remoteFile!=null)remoteFile.delete();}
+        }
+        return new Result(false,changed,"云端数据刚刚有变化，请再同步一次。",revision());
+    }
+
+    JSONObject localManifest() throws Exception{
+        JSONObject collection;
+        synchronized(store){collection=new JSONObject(store.json().toString());}
+        return new JSONObject().put("format","suishoucun-cloud").put("version",1)
+            .put("collection",collection).put("background",backgroundFile!=null&&backgroundFile.isFile());
+    }
+    void uploadLocalAssets(String auth,String syncCode,boolean forceBackground)throws Exception{
+        JSONObject collection;
+        synchronized(store){collection=new JSONObject(store.json().toString());}
+        for(String name:imageNames(collection)){
+            File file=new File(store.photos,name);
+            if(!file.isFile())throw new IOException("本地图片缺失");
+            if(!assetExists(auth,name))uploadEncryptedAsset(auth,syncCode,name,file);
+        }
+        if(backgroundFile!=null&&backgroundFile.isFile()&&(forceBackground||!assetExists(auth,"background"))){
+            uploadEncryptedAsset(auth,syncCode,"background",backgroundFile);
+        }
+    }
+    void ensureRemotePhotos(String auth,String syncCode,JSONObject collection)throws Exception{
+        for(String name:imageNames(collection)){
+            File target=new File(store.photos,name);
+            if(target.isFile()&&target.length()>0)continue;
+            downloadEncryptedAsset(auth,syncCode,name,target);
+        }
+    }
+    void applyRemoteBackground(String auth,String syncCode,boolean hasBackground)throws Exception{
+        if(!hasBackground){if(backgroundFile!=null&&backgroundFile.isFile())backgroundFile.delete();return;}
+        File tmp=new File(context.getCacheDir(),"sync-bg-"+UUID.randomUUID()+".tmp");
+        try{
+            downloadEncryptedAsset(auth,syncCode,"background",tmp);
+            if(backgroundFile.exists()&&!backgroundFile.delete())throw new IOException("背景图无法替换");
+            if(!tmp.renameTo(backgroundFile)){copyFile(tmp,backgroundFile,MAX_ASSET);tmp.delete();}
+        }finally{tmp.delete();}
+    }
+
+    static LinkedHashSet<String> imageNames(JSONObject collection)throws Exception{
+        LinkedHashSet<String> names=new LinkedHashSet<>();
+        JSONArray notes=collection.getJSONArray("notes");
+        for(int i=0;i<notes.length();i++)addImages(names,notes.getJSONObject(i));
+        if(!collection.isNull("draft"))addImages(names,collection.getJSONObject("draft"));
+        return names;
+    }
+    static void addImages(Set<String> names,JSONObject note)throws Exception{
+        JSONArray a=note.getJSONArray("images");
+        for(int i=0;i<a.length();i++){String s=a.getString(i);if(!s.matches("[a-zA-Z0-9_.-]+"))throw new IOException("图片名无效");names.add(s);}
+    }
+
+    File encryptManifest(JSONObject manifest,String code)throws Exception{
+        byte[] bytes=manifest.toString().getBytes(StandardCharsets.UTF_8);
+        if(bytes.length>MAX_MANIFEST)throw new IOException("记录数据过大");
+        File plain=new File(context.getCacheDir(),"sync-manifest-"+UUID.randomUUID()+".json");
+        File encrypted=new File(context.getCacheDir(),"sync-manifest-"+UUID.randomUUID()+".bin");
+        try(FileOutputStream out=new FileOutputStream(plain)){out.write(bytes);}
+        try{encryptFile(plain,encrypted,keyForCode(code),"SSM1");return encrypted;}finally{plain.delete();}
+    }
+    JSONObject decryptManifest(File encrypted,String code)throws Exception{
+        File plain=new File(context.getCacheDir(),"sync-manifest-"+UUID.randomUUID()+".json");
+        try{
+            decryptFile(encrypted,plain,keyForCode(code),"SSM1",MAX_MANIFEST);
+            byte[] bytes=Store.read(new FileInputStream(plain),MAX_MANIFEST);
+            JSONObject m=new JSONObject(new String(bytes,StandardCharsets.UTF_8));
+            if(!"suishoucun-cloud".equals(m.optString("format"))||m.optInt("version")!=1)throw new IOException("云端数据版本不兼容");
+            return m;
+        }finally{plain.delete();}
+    }
+    void uploadEncryptedAsset(String auth,String code,String name,File source)throws Exception{
+        if(source.length()>64L*1024*1024)throw new IOException("单张图片超过64MB，暂时不能同步");
+        File encrypted=new File(context.getCacheDir(),"sync-asset-"+UUID.randomUUID()+".bin");
+        try{encryptFile(source,encrypted,keyForCode(code),"SSA1");putAsset(auth,name,encrypted);}finally{encrypted.delete();}
+    }
+    void downloadEncryptedAsset(String auth,String code,String name,File target)throws Exception{
+        File encrypted=getAsset(auth,name);
+        File tmp=new File(context.getCacheDir(),"sync-asset-"+UUID.randomUUID()+".tmp");
+        try{
+            decryptFile(encrypted,tmp,keyForCode(code),"SSA1",MAX_ASSET);
+            File parent=target.getParentFile();if(parent!=null)parent.mkdirs();
+            if(target.exists()&&!target.delete())throw new IOException("文件无法替换");
+            if(!tmp.renameTo(target)){copyFile(tmp,target,MAX_ASSET);tmp.delete();}
+        }finally{encrypted.delete();tmp.delete();}
+    }
+
+    static void encryptFile(File input,File output,byte[] key,String magic)throws Exception{
+        byte[] iv=new byte[12];new SecureRandom().nextBytes(iv);
+        Cipher cipher=Cipher.getInstance("AES/GCM/NoPadding");
+        cipher.init(Cipher.ENCRYPT_MODE,new SecretKeySpec(key,"AES"),new GCMParameterSpec(128,iv));
+        try(FileOutputStream raw=new FileOutputStream(output)){
+            raw.write(magic.getBytes(StandardCharsets.US_ASCII));raw.write(iv);
+            try(CipherOutputStream encrypted=new CipherOutputStream(raw,cipher);FileInputStream in=new FileInputStream(input)){copy(in,encrypted,MAX_ASSET+MAX_MANIFEST);}
+        }
+    }
+    static void decryptFile(File input,File output,byte[] key,String magic,int max)throws Exception{
+        try(FileInputStream raw=new FileInputStream(input)){
+            byte[] header=new byte[4];readFully(raw,header);if(!magic.equals(new String(header,StandardCharsets.US_ASCII)))throw new IOException("同步文件格式无效");
+            byte[] iv=new byte[12];readFully(raw,iv);
+            Cipher cipher=Cipher.getInstance("AES/GCM/NoPadding");
+            cipher.init(Cipher.DECRYPT_MODE,new SecretKeySpec(key,"AES"),new GCMParameterSpec(128,iv));
+            try(CipherInputStream decrypted=new CipherInputStream(raw,cipher);FileOutputStream out=new FileOutputStream(output)){copy(decrypted,out,max);}
+        }catch(Exception e){output.delete();throw e;}
+    }
+    static void readFully(InputStream in,byte[] bytes)throws IOException{
+        int off=0,n;while(off<bytes.length&&(n=in.read(bytes,off,bytes.length-off))>0)off+=n;if(off!=bytes.length)throw new EOFException();
+    }
+    static long copy(InputStream in,OutputStream out,long max)throws IOException{
+        byte[] buf=new byte[64*1024];long total=0;int n;
+        while((n=in.read(buf))!=-1){total+=n;if(total>max)throw new IOException("同步文件过大");out.write(buf,0,n);}
+        out.flush();return total;
+    }
+    static void copyFile(File from,File to,long max)throws IOException{
+        try(FileInputStream in=new FileInputStream(from);FileOutputStream out=new FileOutputStream(to)){copy(in,out,max);}
+    }
+
+    Remote getManifest(String auth)throws Exception{
+        HttpURLConnection c=open(ENDPOINT,"GET",auth);
+        int status=c.getResponseCode();
+        if(status==404){c.disconnect();return new Remote(0,null);}
+        if(status!=200){String e=readError(c);throw new IOException("云端返回 "+status+" "+e);}
+        long rev=parseRevision(c);File out=new File(context.getCacheDir(),"sync-remote-"+UUID.randomUUID()+".bin");
+        try(InputStream in=c.getInputStream();FileOutputStream file=new FileOutputStream(out)){copy(in,file,MAX_MANIFEST+1024);}finally{c.disconnect();}
+        return new Remote(rev,out);
+    }
+    long putManifest(String auth,long expected,File file)throws Exception{
+        HttpURLConnection c=open(ENDPOINT,"PUT",auth);c.setRequestProperty("x-sync-revision",String.valueOf(expected));
+        sendFile(c,file);
+        int status=c.getResponseCode();
+        if(status==409){long rev=parseRevision(c);c.disconnect();throw new Conflict(rev);}
+        if(status!=200){String e=readError(c);throw new IOException("云端返回 "+status+" "+e);}
+        long rev=parseRevision(c);c.disconnect();return rev;
+    }
+    boolean assetExists(String auth,String name)throws Exception{
+        HttpURLConnection c=open(assetUrl(name),"HEAD",auth);int status=c.getResponseCode();c.disconnect();
+        if(status==200)return true;if(status==404)return false;throw new IOException("检查图片失败 "+status);
+    }
+    void putAsset(String auth,String name,File file)throws Exception{
+        HttpURLConnection c=open(assetUrl(name),"PUT",auth);sendFile(c,file);int status=c.getResponseCode();
+        if(status!=200){String e=readError(c);throw new IOException("上传图片失败 "+status+" "+e);}c.disconnect();
+    }
+    File getAsset(String auth,String name)throws Exception{
+        HttpURLConnection c=open(assetUrl(name),"GET",auth);int status=c.getResponseCode();
+        if(status!=200){String e=readError(c);throw new IOException("下载图片失败 "+status+" "+e);}
+        File out=new File(context.getCacheDir(),"sync-download-"+UUID.randomUUID()+".bin");
+        try(InputStream in=c.getInputStream();FileOutputStream file=new FileOutputStream(out)){copy(in,file,MAX_ASSET+1024);}finally{c.disconnect();}
+        return out;
+    }
+    void deleteRemote()throws Exception{
+        if(!enabled())return;String auth=authForCode(code());HttpURLConnection c=open(ENDPOINT,"DELETE",auth);int status=c.getResponseCode();
+        if(status!=200){String e=readError(c);throw new IOException("删除云端数据失败 "+status+" "+e);}c.disconnect();
+    }
+    static HttpURLConnection open(String address,String method,String auth)throws Exception{
+        HttpURLConnection c=(HttpURLConnection)new URL(address).openConnection();c.setConnectTimeout(12000);c.setReadTimeout(60000);c.setRequestMethod(method);c.setRequestProperty("x-sync-auth",auth);c.setRequestProperty("User-Agent","Suishoucun-Android");c.setUseCaches(false);return c;
+    }
+    static void sendFile(HttpURLConnection c,File file)throws Exception{
+        c.setDoOutput(true);c.setRequestProperty("Content-Type","application/octet-stream");c.setFixedLengthStreamingMode(file.length());
+        try(OutputStream out=c.getOutputStream();FileInputStream in=new FileInputStream(file)){copy(in,out,Math.max(MAX_ASSET,MAX_MANIFEST)+2048L);}
+    }
+    static String readError(HttpURLConnection c){
+        try{InputStream in=c.getErrorStream();if(in==null)return "";ByteArrayOutputStream out=new ByteArrayOutputStream();copy(in,out,64*1024);return out.toString("UTF-8");}catch(Exception e){return "";}
+    }
+    static long parseRevision(HttpURLConnection c){try{return Long.parseLong(c.getHeaderField("x-sync-revision"));}catch(Exception e){return 0;}}
+    static String assetUrl(String name)throws Exception{return ENDPOINT+"?asset="+URLEncoder.encode(name,"UTF-8");}
+
+    static String generateCode(){
+        byte[] bytes=new byte[32];new SecureRandom().nextBytes(bytes);
+        return Base64.encodeToString(bytes,Base64.URL_SAFE|Base64.NO_WRAP|Base64.NO_PADDING);
+    }
+    static String normalizeCode(String raw){return raw==null?"":raw.replaceAll("\\s+","").trim();}
+    static boolean validCode(String raw){
+        try{return decodeCode(normalizeCode(raw)).length==32;}catch(Exception e){return false;}
+    }
+    static byte[] decodeCode(String raw){
+        return Base64.decode(normalizeCode(raw),Base64.URL_SAFE|Base64.NO_WRAP|Base64.NO_PADDING);
+    }
+    static byte[] derive(String code,String label)throws Exception{
+        MessageDigest d=MessageDigest.getInstance("SHA-256");d.update(label.getBytes(StandardCharsets.UTF_8));d.update((byte)0);d.update(decodeCode(code));return d.digest();
+    }
+    static byte[] keyForCode(String code)throws Exception{return derive(code,"suishoucun-encryption-v1");}
+    static String authForCode(String code)throws Exception{return Base64.encodeToString(derive(code,"suishoucun-auth-v1"),Base64.URL_SAFE|Base64.NO_WRAP|Base64.NO_PADDING);}
+    static String displayCode(String code){
+        String c=normalizeCode(code);StringBuilder b=new StringBuilder();
+        for(int i=0;i<c.length();i++){if(i>0&&i%4==0)b.append(' ');b.append(c.charAt(i));}return b.toString();
+    }
+    static String readableError(Exception e){
+        String m=e.getMessage()==null?"":e.getMessage();
+        if(m.contains("Unable to resolve host")||m.contains("timed out")||m.contains("Network"))return "现在没连上云端，本机数据没有受影响。联网后会继续同步。";
+        if(m.contains("64MB"))return m;
+        return "同步没有完成，本机数据没有受影响。稍后再试。";
+    }
+}

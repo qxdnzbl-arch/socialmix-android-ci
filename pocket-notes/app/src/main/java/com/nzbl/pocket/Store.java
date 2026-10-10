@@ -81,6 +81,49 @@ public final class Store {
     }
     public Note find(String id){for(Note n:notes)if(n.id.equals(id))return n;return null;}
     public String categoryName(String id){for(Category c:categories)if(c.id.equals(id))return c.name;return "未分类";}
+    public synchronized void replaceSync(JSONObject incoming) throws Exception {
+        JSONObject old=json();
+        try{
+            parse(new JSONObject(incoming.toString()));
+            save();
+            cleanupPhotos();
+        }catch(Exception e){
+            try{parse(old);}catch(Exception ignored){}
+            throw e;
+        }
+    }
+    public synchronized int mergeSync(JSONObject incoming) throws Exception {
+        Store remote=new Store(context);remote.parse(new JSONObject(incoming.toString()));
+        JSONObject old=json();int changed=0;
+        try{
+            HashMap<String,String> categoryMap=new HashMap<>();categoryMap.put(UNFILED,UNFILED);
+            for(Category rc:remote.categories){
+                Category target=null;
+                for(Category mine:categories)if(mine.id.equals(rc.id)){target=mine;break;}
+                if(target==null)for(Category mine:categories)if(mine.name.equals(rc.name)){target=mine;break;}
+                if(target==null){target=new Category(rc.id,rc.name);categories.add(target);changed++;}
+                categoryMap.put(rc.id,target.id);
+            }
+            for(Note rn:remote.notes){
+                Note copy=rn.copy();copy.category=categoryMap.containsKey(copy.category)?categoryMap.get(copy.category):UNFILED;
+                Note local=find(copy.id);
+                if(local==null){notes.add(copy);changed++;}
+                else if(copy.updated>local.updated){notes.remove(local);notes.add(copy);changed++;}
+            }
+            if(remote.draft!=null){
+                Note rd=remote.draft.copy();rd.category=categoryMap.containsKey(rd.category)?categoryMap.get(rd.category):UNFILED;
+                if(draft==null||rd.updated>draft.updated){draft=rd;changed++;}
+            }
+            save();cleanupPhotos();return changed;
+        }catch(Exception e){
+            try{parse(old);}catch(Exception ignored){}
+            throw e;
+        }
+    }
+    public synchronized void cleanupPhotos(){
+        HashSet<String> needed=new HashSet<>();for(Note n:notes)needed.addAll(n.images);if(draft!=null)needed.addAll(draft.images);
+        File[] files=photos.listFiles();if(files!=null)for(File f:files)if(f.isFile()&&!needed.contains(f.getName()))f.delete();
+    }
     public void exportZip(OutputStream output) throws Exception {
         ZipOutputStream z=new ZipOutputStream(output);
         try {
