@@ -33,18 +33,18 @@ public class TransferDb extends SQLiteOpenHelper {
 
     @Override public void onUpgrade(SQLiteDatabase db, int oldVersion, int newVersion) {}
 
-    public void addText(String id, boolean mine, String text, long createdAt, String status) {
+    public boolean addText(String id, boolean mine, String text, long createdAt, String status) {
         ContentValues v = base(id, mine, "text", createdAt, status);
         v.put("text_content", text);
-        getWritableDatabase().insertWithOnConflict("messages", null, v, SQLiteDatabase.CONFLICT_IGNORE);
+        return getWritableDatabase().insertWithOnConflict("messages", null, v, SQLiteDatabase.CONFLICT_IGNORE)!=-1;
     }
 
-    public void addFile(String id, boolean mine, String name, String path, long size, long createdAt, String status) {
+    public boolean addFile(String id, boolean mine, String name, String path, long size, long createdAt, String status) {
         ContentValues v = base(id, mine, "file", createdAt, status);
         v.put("file_name", name);
         v.put("file_path", path);
         v.put("file_size", size);
-        getWritableDatabase().insertWithOnConflict("messages", null, v, SQLiteDatabase.CONFLICT_IGNORE);
+        return getWritableDatabase().insertWithOnConflict("messages", null, v, SQLiteDatabase.CONFLICT_IGNORE)!=-1;
     }
 
     private ContentValues base(String id, boolean mine, String kind, long createdAt, String status) {
@@ -60,7 +60,20 @@ public class TransferDb extends SQLiteOpenHelper {
     public void markSent(String id) {
         ContentValues v = new ContentValues();
         v.put("status", "sent");
-        getWritableDatabase().update("messages", v, "id=?", new String[]{id});
+        getWritableDatabase().update("messages", v, "id=? AND mine=1 AND status='pending'", new String[]{id});
+    }
+
+    public boolean markDelivered(String id){
+        ContentValues v=new ContentValues();
+        v.put("status","delivered");
+        return getWritableDatabase().update("messages",v,
+            "id=? AND mine=1 AND status!='delivered'",new String[]{id})>0;
+    }
+
+    public boolean hasMessage(String id){
+        try(Cursor c=getReadableDatabase().rawQuery("SELECT 1 FROM messages WHERE id=? LIMIT 1",new String[]{id})){
+            return c.moveToFirst();
+        }
     }
 
     public List<Msg> all() {
