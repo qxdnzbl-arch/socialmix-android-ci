@@ -133,7 +133,6 @@ final class CloudSync {
                     if(!localDirty){
                         prefs.edit().putBoolean("dirty",false).putBoolean("background_dirty",false)
                             .putLong("last_sync",System.currentTimeMillis()).commit();
-                        acknowledgeReceived(auth,localRevision);
                         return new Result(true,true,"同步完成",localRevision);
                     }
                 }
