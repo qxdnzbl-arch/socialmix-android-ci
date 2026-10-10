@@ -40,6 +40,14 @@ final class CloudSync {
     CloudSync(Context c,Store s,File background){
         context=c.getApplicationContext();store=s;backgroundFile=background;
         prefs=context.getSharedPreferences("cloud_sync",Context.MODE_PRIVATE);
+        // The former Supabase gateway returns HTTP 402. Switch both devices to the live
+        // transport without erasing existing records or reusing the old server revision.
+        if(enabled()&&!prefs.getBoolean("floot_backend_v3",false)){
+            boolean hasRecords=hasLocalData(),hasBackground=backgroundFile!=null&&backgroundFile.isFile();
+            prefs.edit().putBoolean("floot_backend_v3",true).putLong("revision",0)
+                .putBoolean("dirty",hasRecords).putBoolean("background_dirty",hasBackground)
+                .putLong("last_sync",0).commit();
+        }
     }
     boolean enabled(){return validCode(code());}
     String code(){return prefs.getString("code","");}
