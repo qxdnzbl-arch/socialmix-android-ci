@@ -494,6 +494,7 @@ public class TransferService extends Service {
 
   private void flushPending(){
 
+    if(!crypto.paired())return;
     List<TransferDb.Msg> pending=db.pending();
     if(pending.isEmpty()) return;
     if(pending.get(0).createdAt<System.currentTimeMillis()-30000L
@@ -567,144 +568,86 @@ public class TransferService extends Service {
   private void relayReceiveLoop(String base){
     while(running){
       HttpURLConnection c=null;
-
       try{
-        URL u=new URL(
-          base+"/api/dual/receive/"+room+"/"+url(deviceId));
-
-        c=(HttpURLConnection)u.openConnection();
-        c.setConnectTimeout(8000);
-        c.setReadTimeout(65000);
-        c.setRequestProperty("x-dual-token",SECRET);
+        c=(HttpURLConnection)new URL(base+"/api/dual/receive/"+room+"/"+url(deviceId)).openConnection();
+        c.setConnectTimeout(8000);c.setReadTimeout(65000);
+        c.setRequestProperty("x-dual-token",crypto.relayToken());
         c.setUseCaches(false);
-
-        int code=c.getResponseCode();
-        if(code==200){
+        if(c.getResponseCode()==200){
           if(endpoints.isEmpty())setLinkState("relay");
           String kind=c.getHeaderField("X-Dual-Kind");
-          String id=c.getHeaderField("X-Dual-Id");
-          long created=parseLong(
-            c.getHeaderField("X-Dual-Created"),
-            System.currentTimeMillis()
-          );
-
           if("text".equals(kind)){
-            byte[] b=readLimited(c.getInputStream(),1024*1024);
-            String message=new String(b,StandardCharsets.UTF_8);
-            if(message.startsWith(ACK_PREFIX)){
-              receivedAck(message.substring(ACK_PREFIX.length()));
-            }else{
-              boolean fresh=db.addText(id,false,message,created,"received");
-              if(fresh){changed();notifyIncoming("text","");}
-              ackRelay(base,id);
-            }
+            byte[] payload=readLimited(c.getInputStream(),1024*1024);
+            handleSecureFrame(new String(payload,StandardCharsets.UTF_8),null,base);
           }else if("file".equals(kind)){
-            String name=decodeName(
-              c.getHeaderField("X-Dual-File-Name"));
-
-            File dir=new File(getFilesDir(),"incoming");
-            dir.mkdirs();
-
-            File dst=new File(dir,id+"_"+safeName(name));
-            if(!db.hasMessage(id)){
-              File tmp=new File(dir,id+".receiving");
-              try(InputStream in=c.getInputStream();OutputStream out=new FileOutputStream(tmp)){
-                copyLimited(in,out,500L*1024*1024);
-              }catch(Exception failed){tmp.delete();throw failed;}
-              if(!tmp.renameTo(dst)){tmp.delete();throw new IOException("cannot finalize incoming");}
-              boolean fresh=db.addFile(id,false,name,dst.getAbsolutePath(),
-                dst.length(),created,"received");
-              if(fresh){changed();notifyIncoming("file",name);}
+            PairCrypto.ReceivedFile received;
+            try(InputStream in=c.getInputStream()){received=crypto.decryptFile(this,in);}
+            JSONObject m=received.metadata;
+            String id=m.optString("id",""),sender=m.optString("sender","");
+            if(!crypto.fromPeer(sender)||!"file".equals(m.optString("op"))
+               ||!id.matches("[0-9a-fA-F-]{36}")){
+              received.file.delete();throw new SecurityException("Sender not bound to this device");
             }
+            String name=safeName(m.optString("name","文件"));
+            commitReceivedFile(received,id,name,m.optLong("created"));
             ackRelay(base,id);
           }
         }
-      }catch(Exception ignored){
-      }finally{
-        if(c!=null) c.disconnect();
-      }
-
-      if(running){
-        try{
-          Thread.sleep(350);
-        }catch(InterruptedException ignored){}
-      }
+      }catch(Exception e){
+        if(running)Log.w("DualE2E","receive "+base+" "+e.getClass().getSimpleName());
+      }finally{if(c!=null)c.disconnect();}
+      if(running)try{Thread.sleep(350);}catch(InterruptedException ignored){}
     }
   }
 
   private boolean tryRelaySend(TransferDb.Msg m){
+    if(!crypto.paired())return false;
     for(String base:RELAYS){
       HttpURLConnection c=null;
-
+      File encrypted=null;
       try{
-        URL u=new URL(
-          base+"/api/dual/send/"+room+"/"+url(deviceId));
-
-        c=(HttpURLConnection)u.openConnection();
-        c.setRequestMethod("POST");
-        c.setDoOutput(true);
-        c.setConnectTimeout(5000);
-        c.setReadTimeout(65000);
-        c.setUseCaches(false);
-
-        c.setRequestProperty("x-dual-token",SECRET);
+        c=(HttpURLConnection)new URL(base+"/api/dual/send/"+room+"/"+url(deviceId)).openConnection();
+        c.setRequestMethod("POST");c.setDoOutput(true);
+        c.setConnectTimeout(7000);c.setReadTimeout(65000);c.setUseCaches(false);
+        c.setRequestProperty("x-dual-token",crypto.relayToken());
         c.setRequestProperty("x-dual-kind",m.kind);
-        c.setRequestProperty("x-dual-id",m.id);
-        c.setRequestProperty(
-          "x-dual-created",
-          String.valueOf(m.createdAt)
-        );
-
+        c.setRequestProperty("x-dual-id",UUID.randomUUID().toString());
+        c.setRequestProperty("x-dual-created",String.valueOf(m.createdAt));
         if("text".equals(m.kind)){
-          byte[] b=(m.text==null?"":m.text)
-            .getBytes(StandardCharsets.UTF_8);
-
-          c.setFixedLengthStreamingMode(b.length);
-
-          try(OutputStream out=c.getOutputStream()){
-            out.write(b);
-          }
+          JSONObject message=new JSONObject().put("op","text").put("sender",deviceId)
+            .put("id",m.id).put("created",m.createdAt)
+            .put("text",m.text==null?"":m.text);
+          byte[] bytes=crypto.encrypt(message).getBytes(StandardCharsets.UTF_8);
+          c.setFixedLengthStreamingMode(bytes.length);
+          try(OutputStream out=c.getOutputStream()){out.write(bytes);}
         }else{
-          File file=new File(m.filePath==null?"":m.filePath);
-          if(!file.isFile()) return false;
-
-          c.setRequestProperty(
-            "x-dual-file-name",
-            Base64.encodeToString(
-              safeName(m.fileName).getBytes(StandardCharsets.UTF_8),
-              Base64.NO_WRAP
-            )
-          );
-
-          c.setFixedLengthStreamingMode(file.length());
-
-          try(
-            InputStream in=new FileInputStream(file);
-            OutputStream out=c.getOutputStream()
-          ){
+          File source=new File(m.filePath==null?"":m.filePath);
+          if(!source.isFile())return false;
+          JSONObject info=new JSONObject().put("op","file").put("sender",deviceId)
+            .put("id",m.id).put("name",safeName(m.fileName))
+            .put("created",m.createdAt).put("size",source.length())
+            .put("sha",PairCrypto.shaFile(source));
+          encrypted=crypto.encryptFile(this,source,info);
+          c.setRequestProperty("x-dual-file-name",
+            Base64.encodeToString("encrypted.sjc".getBytes(StandardCharsets.UTF_8),Base64.NO_WRAP));
+          c.setFixedLengthStreamingMode(encrypted.length());
+          try(InputStream in=new FileInputStream(encrypted);OutputStream out=c.getOutputStream()){
             copy(in,out);
           }
         }
-
         int code=c.getResponseCode();
-
         if(code>=200&&code<300){
           if(endpoints.isEmpty())setLinkState("relay");
           getSystemService(NotificationManager.class).cancel(WAITING_ID);
-          db.markSent(m.id);
-          changed();
-          return true;
+          db.markSent(m.id);changed();return true;
         }
-        Log.w("DualRelay","send "+m.kind+" status "+code);
-
-        if(code==409) continue;
-      }catch(Exception e){
-        Log.w("DualRelay","send retry "+e.getClass().getSimpleName());
-      }finally{
-        if(c!=null) c.disconnect();
+        Log.w("DualE2E","relay rejected encrypted send "+code);
+      }catch(Exception e){Log.w("DualE2E","encrypted send retry "+e);}
+      finally{
+        if(c!=null)c.disconnect();
+        if(encrypted!=null)encrypted.delete();
       }
     }
-
     return false;
   }
 
@@ -713,6 +656,7 @@ public class TransferService extends Service {
     int flags,
     int startId
   ){
+    if(!crypto.configured())return START_NOT_STICKY;
     if(running&&!timer.isShutdown())timer.execute(this::tryStartNearby);
     requestFlush();
     return START_STICKY;
@@ -722,11 +666,13 @@ public class TransferService extends Service {
     running=false;
 
     try{
-      nearby.stopAdvertising();
-      nearby.stopDiscovery();
-      nearby.stopAllEndpoints();
+      if(nearby!=null)nearby.stopAdvertising();
+      if(nearby!=null)nearby.stopDiscovery();
+      if(nearby!=null)nearby.stopAllEndpoints();
     }catch(Exception ignored){}
 
+    for(File tmp:temporaryEncrypted.values())tmp.delete();
+    temporaryEncrypted.clear();
     timer.shutdownNow();
     payloadIo.shutdownNow();
     sendIo.shutdownNow();
