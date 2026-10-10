@@ -36,6 +36,8 @@ public class MainActivity extends Activity {
     TextView categoryButton;
     final Handler handler=new Handler();
     Runnable draftTask,syncTask;
+    Runnable cloudPoller;
+    boolean screenActive=false;
     final java.util.concurrent.atomic.AtomicBoolean syncInFlight=new java.util.concurrent.atomic.AtomicBoolean(false);
     int scrollPosition=0;
     ListView homeList;
@@ -58,8 +60,22 @@ public class MainActivity extends Activity {
         if(!store.ready)new AlertDialog.Builder(this).setTitle("记录读取异常").setMessage(store.loadError).setPositiveButton("导出原文件",(d,w)->exportPicker()).setNegativeButton("关闭",null).show();
     }
     @Override public void onSaveInstanceState(Bundle out){captureDraft();out.putString("screen",screen);out.putString("filter",filter);out.putString("query",query);out.putBoolean("searchOpen",searchOpen);out.putString("searchReturnFilter",searchReturnFilter);if(current!=null)out.putString("id",current.id);super.onSaveInstanceState(out);}
-    @Override protected void onResume(){super.onResume();if(cloudSync!=null&&cloudSync.enabled())handler.postDelayed(()->syncCloud(false),500);}
-    @Override public void onPause(){captureDraft();if(cloudSync!=null&&cloudSync.enabled()&&cloudSync.dirty())syncCloud(false);super.onPause();}
+    @Override protected void onResume(){
+        super.onResume();screenActive=true;
+        if(cloudSync!=null&&cloudSync.enabled())handler.postDelayed(()->syncCloud(false),500);
+        if(cloudPoller!=null)handler.removeCallbacks(cloudPoller);
+        cloudPoller=new Runnable(){@Override public void run(){
+            if(!screenActive||isFinishing())return;
+            if(cloudSync!=null&&cloudSync.enabled())syncCloud(false);
+            handler.postDelayed(this,10000);
+        }};
+        handler.postDelayed(cloudPoller,10000);
+    }
+    @Override public void onPause(){
+        screenActive=false;if(cloudPoller!=null)handler.removeCallbacks(cloudPoller);
+        captureDraft();if(cloudSync!=null&&cloudSync.enabled()&&cloudSync.dirty())syncCloud(false);
+        super.onPause();
+    }
     @Override public void onBackPressed(){
         if("albumPhoto".equals(screen)){album();return;}
         if("photo".equals(screen)){if(editing!=null)editor(editing);else if(current!=null)detail(current,false);else home();return;}
