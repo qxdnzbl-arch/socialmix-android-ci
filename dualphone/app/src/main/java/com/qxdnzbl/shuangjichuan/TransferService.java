@@ -28,7 +28,7 @@ public class TransferService extends Service {
   private static final String ACK_PREFIX="__SJC_ACK_V1__:";
   private static final String INCOMING_CHANNEL="dual_incoming_v1", RECEIPT_CHANNEL="dual_delivery_v1";
   private static final String SERVICE_ID="com.qxdnzbl.shuangjichuan.v5";
-  private static final String SECRET="6686986c94d4a4d34fd705665b962491078a94688d3f730b568d36a2c526c470";
+  private PairCrypto crypto;
   private static final String[] RELAYS={
     "https://oppo-iphone-transfer-qr.onrender.com",
     "https://oppo-iphone-transfer.onrender.com"
@@ -42,6 +42,7 @@ public class TransferService extends Service {
   private final Set<String> endpoints=new CopyOnWriteArraySet<>();
   private final Set<String> requested=new CopyOnWriteArraySet<>();
   private final Map<Long,String> outgoing=new ConcurrentHashMap<>();
+  private final Map<Long,File> temporaryEncrypted=new ConcurrentHashMap<>();
   private final Set<String> inFlight=ConcurrentHashMap.newKeySet();
   private final Map<Long,Payload> incomingFiles=new ConcurrentHashMap<>();
   private final Map<Long,FileMeta> incomingMeta=new ConcurrentHashMap<>();
@@ -50,6 +51,7 @@ public class TransferService extends Service {
 
   private volatile boolean running=true;
   private volatile boolean nearbyStarted=false;
+  private volatile long nextPairBeacon=0L;
   private volatile long lastWaitingAlert=0L;
   private volatile long nearbyStartedAt=0L;
   private TransferDb db;
@@ -70,30 +72,28 @@ public class TransferService extends Service {
     db=new TransferDb(this);
 
     SharedPreferences p=getSharedPreferences("dual",MODE_PRIVATE);
-    deviceId=p.getString("device","");
-    if(deviceId.isEmpty()){
-      deviceId=UUID.randomUUID().toString();
-      p.edit().putString("device",deviceId).apply();
-    }
-
-    room=sha256(SECRET).substring(0,32);
+    crypto=new PairCrypto(this);
+    deviceId=crypto.self();
     createChannel();
-    startForeground(NOTIFY_ID,notification("自动同步中"));
-
-    nearby=Nearby.getConnectionsClient(this);
-
-    boolean ciNearbyOnly=
-      (getApplicationInfo().flags & android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE)!=0
-      && p.getBoolean("ci_nearby_only",false);
-
-    if(!ciNearbyOnly){
-      for(String relay:RELAYS){
-        io.execute(()->relayReceiveLoop(relay));
-      }
+    startForeground(NOTIFY_ID,notification(crypto.configured()?"专属设备加密同步":"等待设备配对"));
+    if(!crypto.configured()){
+      stopSelf();
+      return;
     }
-
-    timer.scheduleWithFixedDelay(this::requestFlush,250,500,TimeUnit.MILLISECONDS);
+    room=crypto.room();
+    nearby=Nearby.getConnectionsClient(this);
+    boolean ciNearbyOnly=(getApplicationInfo().flags & android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE)!=0
+      && p.getBoolean("ci_nearby_only",false);
+    if(!ciNearbyOnly)for(String relay:RELAYS)io.execute(()->relayReceiveLoop(relay));
+    timer.scheduleWithFixedDelay(()->{
+      requestFlush();
+      if(!crypto.paired()&&System.currentTimeMillis()>=nextPairBeacon){
+        nextPairBeacon=System.currentTimeMillis()+12000L;
+        io.execute(this::sendPairBeacon);
+      }
+    },250,500,TimeUnit.MILLISECONDS);
     timer.scheduleWithFixedDelay(this::tryStartNearby,0,5,TimeUnit.SECONDS);
+    io.execute(this::sendPairBeacon);
   }
 
   public static void start(Context c){
@@ -218,10 +218,7 @@ public class TransferService extends Service {
   }
 
   private synchronized void tryStartNearby(){
-    if(!hasNearbyPermissions()){
-      // Missing Bluetooth consent must never disable cross-network delivery.
-      return;
-    }
+    if(!crypto.configured()||!hasNearbyPermissions())return;
     long now=System.currentTimeMillis();
     if(nearbyStarted){
       if(!endpoints.isEmpty()) return;
@@ -260,6 +257,7 @@ public class TransferService extends Service {
   private final EndpointDiscoveryCallback discovery=new EndpointDiscoveryCallback(){
     @Override public void onEndpointFound(String endpointId,DiscoveredEndpointInfo info){
       String peerName=info.getEndpointName()==null?"":info.getEndpointName();
+      if(crypto.paired()&&!crypto.peer().equals(peerName))return;
       Log.i("DualNearby","found "+endpointId+" peer="+peerName);
       if(deviceId.compareTo(peerName)<0){
         requestPeer(endpointId);
@@ -288,6 +286,10 @@ public class TransferService extends Service {
 
   private final ConnectionLifecycleCallback lifecycle=new ConnectionLifecycleCallback(){
     @Override public void onConnectionInitiated(String endpointId,ConnectionInfo info){
+      if(crypto.paired()&&!crypto.peer().equals(info.getEndpointName())){
+        nearby.rejectConnection(endpointId);
+        return;
+      }
       setLinkState("connecting");
       nearby.acceptConnection(endpointId,payloads)
         .addOnFailureListener(e->requested.remove(endpointId));
@@ -298,6 +300,7 @@ public class TransferService extends Service {
         Log.i("DualNearby","connected "+endpointId);
         endpoints.add(endpointId);
         setLinkState("nearby");
+        io.execute(TransferService.this::sendPairBeacon);
         requestFlush();
       }else{
         requested.remove(endpointId);
