@@ -9,7 +9,7 @@ import android.os.Build;
 final class SyncNotifier {
     private static final String CHANNEL = "suishoucun_sync_events";
     private static final String PREFS = "suishoucun_notifications";
-    private static final int UPLOADED = 201, RECEIVED = 202, FAILURE = 203;
+    private static final int UPLOADED = 201, RECEIVED = 202, FAILURE = 203, DELIVERED = 204;
 
     static void requestPermission(Activity activity) {
         if(Build.VERSION.SDK_INT>=33 &&
@@ -22,6 +22,9 @@ final class SyncNotifier {
     }
     static void uploaded(Context context,long revision){
         show(context,UPLOADED,revision,"已保存到云端","记录和图片已完整上传。另一台手机同步后即可收到。");
+    }
+    static void delivered(Context context,long revision){
+        show(context,DELIVERED,revision,"另一台手机已收到","对方手机已完整下载并保存这次同步内容。");
     }
     static void received(Context context,long revision){
         show(context,RECEIVED,revision,"随手存 · 已收到新内容","另一台手机的记录和图片已同步到本机。");
