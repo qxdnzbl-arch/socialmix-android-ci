@@ -1,7 +1,7 @@
 name: Suishoucun Offline Android
 on:
   push:
-    branches: [suishoucun-offline]
+    branches: [suishoucun-v77-fast-sync-notify]
     paths: ['pocket-notes/**', '.github/workflows/suishoucun.yml']
   workflow_dispatch:
 permissions:
