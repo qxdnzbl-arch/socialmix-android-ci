@@ -327,6 +327,7 @@ final class CloudSync {
         }catch(Exception e){out.delete();throw e;}
         return out;
     }
+    Remote getManifest(String auth)throws Exception{return getManifest(auth,-1);}
     Remote getManifest(String auth,long localRevision)throws Exception{
         JSONObject head=rpc("suishoucun_sync_head_v2",auth,new JSONObject());long revision=head.optLong("revision",0);
         if(revision<=0)return new Remote(0,null);
