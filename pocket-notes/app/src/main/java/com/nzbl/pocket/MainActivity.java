@@ -36,6 +36,7 @@ public class MainActivity extends Activity {
     TextView categoryButton;
     final Handler handler=new Handler();
     Runnable draftTask,syncTask;
+    final java.util.concurrent.atomic.AtomicBoolean syncInFlight=new java.util.concurrent.atomic.AtomicBoolean(false);
     int scrollPosition=0;
     ListView homeList;
     public int dp(float n){return Math.round(n*getResources().getDisplayMetrics().density);}
@@ -58,7 +59,7 @@ public class MainActivity extends Activity {
     }
     @Override public void onSaveInstanceState(Bundle out){captureDraft();out.putString("screen",screen);out.putString("filter",filter);out.putString("query",query);out.putBoolean("searchOpen",searchOpen);out.putString("searchReturnFilter",searchReturnFilter);if(current!=null)out.putString("id",current.id);super.onSaveInstanceState(out);}
     @Override protected void onResume(){super.onResume();if(cloudSync!=null&&cloudSync.enabled())handler.postDelayed(()->syncCloud(false),500);}
-    @Override public void onPause(){captureDraft();if(cloudSync!=null&&cloudSync.enabled())syncCloud(false);super.onPause();}
+    @Override public void onPause(){captureDraft();if(cloudSync!=null&&cloudSync.enabled()&&cloudSync.dirty())syncCloud(false);super.onPause();}
     @Override public void onBackPressed(){
         if("albumPhoto".equals(screen)){album();return;}
         if("photo".equals(screen)){if(editing!=null)editor(editing);else if(current!=null)detail(current,false);else home();return;}
@@ -104,12 +105,23 @@ public class MainActivity extends Activity {
         if(syncTask!=null)handler.removeCallbacks(syncTask);syncTask=()->syncCloud(false);handler.postDelayed(syncTask,2500);
     }
     void syncCloud(boolean manual){
-        if(cloudSync==null||!cloudSync.enabled())return;if(manual)toast("正在同步…");
-        new Thread(()->{CloudSync.Result result=cloudSync.syncNow(false);runOnUiThread(()->{
-            if(isFinishing())return;
-            if(result.ok){if(manual)toast("同步完成");if(result.changed){if("home".equals(screen))home();else if("album".equals(screen))album();}}
-            else if(manual)error(result.message);
-        });}).start();
+        if(cloudSync==null||!cloudSync.enabled())return;
+        if(!syncInFlight.compareAndSet(false,true)){if(manual)toast("正在同步中…");return;}
+        if(manual)toast("正在同步…");
+        final long initialChanges=cloudSync.prefs.getLong("change_seq",0);
+        new Thread(()->{
+            CloudSync.Result result;
+            try{result=cloudSync.syncNow(false);}catch(Exception e){result=new CloudSync.Result(false,false,"同步暂时遇到问题，原记录仍在本机。",cloudSync.revision());}
+            syncInFlight.set(false);
+            final CloudSync.Result delivered=result;
+            runOnUiThread(()->{
+                if(isFinishing())return;
+                if(delivered.ok){if(manual)toast(cloudSync.dirty()?"部分已同步，其余正在继续…":"同步完成");if(delivered.changed){if("home".equals(screen))home();else if("album".equals(screen))album();}}
+                else if(manual)error(delivered.message);
+                if(cloudSync.dirty()&&cloudSync.prefs.getLong("change_seq",0)!=initialChanges)
+                    handler.postDelayed(()->syncCloud(false),1200);
+            });
+        }).start();
     }
 
     void mainHeader(String mode){
@@ -339,12 +351,12 @@ public class MainActivity extends Activity {
     }
     void enableCloudSync(){
         cloudSync.beginNew();
-        busy("正在开启多端同步…",()->{CloudSync.Result result=cloudSync.syncNow(false);runOnUiThread(()->{if(result.ok)showSyncCode();else error(result.message);});});
+        busySync("正在开启多端同步…",()->{CloudSync.Result result=cloudSync.syncNow(false);runOnUiThread(()->{if(result.ok)showSyncCode();else error(result.message);});});
     }
     void connectCloudSyncDialog(){
         EditText e=input("粘贴同步码",16,false);e.setPadding(dp(22),dp(14),dp(22),dp(14));
         AlertDialog d=new AlertDialog.Builder(this).setTitle("连接已有同步").setMessage("如果这台手机已经有记录，会和云端内容合并，不会直接清空。").setView(e).setPositiveButton("连接",null).setNegativeButton("取消",null).create();
-        d.setOnShowListener(v->d.getButton(-1).setOnClickListener(b->{String code=e.getText().toString();if(!CloudSync.validCode(code)){e.setError("同步码不正确");return;}d.dismiss();busy("正在同步数据…",()->{CloudSync.Result result=cloudSync.connectExisting(code);runOnUiThread(()->{if(result.ok){filter="all";query="";home();toast("已连接并同步完成");}else error(result.message);});});}));
+        d.setOnShowListener(v->d.getButton(-1).setOnClickListener(b->{String code=e.getText().toString();if(!CloudSync.validCode(code)){e.setError("同步码不正确");return;}d.dismiss();busySync("正在同步数据…",()->{CloudSync.Result result=cloudSync.connectExisting(code);runOnUiThread(()->{if(result.ok){filter="all";query="";home();toast("已连接并同步完成");}else error(result.message);});});}));
         d.getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);d.show();
     }
     void showSyncCode(){
@@ -389,6 +401,14 @@ public class MainActivity extends Activity {
     void exportPicker(){Intent i=new Intent(Intent.ACTION_CREATE_DOCUMENT);i.addCategory(Intent.CATEGORY_OPENABLE);i.setType("application/zip");i.putExtra(Intent.EXTRA_TITLE,"随手存备份-"+new SimpleDateFormat("yyyyMMdd-HHmm",Locale.ROOT).format(new Date())+".zip");try{startActivityForResult(i,20);}catch(Exception e){error("手机未提供文件保存入口。");}}
     void importPicker(){Intent i=new Intent(Intent.ACTION_OPEN_DOCUMENT);i.addCategory(Intent.CATEGORY_OPENABLE);i.setType("*/*");i.putExtra(Intent.EXTRA_MIME_TYPES,new String[]{"application/zip","application/octet-stream","application/x-zip-compressed"});try{startActivityForResult(i,21);}catch(Exception e){error("手机未提供文件选择器。");}}
     void busy(String label,Runnable background){ProgressDialog p=new ProgressDialog(this);p.setMessage(label);p.setCancelable(false);p.show();new Thread(()->{try{background.run();}finally{runOnUiThread(()->{if(!isFinishing())p.dismiss();});}}).start();}
+    void busySync(String label,Runnable background){
+        ProgressDialog p=new ProgressDialog(this);p.setMessage(label);p.setCancelable(false);p.show();
+        new Thread(()->{
+            cloudSync.progress=stage->runOnUiThread(()->{if(!isFinishing()&&p.isShowing())p.setMessage(stage);});
+            try{background.run();}
+            finally{cloudSync.progress=null;runOnUiThread(()->{if(!isFinishing())p.dismiss();});}
+        }).start();
+    }
     @Override public void onActivityResult(int request,int result,Intent data){super.onActivityResult(request,result,data);if(request==40){if(Build.VERSION.SDK_INT<26||getPackageManager().canRequestPackageInstalls())installDownloadedUpdate();return;}if(result!=RESULT_OK||data==null)return;
         if(request==10&&editing!=null){ArrayList<Uri> uris=new ArrayList<>();if(data.getClipData()!=null)for(int i=0;i<data.getClipData().getItemCount();i++)uris.add(data.getClipData().getItemAt(i).getUri());else if(data.getData()!=null)uris.add(data.getData());Store.Note note=editing;
             busy("正在保存图片…",()->{int failed=0;ArrayList<String> success=new ArrayList<>();for(Uri uri:uris){File target=new File(store.photos,UUID.randomUUID()+".img");try{InputStream in=getContentResolver().openInputStream(uri);if(in==null)throw new IOException();Store.copy(in,new FileOutputStream(target),64*1024*1024);BitmapFactory.Options o=new BitmapFactory.Options();o.inJustDecodeBounds=true;BitmapFactory.decodeFile(target.toString(),o);if(o.outWidth<=0||o.outHeight<=0)throw new IOException();success.add(target.getName());}catch(Exception e){target.delete();failed++;}}int errors=failed;runOnUiThread(()->{long now=System.currentTimeMillis();for(int i=0;i<success.size();i++){note.images.add(success.get(i));note.imageTimes.add(now+i);}captureDraft();renderEditorPhotos();if(errors>0)error(errors+" 张图片没能读取，其他图片已保存。");});});
