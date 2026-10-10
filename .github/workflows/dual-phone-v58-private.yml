@@ -41,6 +41,10 @@ jobs:
           mkdir -p accepted
           cp app/build/outputs/apk/release/app-release.apk accepted/ShuangJiChuan_v5.8_private_pairing.apk
           sha256sum accepted/ShuangJiChuan_v5.8_private_pairing.apk > accepted/SHA256.txt
+      - name: Enable hardware-assisted Android emulator
+        run: |
+          ls -la /dev/kvm
+          sudo chmod 666 /dev/kvm
       - name: Android emulator private transfer and system notification
         uses: reactivecircus/android-emulator-runner@v2
         with:
