@@ -29,7 +29,21 @@ def post(kind,data):
     if kind=="file": headers["x-dual-file-name"]=base64.b64encode(b"encrypted.sjc").decode()
     req=urllib.request.Request(BASE+"/api/dual/send/"+ROOM+"/qa-remote-device",
       method="POST",data=data,headers=headers)
-    with urllib.request.urlopen(req,timeout=75) as r:assert r.status==200
+    import urllib.error
+    for attempt in range(35):
+        try:
+            with urllib.request.urlopen(req,timeout=75) as r:
+                assert r.status==200
+                return
+        except urllib.error.HTTPError as exc:
+            body=exc.read().decode(errors="replace")
+            if exc.code!=409: raise
+            print("relay peer waiting",attempt,body,flush=True)
+            if attempt==34:
+                (OUT/"relay-failed-logcat.txt").write_bytes(adb("logcat","-d","-s","DualE2E:W","AndroidRuntime:E"))
+                (OUT/"relay-failed-services.txt").write_bytes(adb("shell","dumpsys","activity","services",PKG))
+                raise AssertionError("paired Android receiver remained offline after retry") from exc
+            time.sleep(.7)
 
 def adb(*args):
     return subprocess.run(["adb",*args],check=True,capture_output=True).stdout
