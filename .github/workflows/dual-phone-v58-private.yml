@@ -5,6 +5,7 @@ on:
     branches: [dualphone-v58-private-pairing]
     paths:
       - 'dualphone/app/**'
+      - 'dualphone/acceptance/private_e2e.py'
       - '.github/workflows/dual-phone-v58-private.yml'
 permissions:
   contents: read
