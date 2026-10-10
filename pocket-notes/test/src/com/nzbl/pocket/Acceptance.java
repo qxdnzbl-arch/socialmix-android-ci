@@ -86,6 +86,7 @@ check(a.store.categories.isEmpty(),"fresh install has no preset categories");che
             final Context deviceOne=getTargetContext();
             Context deviceTwo=new ContextWrapper(deviceOne){
                 final File rootDir=new File(dir,"independent-device-two");
+                @Override public Context getApplicationContext(){return this;}
                 @Override public File getFilesDir(){File out=new File(rootDir,"files");out.mkdirs();return out;}
                 @Override public File getCacheDir(){File out=new File(rootDir,"cache");out.mkdirs();return out;}
                 @Override public SharedPreferences getSharedPreferences(String name,int mode){
