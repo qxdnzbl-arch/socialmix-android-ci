@@ -410,22 +410,20 @@ public class TransferService extends Service {
 
       File dst=new File(dir,meta.id+"_"+safeName(meta.name));
       Uri uri=payload.asFile().asUri();
-
-      try(
-        InputStream in=getContentResolver().openInputStream(uri);
-        OutputStream out=new FileOutputStream(dst)
-      ){
-        copy(in,out);
+      if(!db.hasMessage(meta.id)){
+        File tmp=new File(dir,meta.id+".receiving");
+        try(InputStream in=getContentResolver().openInputStream(uri);
+            OutputStream out=new FileOutputStream(tmp)){
+          copyLimited(in,out,500L*1024*1024);
+        }catch(Exception failure){tmp.delete();throw failure;}
+        if(tmp.length()!=meta.size){tmp.delete();throw new IOException("nearby file size mismatch");}
+        if(dst.exists()&&!dst.delete()){tmp.delete();throw new IOException("incoming path busy");}
+        if(!tmp.renameTo(dst)){tmp.delete();throw new IOException("incoming finalize failed");}
+        boolean fresh=db.addFile(meta.id,false,meta.name,dst.getAbsolutePath(),
+          dst.length(),meta.created,"received");
+        if(fresh){changed();notifyIncoming("file",meta.name);}
       }
-
-      try{
-        getContentResolver().delete(uri,null,null);
-      }catch(Exception ignored){}
-
-      if(dst.length()!=meta.size){dst.delete();throw new IOException("nearby file size mismatch");}
-      boolean fresh=db.addFile(meta.id,false,meta.name,dst.getAbsolutePath(),
-        dst.length(),meta.created,"received");
-      if(fresh){changed();notifyIncoming("file",meta.name);}
+      try{getContentResolver().delete(uri,null,null);}catch(Exception ignored){}
       String endpoint=incomingPeers.get(pid);
       if(endpoint!=null)ackNearby(endpoint,meta.id);
     }catch(Exception e){
