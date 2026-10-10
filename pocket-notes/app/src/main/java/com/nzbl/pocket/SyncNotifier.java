@@ -14,6 +14,9 @@ final class SyncNotifier {
     static void requestPermission(Activity activity) {
         if(Build.VERSION.SDK_INT>=33 &&
                 activity.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)!=PackageManager.PERMISSION_GRANTED){
+            android.content.SharedPreferences p=activity.getSharedPreferences(PREFS,Context.MODE_PRIVATE);
+            if(p.getBoolean("permission_requested",false))return;
+            p.edit().putBoolean("permission_requested",true).apply();
             activity.requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS},3821);
         }
     }
