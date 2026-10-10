@@ -19,6 +19,10 @@ final class CloudSync {
     final Store store;
     final File backgroundFile;
     final SharedPreferences prefs;
+    interface Progress {void onStage(String stage);}
+    volatile Progress progress;
+    void report(String stage){Progress p=progress;if(p!=null)p.onStage(stage);}
+
 
     static final class Result {
         final boolean ok,changed;
@@ -55,9 +59,11 @@ final class CloudSync {
     }
     void markDirty(boolean background){
         if(!enabled())return;
-        SharedPreferences.Editor e=prefs.edit().putBoolean("dirty",true);
-        if(background)e.putBoolean("background_dirty",true);
-        e.apply();
+        synchronized(prefs){
+            SharedPreferences.Editor e=prefs.edit().putLong("change_seq",prefs.getLong("change_seq",0)+1).putBoolean("dirty",true);
+            if(background)e.putBoolean("background_dirty",true);
+            e.commit();
+        }
     }
     String beginNew(){
         String c=generateCode();
@@ -94,7 +100,9 @@ final class CloudSync {
         for(int attempt=0;attempt<3;attempt++){
             File remoteFile=null;
             try{
-                Remote remote=getManifest(auth);
+                report("正在检查云端记录…");
+                long changeSeq=prefs.getLong("change_seq",0);
+                Remote remote=getManifest(auth,revision());
                 remoteFile=remote.encrypted;
                 long localRevision=revision();
                 boolean localDirty=dirty(),bgDirty=backgroundDirty();
@@ -109,18 +117,24 @@ final class CloudSync {
                 if(remote.revision>localRevision){
                     JSONObject manifest=decryptManifest(remote.encrypted,syncCode);
                     JSONObject collection=manifest.getJSONObject("collection");
+                    report("正在下载另一台手机的记录…");
                     ensureRemotePhotos(auth,syncCode,collection);
+                    boolean shouldMerge=localDirty||dirty()||prefs.getLong("change_seq",0)!=changeSeq;
                     synchronized(store){
-                        if(localDirty)store.mergeSync(collection);else store.replaceSync(collection);
+                        if(shouldMerge)store.mergeSync(collection);else store.replaceSync(collection);
                     }
-                    if(!bgDirty)applyRemoteBackground(auth,syncCode,manifest.optBoolean("background",false));
+                    if(!bgDirty)applyRemoteBackground(auth,syncCode,manifest.optBoolean("background",false),manifest.optString("backgroundHash",""));
                     localRevision=remote.revision;changed=true;
                     prefs.edit().putLong("revision",localRevision).commit();
-                    if(!localDirty){
-                        prefs.edit().putBoolean("dirty",false).putBoolean("background_dirty",false)
-                            .putLong("last_sync",System.currentTimeMillis()).commit();
+                    if(!shouldMerge){
+                        synchronized(prefs){
+                            boolean edited=prefs.getLong("change_seq",0)!=changeSeq;
+                            prefs.edit().putBoolean("dirty",edited).putBoolean("background_dirty",edited&&prefs.getBoolean("background_dirty",false))
+                                .putLong("last_sync",System.currentTimeMillis()).commit();
+                        }
                         return new Result(true,true,"同步完成",localRevision);
                     }
+                    localDirty=true;
                 }
                 if(localDirty||remote.revision==0){
                     uploadLocalAssets(auth,syncCode,bgDirty||remote.revision==0);
@@ -128,8 +142,12 @@ final class CloudSync {
                     File encrypted=encryptManifest(manifest,syncCode);
                     try{
                         long next=putManifest(auth,remote.revision,encrypted);
-                        prefs.edit().putLong("revision",next).putBoolean("dirty",false)
-                            .putBoolean("background_dirty",false).putLong("last_sync",System.currentTimeMillis()).commit();
+                        synchronized(prefs){
+                            boolean edited=prefs.getLong("change_seq",0)!=changeSeq;
+                            prefs.edit().putLong("revision",next).putBoolean("dirty",edited)
+                                .putBoolean("background_dirty",edited&&prefs.getBoolean("background_dirty",false))
+                                .putLong("last_sync",System.currentTimeMillis()).commit();
+                        }
                         return new Result(true,changed,"同步完成",next);
                     }finally{encrypted.delete();}
                 }
@@ -147,30 +165,50 @@ final class CloudSync {
     JSONObject localManifest() throws Exception{
         JSONObject collection;
         synchronized(store){collection=new JSONObject(store.json().toString());}
+        boolean hasBackground=backgroundFile!=null&&backgroundFile.isFile();
         return new JSONObject().put("format","suishoucun-cloud").put("version",1)
-            .put("collection",collection).put("background",backgroundFile!=null&&backgroundFile.isFile());
+            .put("collection",collection).put("background",hasBackground)
+            .put("backgroundHash",hasBackground?fileHash(backgroundFile):"");
     }
     void uploadLocalAssets(String auth,String syncCode,boolean forceBackground)throws Exception{
         JSONObject collection;
         synchronized(store){collection=new JSONObject(store.json().toString());}
-        for(String name:imageNames(collection)){
-            File file=new File(store.photos,name);
-            if(!file.isFile())throw new IOException("本地图片缺失");
-            if(!assetExists(auth,name))uploadEncryptedAsset(auth,syncCode,name,file);
+        LinkedHashSet<String> names=imageNames(collection);
+        JSONArray objects=new JSONArray();for(String name:names)objects.put("asset/"+name);
+        if(backgroundFile!=null&&backgroundFile.isFile())objects.put("asset/background");
+        report("正在核对 "+names.size()+" 张图片…");
+        HashSet<String> available=new HashSet<>();
+        if(objects.length()>0){
+            JSONObject status=rpc("suishoucun_sync_assets_status_v3",auth,new JSONObject().put("p_objects",objects));
+            JSONArray list=status.getJSONArray("complete");for(int i=0;i<list.length();i++)available.add(list.getString(i));
         }
-        if(backgroundFile!=null&&backgroundFile.isFile()&&(forceBackground||!assetExists(auth,"background"))){
+        int i=0;for(String name:names){
+            i++;File file=new File(store.photos,name);
+            if(!file.isFile())throw new IOException("本地图片缺失");
+            if(!available.contains("asset/"+name)){
+                report("正在上传图片 "+i+"/"+names.size()+"…");
+                uploadEncryptedAsset(auth,syncCode,name,file);
+            }
+        }
+        if(backgroundFile!=null&&backgroundFile.isFile()&&(forceBackground||!available.contains("asset/background"))){
+            report("正在上传背景图…");
             uploadEncryptedAsset(auth,syncCode,"background",backgroundFile);
         }
     }
     void ensureRemotePhotos(String auth,String syncCode,JSONObject collection)throws Exception{
-        for(String name:imageNames(collection)){
-            File target=new File(store.photos,name);
+        LinkedHashSet<String> names=imageNames(collection);int i=0;
+        for(String name:names){
+            i++;File target=new File(store.photos,name);
             if(target.isFile()&&target.length()>0)continue;
+            report("正在接收图片 "+i+"/"+names.size()+"…");
             downloadEncryptedAsset(auth,syncCode,name,target);
         }
     }
-    void applyRemoteBackground(String auth,String syncCode,boolean hasBackground)throws Exception{
+    void applyRemoteBackground(String auth,String syncCode,boolean hasBackground,String expectedHash)throws Exception{
         if(!hasBackground){if(backgroundFile!=null&&backgroundFile.isFile())backgroundFile.delete();return;}
+        if(backgroundFile!=null&&backgroundFile.isFile()&&expectedHash.matches("[0-9a-f]{64}")
+            &&expectedHash.equals(fileHash(backgroundFile)))return;
+        report("正在接收背景图…");
         File tmp=new File(context.getCacheDir(),"sync-bg-"+UUID.randomUUID()+".tmp");
         try{
             downloadEncryptedAsset(auth,syncCode,"background",tmp);
@@ -179,6 +217,11 @@ final class CloudSync {
         }finally{tmp.delete();}
     }
 
+    static String fileHash(File file)throws Exception{
+        MessageDigest d=MessageDigest.getInstance("SHA-256");
+        try(FileInputStream in=new FileInputStream(file)){byte[] buf=new byte[65536];int n;while((n=in.read(buf))!=-1)d.update(buf,0,n);}
+        StringBuilder out=new StringBuilder();for(byte b:d.digest())out.append(String.format(Locale.ROOT,"%02x",b&255));return out.toString();
+    }
     static LinkedHashSet<String> imageNames(JSONObject collection)throws Exception{
         LinkedHashSet<String> names=new LinkedHashSet<>();
         JSONArray notes=collection.getJSONArray("notes");
@@ -264,7 +307,7 @@ final class CloudSync {
         byte[] request=payload.toString().getBytes(StandardCharsets.UTF_8);c.setFixedLengthStreamingMode(request.length);
         try(OutputStream out=c.getOutputStream()){out.write(request);}
         int status=c.getResponseCode();InputStream in=status>=200&&status<300?c.getInputStream():c.getErrorStream();
-        String response="";if(in!=null){ByteArrayOutputStream out=new ByteArrayOutputStream();try{copy(in,out,1024*1024);}catch(Exception ignored){}response=out.toString("UTF-8");}
+        String response="";if(in!=null){ByteArrayOutputStream out=new ByteArrayOutputStream();try{copy(in,out,4*1024*1024);}catch(Exception ignored){}response=out.toString("UTF-8");}
         c.disconnect();
         if(status<200||status>=300)throw new IOException("云端返回 "+status+" "+response);
         if(response.trim().isEmpty())return new JSONObject();
@@ -278,13 +321,16 @@ final class CloudSync {
         rpc("suishoucun_sync_prepare_object_v2",auth,new JSONObject().put("p_object",object).put("p_chunk_count",chunks));
         try(FileInputStream in=new FileInputStream(file)){
             byte[] buf=new byte[CHUNK_BYTES];
-            for(int i=0;i<chunks;i++){
-                int need=(int)Math.min(CHUNK_BYTES,Math.max(0,length-(long)i*CHUNK_BYTES)),off=0,n;
-                while(off<need&&(n=in.read(buf,off,need-off))>0)off+=n;
-                if(off!=need)throw new EOFException();
-                byte[] part=off==buf.length?buf:Arrays.copyOf(buf,off);
-                String encoded=Base64.encodeToString(part,Base64.NO_WRAP);
-                rpc("suishoucun_sync_put_chunk_v2",auth,new JSONObject().put("p_object",object).put("p_index",i).put("p_chunk_count",chunks).put("p_payload",encoded));
+            for(int i=0;i<chunks;){
+                JSONArray parts=new JSONArray();
+                for(int group=0;group<3&&i<chunks;group++,i++){
+                    int need=(int)Math.min(CHUNK_BYTES,Math.max(0,length-(long)i*CHUNK_BYTES)),off=0,n;
+                    while(off<need&&(n=in.read(buf,off,need-off))>0)off+=n;
+                    if(off!=need)throw new EOFException();
+                    byte[] part=off==buf.length?buf:Arrays.copyOf(buf,off);
+                    parts.put(new JSONObject().put("index",i).put("payload",Base64.encodeToString(part,Base64.NO_WRAP)));
+                }
+                rpc("suishoucun_sync_put_batch_v3",auth,new JSONObject().put("p_object",object).put("p_chunk_count",chunks).put("p_chunks",parts));
             }
         }
         JSONObject status=objectStatus(auth,object);if(!status.optBoolean("complete",false))throw new IOException("云端文件上传不完整");
@@ -294,17 +340,27 @@ final class CloudSync {
         int chunks=status.optInt("chunks",0);if(chunks<1||chunks>4096)throw new IOException("云端文件分片无效");
         File out=new File(context.getCacheDir(),"sync-download-"+UUID.randomUUID()+".bin");long total=0;
         try(FileOutputStream file=new FileOutputStream(out)){
-            for(int i=0;i<chunks;i++){
-                JSONObject part=rpc("suishoucun_sync_get_chunk_v2",auth,new JSONObject().put("p_object",object).put("p_index",i));
-                if(!part.optBoolean("found",false)||part.optInt("chunks",0)!=chunks)throw new IOException("云端文件分片缺失");
-                byte[] bytes=Base64.decode(part.getString("payload"),Base64.DEFAULT);total+=bytes.length;if(total>max)throw new IOException("同步文件过大");file.write(bytes);
+            for(int i=0;i<chunks;){
+                JSONArray indices=new JSONArray();int num=Math.min(3,chunks-i);
+                for(int j=0;j<num;j++)indices.put(i+j);
+                JSONObject batch=rpc("suishoucun_sync_get_batch_v3",auth,new JSONObject().put("p_object",object).put("p_indices",indices));
+                if(!batch.optBoolean("found",false)||batch.optInt("chunks",0)!=chunks)throw new IOException("云端文件分片缺失");
+                JSONArray parts=batch.getJSONArray("parts");if(parts.length()!=num)throw new IOException("云端分片数量错误");
+                for(int j=0;j<num;j++,i++){
+                    JSONObject part=parts.getJSONObject(j);
+                    if(part.optInt("index",-1)!=i)throw new IOException("云端文件分片顺序错误");
+                    byte[] bytes=Base64.decode(part.getString("payload"),Base64.DEFAULT);
+                    total+=bytes.length;if(total>max)throw new IOException("同步文件过大");file.write(bytes);
+                }
             }
         }catch(Exception e){out.delete();throw e;}
         return out;
     }
-    Remote getManifest(String auth)throws Exception{
+    Remote getManifest(String auth)throws Exception{return getManifest(auth,-1);}
+    Remote getManifest(String auth,long localRevision)throws Exception{
         JSONObject head=rpc("suishoucun_sync_head_v2",auth,new JSONObject());long revision=head.optLong("revision",0);
         if(revision<=0)return new Remote(0,null);
+        if(revision==localRevision)return new Remote(revision,null);
         String object=head.optString("manifest","");if(object.isEmpty())throw new IOException("云端清单缺失");
         return new Remote(revision,getObject(auth,object,MAX_MANIFEST+1024));
     }
