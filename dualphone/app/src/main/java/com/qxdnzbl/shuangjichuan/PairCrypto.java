@@ -67,7 +67,13 @@ final class PairCrypto {
   }
   boolean fromPeer(String sender){return paired()&&sender!=null&&sender.equals(peer());}
 
-  String room(){return hex(derive("room")).substring(0,32);}
+  String room(){
+    try{
+      byte[] digest=MessageDigest.getInstance("SHA-256")
+        .digest(relayToken().getBytes(StandardCharsets.UTF_8));
+      return hex(digest).substring(0,32);
+    }catch(Exception e){throw new IllegalStateException(e);}
+  }
   String relayToken(){return hex(derive("relay-auth"));}
   private byte[] derive(String purpose){
     String secret=code();
