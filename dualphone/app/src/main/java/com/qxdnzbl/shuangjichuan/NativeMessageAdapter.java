@@ -171,7 +171,7 @@ public class NativeMessageAdapter extends RecyclerView.Adapter<NativeMessageAdap
   @Override public void onViewRecycled(Holder h){if(h instanceof ImageHolder){((ImageHolder)h).photo.setTag(null);((ImageHolder)h).photo.setImageDrawable(null);}super.onViewRecycled(h);}
   private void bindState(TextView state,TransferDb.Msg m,int position){
     boolean show=m.mine&&position==lastMine;state.setVisibility(show?View.VISIBLE:View.GONE);
-    if(show)state.setText("sent".equals(m.status)?"已送达":("nearby".equals(link)||"relay".equals(link))?"待发送":"等待连接");
+    if(show)state.setText("delivered".equals(m.status)?"已送达":"sent".equals(m.status)?"已发送":("nearby".equals(link)||"relay".equals(link))?"发送中":"等待连接");
   }
   private CharSequence highlight(String text,String q,boolean mine){
     if(q==null||q.isEmpty())return text;
