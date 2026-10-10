@@ -24,7 +24,8 @@ import java.util.*;
 import java.util.concurrent.*;
 
 public class MainActivity extends Activity implements NativeMessageAdapter.Callbacks {
-  private static final int PICK_FILES=7070, PERMS=7071, PICK_BG=7072;
+  private static final int PICK_FILES=7070, PERMS=7071, PICK_BG=7072, NOTIFICATION_PERMS=7073;
+  public static volatile boolean chatForeground=false;
   private static final String SECRET="6686986c94d4a4d34fd705665b962491078a94688d3f730b568d36a2c526c470";
 
   private final ExecutorService io=Executors.newCachedThreadPool();
@@ -123,7 +124,7 @@ public class MainActivity extends Activity implements NativeMessageAdapter.Callb
     if(ciLoadCount>0)loadCiMessagesAsync(ciLoadCount);
 
     requestNearbyPermissions();
-    if(hasNearbyPermissions()) TransferService.start(this);
+    TransferService.start(this);
   }
 
   @Override protected void onStart(){
@@ -139,14 +140,16 @@ public class MainActivity extends Activity implements NativeMessageAdapter.Callb
   }
 
   @Override protected void onResume(){
-    super.onResume();
-    if(hasNearbyPermissions()) TransferService.wake(this);
+    super.onResume();chatForeground=true;
+    TransferService.wake(this);
+    if(hasNearbyPermissions())mainHandler.postDelayed(this::requestNotificationPermission,700);
     scheduleReload(false);
     updateStatus();
     if(updater!=null)updater.onResume();
   }
 
   @Override protected void onPause(){
+    chatForeground=false;
     if(input!=null)prefs.edit().putString("draft_text",input.getText().toString()).apply();
     super.onPause();
   }
@@ -830,11 +833,18 @@ public class MainActivity extends Activity implements NativeMessageAdapter.Callb
     if(!need.isEmpty())requestPermissions(need.toArray(new String[0]),PERMS);
   }
 
+  private void requestNotificationPermission(){
+    if(Build.VERSION.SDK_INT<33||granted(Manifest.permission.POST_NOTIFICATIONS))return;
+    if(prefs.getBoolean("notification_permission_requested",false))return;
+    prefs.edit().putBoolean("notification_permission_requested",true).apply();
+    requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS},NOTIFICATION_PERMS);
+  }
+
   @Override public void onRequestPermissionsResult(int requestCode,String[] permissions,int[] grantResults){
     super.onRequestPermissionsResult(requestCode,permissions,grantResults);
-    if(requestCode==PERMS&&hasNearbyPermissions()){
-      stopService(new Intent(this,TransferService.class));
-      root.postDelayed(()->TransferService.start(this),180);
+    if(requestCode==PERMS){
+      TransferService.wake(this);
+      mainHandler.postDelayed(this::requestNotificationPermission,350);
       updateStatus();
     }
   }
