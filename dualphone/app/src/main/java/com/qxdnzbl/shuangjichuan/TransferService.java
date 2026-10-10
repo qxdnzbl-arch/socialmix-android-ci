@@ -24,7 +24,9 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 public class TransferService extends Service {
   public static final String ACTION_CHANGED="com.qxdnzbl.shuangjichuan.CHANGED";
-  private static final int NOTIFY_ID=31021;
+  private static final int NOTIFY_ID=31021, MESSAGE_ID=31022, DELIVERY_ID=31023, WAITING_ID=31024;
+  private static final String ACK_PREFIX="__SJC_ACK_V1__:";
+  private static final String INCOMING_CHANNEL="dual_incoming_v1", RECEIPT_CHANNEL="dual_delivery_v1";
   private static final String SERVICE_ID="com.qxdnzbl.shuangjichuan.v5";
   private static final String SECRET="6686986c94d4a4d34fd705665b962491078a94688d3f730b568d36a2c526c470";
   private static final String[] RELAYS={
@@ -43,6 +45,7 @@ public class TransferService extends Service {
   private final Set<String> inFlight=ConcurrentHashMap.newKeySet();
   private final Map<Long,Payload> incomingFiles=new ConcurrentHashMap<>();
   private final Map<Long,FileMeta> incomingMeta=new ConcurrentHashMap<>();
+  private final Map<Long,String> incomingPeers=new ConcurrentHashMap<>();
   private final Set<Long> completedIncoming=ConcurrentHashMap.newKeySet();
 
   private volatile boolean running=true;
@@ -106,10 +109,15 @@ public class TransferService extends Service {
 
   private void createChannel(){
     if(Build.VERSION.SDK_INT>=26){
+      NotificationManager manager=getSystemService(NotificationManager.class);
       NotificationChannel ch=new NotificationChannel(
         "transfer","双机传后台同步",NotificationManager.IMPORTANCE_LOW);
       ch.setDescription("自动接收另一台手机的消息和文件");
-      getSystemService(NotificationManager.class).createNotificationChannel(ch);
+      manager.createNotificationChannel(ch);
+      manager.createNotificationChannel(new NotificationChannel(
+        INCOMING_CHANNEL,"收到新消息",NotificationManager.IMPORTANCE_HIGH));
+      manager.createNotificationChannel(new NotificationChannel(
+        RECEIPT_CHANNEL,"送达状态",NotificationManager.IMPORTANCE_DEFAULT));
     }
   }
 
@@ -122,6 +130,60 @@ public class TransferService extends Service {
       .setSmallIcon(android.R.drawable.stat_sys_upload_done)
       .setOngoing(true)
       .build();
+  }
+
+  private void eventNotification(int id,String channel,String title,String body){
+    if(Build.VERSION.SDK_INT>=33&&checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)!=PackageManager.PERMISSION_GRANTED)return;
+    if(id==MESSAGE_ID&&MainActivity.chatForeground)return;
+    Intent intent=new Intent(this,MainActivity.class);
+    intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK|Intent.FLAG_ACTIVITY_CLEAR_TOP|Intent.FLAG_ACTIVITY_SINGLE_TOP);
+    PendingIntent open=PendingIntent.getActivity(this,0,intent,
+      PendingIntent.FLAG_UPDATE_CURRENT|PendingIntent.FLAG_IMMUTABLE);
+    Notification.Builder builder=Build.VERSION.SDK_INT>=26
+      ?new Notification.Builder(this,channel):new Notification.Builder(this);
+    Notification notification=builder.setSmallIcon(android.R.drawable.stat_notify_chat)
+      .setContentTitle(title).setContentText(body).setAutoCancel(true)
+      .setContentIntent(open).setCategory(Notification.CATEGORY_MESSAGE)
+      .setVisibility(Notification.VISIBILITY_PRIVATE).build();
+    getSystemService(NotificationManager.class).notify(id,notification);
+  }
+
+  private void notifyIncoming(String kind,String name){
+    eventNotification(MESSAGE_ID,INCOMING_CHANNEL,"双机传 · 收到新内容",
+      "file".equals(kind)?(PhotoImages.isPhoto(name)?"收到一张图片":"收到一个文件"):"收到一条消息");
+  }
+  private void notifyDelivered(){
+    eventNotification(DELIVERY_ID,RECEIPT_CHANNEL,"双机传 · 已送达","另一台手机已收到并保存");
+  }
+  private void receivedAck(String id){
+    if(id!=null&&id.matches("[0-9a-fA-F-]{36}")&&db.markDelivered(id)){
+      changed();notifyDelivered();
+    }
+  }
+  private void ackNearby(String endpoint,String id){
+    try{
+      JSONObject ack=new JSONObject().put("auth",SECRET).put("op","ack").put("id",id);
+      nearby.sendPayload(endpoint,Payload.fromBytes(ack.toString().getBytes(StandardCharsets.UTF_8)))
+        .addOnFailureListener(e->Log.w("DualDelivery","ack nearby "+e));
+    }catch(Exception e){Log.w("DualDelivery","ack near prepare "+e);}
+  }
+  private void ackRelay(String base,String id){
+    io.execute(()->{
+      HttpURLConnection c=null;
+      try{
+        c=(HttpURLConnection)new URL(base+"/api/dual/send/"+room+"/"+url(deviceId)).openConnection();
+        c.setRequestMethod("POST");c.setDoOutput(true);c.setConnectTimeout(5000);
+        c.setReadTimeout(12000);c.setRequestProperty("x-dual-token",SECRET);
+        c.setRequestProperty("x-dual-kind","text");
+        c.setRequestProperty("x-dual-id","ack-"+id);
+        c.setRequestProperty("x-dual-created",String.valueOf(System.currentTimeMillis()));
+        byte[] bytes=(ACK_PREFIX+id).getBytes(StandardCharsets.UTF_8);
+        c.setFixedLengthStreamingMode(bytes.length);
+        try(OutputStream out=c.getOutputStream()){out.write(bytes);}
+        if(c.getResponseCode()!=200)Log.w("DualDelivery","ack status "+c.getResponseCode());
+      }catch(Exception e){Log.w("DualDelivery","ack relay failed "+e);}
+      finally{if(c!=null)c.disconnect();}
+    });
   }
 
   private void changed(){
@@ -266,17 +328,17 @@ public class TransferService extends Service {
           if(!SECRET.equals(j.optString("auth"))) return;
 
           String op=j.optString("op");
-          if("text".equals(op)){
-            db.addText(
-              j.getString("id"),
-              false,
-              j.optString("text"),
-              j.optLong("created",System.currentTimeMillis()),
-              "received"
-            );
-            changed();
+          if("ack".equals(op)){
+            receivedAck(j.optString("id"));
+          }else if("text".equals(op)){
+            String id=j.getString("id");
+            boolean fresh=db.addText(id,false,j.optString("text"),
+              j.optLong("created",System.currentTimeMillis()),"received");
+            if(fresh){changed();notifyIncoming("text","");}
+            ackNearby(endpointId,id);
           }else if("file_meta".equals(op)){
             long pid=j.getLong("payloadId");
+            incomingPeers.put(pid,endpointId);
             incomingMeta.put(
               pid,
               new FileMeta(
@@ -289,6 +351,7 @@ public class TransferService extends Service {
             tryFinalizeIncoming(pid);
           }
         }else if(payload.getType()==Payload.Type.FILE){
+          incomingPeers.put(payload.getId(),endpointId);
           incomingFiles.put(payload.getId(),payload);
           tryFinalizeIncoming(payload.getId());
         }
@@ -326,6 +389,7 @@ public class TransferService extends Service {
         if(failedMsg!=null) inFlight.remove(failedMsg);
         Payload p=incomingFiles.remove(id);
         incomingMeta.remove(id);
+        incomingPeers.remove(id);
         completedIncoming.remove(id);
         if(p!=null) p.close();
       }
@@ -357,21 +421,18 @@ public class TransferService extends Service {
         getContentResolver().delete(uri,null,null);
       }catch(Exception ignored){}
 
-      db.addFile(
-        meta.id,
-        false,
-        meta.name,
-        dst.getAbsolutePath(),
-        dst.length(),
-        meta.created,
-        "received"
-      );
-      changed();
+      if(dst.length()!=meta.size)throw new IOException("nearby file size mismatch");
+      boolean fresh=db.addFile(meta.id,false,meta.name,dst.getAbsolutePath(),
+        dst.length(),meta.created,"received");
+      if(fresh){changed();notifyIncoming("file",meta.name);}
+      String endpoint=incomingPeers.get(pid);
+      if(endpoint!=null)ackNearby(endpoint,meta.id);
     }catch(Exception e){
       Log.w("DualNearby","save file "+e);
     }finally{
       incomingFiles.remove(pid);
       incomingMeta.remove(pid);
+      incomingPeers.remove(pid);
       completedIncoming.remove(pid);
       payload.close();
     }
@@ -477,7 +538,7 @@ public class TransferService extends Service {
 
         c=(HttpURLConnection)u.openConnection();
         c.setConnectTimeout(8000);
-        c.setReadTimeout(35000);
+        c.setReadTimeout(65000);
         c.setRequestProperty("x-dual-token",SECRET);
         c.setUseCaches(false);
 
@@ -492,14 +553,14 @@ public class TransferService extends Service {
 
           if("text".equals(kind)){
             byte[] b=readLimited(c.getInputStream(),1024*1024);
-            db.addText(
-              id,
-              false,
-              new String(b,StandardCharsets.UTF_8),
-              created,
-              "received"
-            );
-            changed();
+            String message=new String(b,StandardCharsets.UTF_8);
+            if(message.startsWith(ACK_PREFIX)){
+              receivedAck(message.substring(ACK_PREFIX.length()));
+            }else{
+              boolean fresh=db.addText(id,false,message,created,"received");
+              if(fresh){changed();notifyIncoming("text","");}
+              ackRelay(base,id);
+            }
           }else if("file".equals(kind)){
             String name=decodeName(
               c.getHeaderField("X-Dual-File-Name"));
@@ -508,24 +569,17 @@ public class TransferService extends Service {
             dir.mkdirs();
 
             File dst=new File(dir,id+"_"+safeName(name));
-
-            try(
-              InputStream in=c.getInputStream();
-              OutputStream out=new FileOutputStream(dst)
-            ){
-              copyLimited(in,out,500L*1024*1024);
+            if(!db.hasMessage(id)){
+              File tmp=new File(dir,id+".receiving");
+              try(InputStream in=c.getInputStream();OutputStream out=new FileOutputStream(tmp)){
+                copyLimited(in,out,500L*1024*1024);
+              }catch(Exception failed){tmp.delete();throw failed;}
+              if(!tmp.renameTo(dst)){tmp.delete();throw new IOException("cannot finalize incoming");}
+              boolean fresh=db.addFile(id,false,name,dst.getAbsolutePath(),
+                dst.length(),created,"received");
+              if(fresh){changed();notifyIncoming("file",name);}
             }
-
-            db.addFile(
-              id,
-              false,
-              name,
-              dst.getAbsolutePath(),
-              dst.length(),
-              created,
-              "received"
-            );
-            changed();
+            ackRelay(base,id);
           }
         }
       }catch(Exception ignored){
@@ -553,7 +607,7 @@ public class TransferService extends Service {
         c.setRequestMethod("POST");
         c.setDoOutput(true);
         c.setConnectTimeout(5000);
-        c.setReadTimeout(15000);
+        c.setReadTimeout(65000);
         c.setUseCaches(false);
 
         c.setRequestProperty("x-dual-token",SECRET);
@@ -602,9 +656,11 @@ public class TransferService extends Service {
           changed();
           return true;
         }
+        Log.w("DualRelay","send "+m.kind+" status "+code);
 
         if(code==409) continue;
-      }catch(Exception ignored){
+      }catch(Exception e){
+        Log.w("DualRelay","send retry "+e.getClass().getSimpleName());
       }finally{
         if(c!=null) c.disconnect();
       }
