@@ -324,12 +324,12 @@ public class MainActivity extends Activity {
     void cloudSyncDialog(){
         if(cloudSync==null)return;
         if(!cloudSync.enabled()){
-            new AlertDialog.Builder(this).setTitle("多端同步").setMessage("不用注册账号。第一台手机开启后会生成一个同步码；另一台手机输入同一个码，记录、分类、图片和背景会同步过去。")
+            new AlertDialog.Builder(this).setTitle("多端同步")
                 .setItems(new String[]{"开启多端同步","连接已有同步"},(d,w)->{if(w==0)enableCloudSync();else connectCloudSyncDialog();})
                 .setNegativeButton("取消",null).show();
             return;
         }
-        new AlertDialog.Builder(this).setTitle("多端同步").setMessage("已开启 · "+cloudSync.lastSyncLabel())
+        new AlertDialog.Builder(this).setTitle("多端同步 · "+cloudSync.lastSyncLabel())
             .setItems(new String[]{"立即同步","查看同步码","断开这台手机"},(d,w)->{
                 if(w==0)syncCloud(true);else if(w==1)showSyncCode();else new AlertDialog.Builder(this).setTitle("断开这台手机？")
                     .setMessage("只会停止这台手机同步，云端数据和其他手机不会删除。")
