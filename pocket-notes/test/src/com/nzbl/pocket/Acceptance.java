@@ -156,9 +156,14 @@ JSONObject cloudManifest=sync.decryptManifest(cloudRemote.encrypted,syncCode);cl
             CloudSync.Result uploadFromSecond=secondSync.syncNow(false);
             check(uploadFromSecond.ok&&uploadFromSecond.revision>cloudFirst.revision,
                   "second device uploads its changes as a new cloud revision");
-            CloudSync.Result backToFirst=sync.syncNow(false);
-            check(backToFirst.ok&&newText.equals(a.store.find(sharedNoteId).title),
-                  "first device automatically retrieves edits made on second device");
+            // Do not manually invoke the first phone: prove foreground auto-refresh while both apps remain open.
+            long pollDeadline=System.currentTimeMillis()+19000;
+            while(System.currentTimeMillis()<pollDeadline&&
+                  (sync.revision()<uploadFromSecond.revision||!newText.equals(a.store.find(sharedNoteId).title))){
+                Thread.sleep(650);idle();
+            }
+            check(sync.revision()>=uploadFromSecond.revision&&newText.equals(a.store.find(sharedNoteId).title),
+                  "foreground first device automatically receives second-device edits without manual sync");
             secondSync.disconnect();
             sync.disconnect();CloudSync.Result cloudReconnect=sync.connectExisting(syncCode);check(cloudReconnect.ok&&sync.enabled()&&a.store.notes.size()==cloudNotes,"second-device pairing path reconnects to the same cloud data without losing records");
             sync.deleteRemote();sync.disconnect();check(!sync.enabled(),"cloud sync can be disconnected cleanly");
