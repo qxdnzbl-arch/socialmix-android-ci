@@ -83,6 +83,16 @@ check(a.store.categories.isEmpty(),"fresh install has no preset categories");che
             int cloudNotes=a.store.notes.size();CloudSync.Result cloudFirst=sync.syncNow(false);check(cloudFirst.ok&&cloudFirst.revision>0&&!sync.dirty(),"cloud sync uploads current records and photos to the real backend");
             CloudSync.Remote cloudRemote=sync.getManifest(syncAuth);check(cloudRemote.revision==cloudFirst.revision&&cloudRemote.encrypted!=null&&cloudRemote.encrypted.length()>0,"cloud manifest is retrievable from the real backend");JSONObject cloudManifest=sync.decryptManifest(cloudRemote.encrypted,syncCode);cloudRemote.encrypted.delete();check("suishoucun-cloud".equals(cloudManifest.optString("format"))&&cloudManifest.getJSONObject("collection").getJSONArray("notes").length()==cloudNotes,"encrypted cloud manifest round-trips the full collection");
             sync.disconnect();CloudSync.Result cloudReconnect=sync.connectExisting(syncCode);check(cloudReconnect.ok&&sync.enabled()&&a.store.notes.size()==cloudNotes,"second-device pairing path reconnects to the same cloud data without losing records");
+            check(sync.objectStatus(syncAuth,"receipt/"+cloudFirst.revision).optBoolean("complete",false),"remote data download posts a server-verifiable arrival receipt");
+            if(android.os.Build.VERSION.SDK_INT>=33)
+                getUiAutomation().grantRuntimePermission(getTargetContext().getPackageName(),android.Manifest.permission.POST_NOTIFICATIONS);
+            SyncNotifier.uploaded(getTargetContext(),cloudFirst.revision);
+            android.app.NotificationManager notifications=(android.app.NotificationManager)getTargetContext().getSystemService(android.content.Context.NOTIFICATION_SERVICE);
+            check(notifications!=null&&notifications.getNotificationChannel("suishoucun_sync_events")!=null,"Android system notification channel is registered");
+            boolean notificationVisible=false;
+            for(android.service.notification.StatusBarNotification notice:notifications.getActiveNotifications())
+                if(notice.getId()==201)notificationVisible=true;
+            check(notificationVisible,"confirmed successful upload displays a real system notification");
             sync.deleteRemote();sync.disconnect();check(!sync.enabled(),"cloud sync can be disconnected cleanly");
             // Save evidence from an actual second small-screen density setting in the runner as well.
             File report=new File(dir,"acceptance.json");JSONObject j=new JSONObject().put("passed",true).put("checks",new JSONArray(checks));try(FileOutputStream f=new FileOutputStream(report)){f.write(j.toString(2).getBytes("UTF-8"));}
