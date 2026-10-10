@@ -45,7 +45,7 @@ final class SyncNotifier {
         PendingIntent pending=PendingIntent.getActivity(app,type,intent,
             PendingIntent.FLAG_UPDATE_CURRENT|PendingIntent.FLAG_IMMUTABLE);
         Notification notification=new Notification.Builder(app,CHANNEL)
-            .setSmallIcon(R.drawable.app_icon).setContentTitle(title).setContentText(text)
+            .setSmallIcon(android.R.drawable.ic_dialog_info).setContentTitle(title).setContentText(text)
             .setAutoCancel(true).setContentIntent(pending)
             .setCategory(Notification.CATEGORY_STATUS).build();
         nm.notify(type,notification);
