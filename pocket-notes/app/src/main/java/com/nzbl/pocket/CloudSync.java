@@ -46,13 +46,14 @@ final class CloudSync {
             boolean hasRecords=hasLocalData(),hasBackground=backgroundFile!=null&&backgroundFile.isFile();
             prefs.edit().putBoolean("floot_backend_v3",true).putLong("revision",0)
                 .putBoolean("dirty",hasRecords).putBoolean("background_dirty",hasBackground)
-                .putLong("last_sync",0).commit();
+                .putLong("last_sync",0).putLong("pending_delivery",0).putLong("delivered_revision",0).commit();
         }
     }
     boolean enabled(){return validCode(code());}
     String code(){return prefs.getString("code","");}
     long revision(){return prefs.getLong("revision",0);}
     long lastSync(){return prefs.getLong("last_sync",0);}
+    long deliveredRevision(){return prefs.getLong("delivered_revision",0);}
     boolean dirty(){return prefs.getBoolean("dirty",false);}
     boolean backgroundDirty(){return prefs.getBoolean("background_dirty",false);}
     String lastSyncLabel(){
@@ -71,7 +72,8 @@ final class CloudSync {
     String beginNew(){
         String c=generateCode();
         prefs.edit().putString("code",c).putLong("revision",0).putBoolean("dirty",true)
-            .putBoolean("background_dirty",backgroundFile!=null&&backgroundFile.isFile()).putLong("last_sync",0).apply();
+            .putBoolean("background_dirty",backgroundFile!=null&&backgroundFile.isFile()).putLong("last_sync",0)
+            .putLong("pending_delivery",0).putLong("delivered_revision",0).apply();
         return c;
     }
     void disconnect(){
@@ -81,15 +83,16 @@ final class CloudSync {
         String next=normalizeCode(raw);
         if(!validCode(next))return new Result(false,false,"同步码不正确。",0);
         String oldCode=code();long oldRev=revision(),oldLast=lastSync();
-        boolean oldDirty=dirty(),oldBg=backgroundDirty();
+        boolean oldDirty=dirty(),oldBg=backgroundDirty();long oldPending=prefs.getLong("pending_delivery",0),oldDelivered=deliveredRevision();
         prefs.edit().putString("code",next).putLong("revision",0)
             .putBoolean("dirty",hasLocalData()).putBoolean("background_dirty",backgroundFile!=null&&backgroundFile.isFile())
-            .putLong("last_sync",0).commit();
+            .putLong("last_sync",0).putLong("pending_delivery",0).putLong("delivered_revision",0).commit();
         Result result=syncNow(true);
         if(!result.ok){
             SharedPreferences.Editor e=prefs.edit().clear();
             if(validCode(oldCode))e.putString("code",oldCode).putLong("revision",oldRev).putLong("last_sync",oldLast)
-                .putBoolean("dirty",oldDirty).putBoolean("background_dirty",oldBg);
+                .putBoolean("dirty",oldDirty).putBoolean("background_dirty",oldBg)
+                .putLong("pending_delivery",oldPending).putLong("delivered_revision",oldDelivered);
             e.commit();
         }
         return result;
@@ -105,6 +108,7 @@ final class CloudSync {
             try{
                 Remote remote=getManifest(auth,revision());
                 remoteFile=remote.encrypted;
+                checkPendingReceipt(auth);
                 long localRevision=revision();
                 boolean localDirty=dirty(),bgDirty=backgroundDirty();
 
@@ -124,10 +128,12 @@ final class CloudSync {
                     }
                     if(!bgDirty)applyRemoteBackground(auth,syncCode,manifest.optBoolean("background",false));
                     localRevision=remote.revision;changed=true;
+                    acknowledgeReceived(auth,localRevision);
                     prefs.edit().putLong("revision",localRevision).commit();
                     if(!localDirty){
                         prefs.edit().putBoolean("dirty",false).putBoolean("background_dirty",false)
                             .putLong("last_sync",System.currentTimeMillis()).commit();
+                        acknowledgeReceived(auth,localRevision);
                         return new Result(true,true,"同步完成",localRevision);
                     }
                 }
@@ -138,7 +144,8 @@ final class CloudSync {
                     try{
                         long next=putManifest(auth,remote.revision,encrypted);
                         prefs.edit().putLong("revision",next).putBoolean("dirty",false)
-                            .putBoolean("background_dirty",false).putLong("last_sync",System.currentTimeMillis()).commit();
+                            .putBoolean("background_dirty",false).putLong("last_sync",System.currentTimeMillis())
+                            .putLong("pending_delivery",next).commit();
                         return new Result(true,changed,"同步完成",next);
                     }finally{encrypted.delete();}
                 }
@@ -159,6 +166,28 @@ final class CloudSync {
         return new JSONObject().put("format","suishoucun-cloud").put("version",1)
             .put("collection",collection).put("background",backgroundFile!=null&&backgroundFile.isFile());
     }
+    void acknowledgeReceived(String auth,long receivedRevision){
+        if(receivedRevision<=0)return;
+        try{
+            String name="receipt/"+receivedRevision;
+            String payload=Base64.encodeToString("received".getBytes(StandardCharsets.US_ASCII),Base64.NO_WRAP);
+            rpc("suishoucun_sync_prepare_object_v2",auth,new JSONObject().put("p_object",name).put("p_chunk_count",1));
+            rpc("suishoucun_sync_put_chunk_v2",auth,new JSONObject().put("p_object",name).put("p_index",0)
+                .put("p_chunk_count",1).put("p_payload",payload));
+        }catch(Exception ignored){ /* A receipt failure never rolls back already saved content. */ }
+    }
+    void checkPendingReceipt(String auth){
+        long pending=prefs.getLong("pending_delivery",0);
+        if(pending<=0)return;
+        long now=System.currentTimeMillis();
+        if(now-prefs.getLong("last_delivery_check",0)<10000)return;
+        prefs.edit().putLong("last_delivery_check",now).apply();
+        try{
+            if(objectStatus(auth,"receipt/"+pending).optBoolean("complete",false))
+                prefs.edit().putLong("delivered_revision",pending).putLong("pending_delivery",0).apply();
+        }catch(Exception ignored){}
+    }
+
     void uploadLocalAssets(String auth,String syncCode,boolean forceBackground)throws Exception{
         JSONObject collection;
         synchronized(store){collection=new JSONObject(store.json().toString());}
