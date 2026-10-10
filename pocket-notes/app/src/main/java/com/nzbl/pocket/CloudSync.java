@@ -13,8 +13,7 @@ import java.util.*;
 import org.json.*;
 
 final class CloudSync {
-    static final String RPC_BASE="https://nvwdtfnhsyfdopaxdylx.supabase.co/rest/v1/rpc/";
-    static final String API_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im52d2R0Zm5oc3lmZG9wYXhkeWx4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODgwMTExNTcsImV4cCI6MjEwMzU4NzE1N30.wXmcZ6KIQOt-eet6ONUgl9HI1eJhJAofdf2_JPD_0Ek";
+    static final String RPC_URL="https://suishoucun-sync.floot.app/_api/sync";
     static final int MAX_ASSET=66*1024*1024,MAX_MANIFEST=8*1024*1024,CHUNK_BYTES=256*1024;
     final Context context;
     final Store store;
@@ -257,11 +256,12 @@ final class CloudSync {
     }
 
     JSONObject rpc(String name,String auth,JSONObject body)throws Exception{
-        HttpURLConnection c=(HttpURLConnection)new URL(RPC_BASE+name).openConnection();
+        HttpURLConnection c=(HttpURLConnection)new URL(RPC_URL).openConnection();
         c.setConnectTimeout(12000);c.setReadTimeout(60000);c.setRequestMethod("POST");c.setDoOutput(true);c.setUseCaches(false);
-        c.setRequestProperty("apikey",API_KEY);c.setRequestProperty("Authorization","Bearer "+API_KEY);c.setRequestProperty("x-sync-auth",auth);
+        c.setRequestProperty("x-sync-auth",auth);
         c.setRequestProperty("Content-Type","application/json");c.setRequestProperty("Accept","application/json");c.setRequestProperty("User-Agent","Suishoucun-Android");
-        byte[] request=body.toString().getBytes(StandardCharsets.UTF_8);c.setFixedLengthStreamingMode(request.length);
+        JSONObject payload=new JSONObject(body.toString()).put("action",name);
+        byte[] request=payload.toString().getBytes(StandardCharsets.UTF_8);c.setFixedLengthStreamingMode(request.length);
         try(OutputStream out=c.getOutputStream()){out.write(request);}
         int status=c.getResponseCode();InputStream in=status>=200&&status<300?c.getInputStream():c.getErrorStream();
         String response="";if(in!=null){ByteArrayOutputStream out=new ByteArrayOutputStream();try{copy(in,out,1024*1024);}catch(Exception ignored){}response=out.toString("UTF-8");}
