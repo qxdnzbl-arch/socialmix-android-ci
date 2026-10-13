@@ -1,0 +1,118 @@
+name: DualPhone Signed Release and In-App Update Channel
+on:
+  push:
+    branches: ['dualphone-v*-release']
+    paths:
+      - 'dualphone/app/**'
+      - 'dualphone/acceptance/**'
+      - '.github/workflows/dualphone-release-in-app-update.yml'
+permissions:
+  contents: write
+concurrency:
+  group: dualphone-publish-latest
+  cancel-in-progress: false
+jobs:
+  verify-and-publish:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 24
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with: {distribution: temurin, java-version: '17'}
+      - uses: gradle/actions/setup-gradle@v4
+        with: {gradle-version: '8.11.1'}
+      - name: Guard against broken pairings and misleading receipts
+        run: |
+          set -eu
+          grep -Fq 'AES/GCM/NoPadding' dualphone/app/src/main/java/com/qxdnzbl/shuangjichuan/PairCrypto.java
+          grep -Fq 'crypto.fromPeer(sender)' dualphone/app/src/main/java/com/qxdnzbl/shuangjichuan/TransferService.java
+          grep -Fq '消息已到达另一台手机' dualphone/app/src/main/java/com/qxdnzbl/shuangjichuan/TransferService.java
+          ! grep -Fq '另一台手机已收到并保存' dualphone/app/src/main/java/com/qxdnzbl/shuangjichuan/TransferService.java
+          grep -Fq 'download(result,false)' dualphone/app/src/main/java/com/qxdnzbl/shuangjichuan/AppUpdater.java
+      - name: Build signed release and matching debug build
+        working-directory: dualphone
+        run: |
+          set -eu
+          base64 -d keystore.b64 > app/shuangjichuan-release.jks
+          gradle --no-daemon :app:assembleRelease :app:assembleDebug
+          SIGNER=$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -1)
+          "$SIGNER" verify --verbose app/build/outputs/apk/release/app-release.apk
+      - name: Real Android install, boot and encrypted 4.9MB relay transfer
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 30
+          arch: x86_64
+          target: google_apis
+          profile: pixel_6
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none
+          script: |
+            set -eu
+            PKG=com.qxdnzbl.shuangjichuan.offline
+            adb root
+            adb install -r dualphone/app/build/outputs/apk/debug/app-debug.apk
+            adb shell am start -W -n "$PKG"/com.qxdnzbl.shuangjichuan.MainActivity --es ciPairCode ABCDEFGHJKLMNPQRSTUV --es ciPairPeer 00000000-0000-0000-0000-000000000001
+            sleep 5
+            adb shell input keyevent 3
+            python3 -m pip install --quiet cryptography
+            python3 dualphone/acceptance/private_e2e.py
+            adb shell am start -W -n "$PKG"/com.qxdnzbl.shuangjichuan.MainActivity
+            sleep 2
+            adb shell uiautomator dump /sdcard/release-ui.xml
+            adb pull /sdcard/release-ui.xml dualphone/release-ui.xml
+            grep -Fq '我的两台手机' dualphone/release-ui.xml
+            adb logcat -d -s AndroidRuntime:E > dualphone/release-logcat.txt
+            ! grep -q 'FATAL EXCEPTION' dualphone/release-logcat.txt
+      - name: Publish APK and update automatic checker channel
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          FILE=dualphone/app/build/outputs/apk/release/app-release.apk
+          VERSION=$(sed -n -E 's/^[[:space:]]*versionCode[[:space:]]+([0-9]+).*/\1/p' dualphone/app/build.gradle)
+          VERSION_NAME=$(sed -n -E "s/^[[:space:]]*versionName[[:space:]]+'([^']+)'.*/\1/p" dualphone/app/build.gradle)
+          test -n "$VERSION" && test -n "$VERSION_NAME"
+          OLD_VERSION=$(gh api "repos/$GH_REPO/releases/tags/dualphone-latest" --jq '.body | fromjson | .versionCode' || echo 0)
+          if [ "$VERSION" -le "$OLD_VERSION" ]; then echo "ERROR: release version $VERSION must exceed $OLD_VERSION"; exit 1; fi
+          mkdir -p dualphone/publish
+          APK="ShuangJiChuan_${VERSION}.apk"
+          cp "$FILE" "dualphone/publish/$APK"
+          SHA=$(sha256sum "dualphone/publish/$APK" | awk '{print $1}')
+          export VERSION VERSION_NAME APK SHA
+          python3 - <<'PY'
+          import os,json
+          repo=os.environ["GH_REPO"]
+          release={
+            "packageName":"com.qxdnzbl.shuangjichuan.offline",
+            "versionCode":int(os.environ["VERSION"]),
+            "versionName":os.environ["VERSION_NAME"],
+            "sha256":os.environ["SHA"],
+            "apkUrl":f"https://github.com/{repo}/releases/download/dualphone-latest/{os.environ['APK']}",
+            "notes":"自动检查和下载更新，安装时仅需确认安卓系统提示；保留原有聊天记录和两台手机的专属加密配对。"
+          }
+          with open("dualphone/publish/update.json","w",encoding="utf-8") as f:
+              json.dump(release,f,ensure_ascii=False)
+          PY
+          gh release upload dualphone-latest "dualphone/publish/$APK" --clobber
+          gh release upload dualphone-latest dualphone/publish/update.json --clobber
+          gh release edit dualphone-latest --title "双机传 v$VERSION_NAME｜应用内自动更新" --notes-file dualphone/publish/update.json
+          gh api "repos/$GH_REPO/releases/tags/dualphone-latest" --jq '.body' > dualphone/publish/current-live.json
+          python3 - <<'PY'
+          import json
+          a=json.load(open("dualphone/publish/update.json",encoding="utf-8"))
+          b=json.load(open("dualphone/publish/current-live.json",encoding="utf-8"))
+          assert a==b,(a,b)
+          print("VERIFIED: latest release points to signed APK",a["versionCode"],a["sha256"])
+          PY
+      - name: Small release audit manifest
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dualphone-update-release-audit
+          path: |
+            dualphone/publish/update.json
+            dualphone/release-logcat.txt
+          if-no-files-found: ignore
+          retention-days: 1
