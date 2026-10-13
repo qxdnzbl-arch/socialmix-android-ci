@@ -47,7 +47,7 @@ final class AppUpdater {
       return;
     }
     long now=System.currentTimeMillis();
-    if(now-prefs.getLong("last_check",0L)>6*60*60*1000L)check(false);
+    if(now-prefs.getLong("last_check",0L)>15*60*1000L)check(false);
   }
   void check(boolean manual){
     if(closed)return;
