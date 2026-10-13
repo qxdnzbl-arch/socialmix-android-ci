@@ -56,7 +56,7 @@ jobs:
             PKG=com.qxdnzbl.shuangjichuan.offline
             adb root
             adb install -r dualphone/app/build/outputs/apk/debug/app-debug.apk
-            adb shell am start -W -n "$PKG"/com.qxdnzbl.shuangjichuan.MainActivity --es ciPairCode ABCDEFGHJKLMNPQRSTUV --es ciPairPeer 00000000-0000-0000-0000-000000000001
+            adb shell am start -W -n com.qxdnzbl.shuangjichuan.offline/com.qxdnzbl.shuangjichuan.MainActivity --es ciPairCode ABCDEFGHJKLMNPQRSTUV --es ciPairPeer 00000000-0000-0000-0000-000000000001
             sleep 5
             adb shell uiautomator dump /sdcard/release-ui.xml
             adb pull /sdcard/release-ui.xml dualphone/release-ui.xml
