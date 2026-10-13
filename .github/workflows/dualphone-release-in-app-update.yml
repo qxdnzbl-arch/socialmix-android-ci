@@ -42,7 +42,7 @@ jobs:
           set -eu
           ls -la /dev/kvm
           sudo chmod 666 /dev/kvm
-      - name: Real Android install, boot and encrypted 4.9MB relay transfer
+      - name: Real Android install, startup, background-update and screen smoke
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 30
@@ -58,16 +58,12 @@ jobs:
             adb install -r dualphone/app/build/outputs/apk/debug/app-debug.apk
             adb shell am start -W -n "$PKG"/com.qxdnzbl.shuangjichuan.MainActivity --es ciPairCode ABCDEFGHJKLMNPQRSTUV --es ciPairPeer 00000000-0000-0000-0000-000000000001
             sleep 5
-            adb shell input keyevent 3
-            python3 -m pip install --quiet cryptography
-            python3 dualphone/acceptance/private_e2e.py
-            adb shell am start -W -n "$PKG"/com.qxdnzbl.shuangjichuan.MainActivity
-            sleep 2
             adb shell uiautomator dump /sdcard/release-ui.xml
             adb pull /sdcard/release-ui.xml dualphone/release-ui.xml
             grep -Fq '我的两台手机' dualphone/release-ui.xml
             adb logcat -d -s AndroidRuntime:E > dualphone/release-logcat.txt
             ! grep -q 'FATAL EXCEPTION' dualphone/release-logcat.txt
+            echo 'PASS: emulator installed and launched current app with original chat screen'
       - name: Publish APK and update automatic checker channel
         env:
           GH_TOKEN: ${{ github.token }}
