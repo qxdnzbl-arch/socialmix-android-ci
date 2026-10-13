@@ -154,7 +154,7 @@ public class TransferService extends Service {
       "file".equals(kind)?(PhotoImages.isPhoto(name)?"收到一张图片":"收到一个文件"):"收到一条消息");
   }
   private void notifyDelivered(){
-    eventNotification(DELIVERY_ID,RECEIPT_CHANNEL,"双机传 · 已送达","另一台手机已收到并保存");
+    eventNotification(DELIVERY_ID,RECEIPT_CHANNEL,"双机传 · 已送达","消息已到达另一台手机");
   }
   private void receivedAck(String id){
     if(id!=null&&id.matches("[0-9a-fA-F-]{36}")&&db.markDelivered(id)){
