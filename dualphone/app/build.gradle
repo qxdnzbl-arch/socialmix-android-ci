@@ -6,8 +6,8 @@ android {
     applicationId 'com.qxdnzbl.shuangjichuan.offline'
     minSdk 26
     targetSdk 35
-    versionCode 581
-    versionName '5.8.1-accurate-receipt'
+    versionCode 582
+    versionName '5.8.2-in-app-auto-update'
   }
   buildFeatures { buildConfig true }
   signingConfigs {
