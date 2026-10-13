@@ -37,6 +37,11 @@ jobs:
           gradle --no-daemon :app:assembleRelease :app:assembleDebug
           SIGNER=$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -1)
           "$SIGNER" verify --verbose app/build/outputs/apk/release/app-release.apk
+      - name: Enable hardware acceleration on GitHub runner
+        run: |
+          set -eu
+          ls -la /dev/kvm
+          sudo chmod 666 /dev/kvm
       - name: Real Android install, boot and encrypted 4.9MB relay transfer
         uses: reactivecircus/android-emulator-runner@v2
         with:
@@ -44,7 +49,7 @@ jobs:
           arch: x86_64
           target: google_apis
           profile: pixel_6
-          disable-animations: true
+          disable-animations: false
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none
           script: |
             set -eu
