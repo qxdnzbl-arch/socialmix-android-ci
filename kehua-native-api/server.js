@@ -132,6 +132,12 @@ async function rpc(name,a){ return tx(async c=>{
     case 'kehua_prod_logout': { const u=await auth(c,a.p_token); await c.query('delete from native_prod_sessions where token=$1 and account_id=$2',[a.p_token,u.id]); return {ok:true}; }
     case 'kehua_prod_rotate_recovery': { const u=await auth(c,a.p_token), rec=recoveryCode(); await c.query('update native_prod_accounts set recovery_hash=$1,updated_at=now() where id=$2',[sha256(rec),u.id]); return {ok:true,recovery_code:rec}; }
     case 'kehua_prod_create_post': { const u=await auth(c,a.p_token), content=cleanText(a.p_content,1200,'内容'), id=uuid(); await c.query('insert into native_prod_posts(id,account_id,content,is_private) values($1,$2,$3,$4)',[id,u.id,content,Boolean(a.p_private)]); return {ok:true,id}; }
+    case 'kehua_prod_delete_post': {
+      const u=await auth(c,a.p_token), id=String(a.p_post_id||'');
+      const removed=await c.query('delete from native_prod_posts where id=$1 and account_id=$2 returning id',[id,u.id]);
+      if(!removed.rowCount) throw fail('内容不存在或无删除权限',404);
+      return {ok:true,deleted:removed.rows[0].id};
+    }
     case 'kehua_prod_home': {
       const u=await auth(c,a.p_token); await ensureResonances(c,u.id);
       const posts=(await c.query(`select p.id,p.content,p.created_at,p.is_private,count(l.id)::int light_count from native_prod_posts p left join native_prod_lights l on l.post_id=p.id where p.account_id=$1 group by p.id order by p.created_at desc limit 50`,[u.id])).rows;
@@ -148,7 +154,19 @@ async function rpc(name,a){ return tx(async c=>{
     case 'kehua_prod_chat': { const u=await auth(c,a.p_token), other=String(a.p_other||''); if(await isBlocked(c,u.id,other)) throw fail('已无法继续联系',403); const p=(await c.query('select id,nickname,bio from native_prod_accounts where id=$1',[other])).rows[0]; if(!p) throw fail('用户不存在',404); const items=(await c.query(`select id,from_id,body,created_at from native_prod_messages where (from_id=$1 and to_id=$2) or (from_id=$2 and to_id=$1) order by created_at asc limit 400`,[u.id,other])).rows.map(x=>({...x,id:Number(x.id)})); return {ok:true,peer:p,is_friend:await isFriend(c,u.id,other),items}; }
     case 'kehua_prod_threads': { const u=await auth(c,a.p_token); const q=await c.query(`with peers as (select case when from_id=$1 then to_id else from_id end peer_id,max(created_at) last_at from native_prod_messages where from_id=$1 or to_id=$1 group by 1) select a.id,a.nickname,coalesce((select m.body from native_prod_messages m where (m.from_id=$1 and m.to_id=a.id) or (m.from_id=a.id and m.to_id=$1) order by m.created_at desc limit 1),'') last_message,p.last_at from peers p join native_prod_accounts a on a.id=p.peer_id order by p.last_at desc`,[u.id]); const items=[]; for(const x of q.rows){ if(!(await isBlocked(c,u.id,x.id))) items.push({...x,is_friend:await isFriend(c,u.id,x.id)}); } return {ok:true,items}; }
     case 'kehua_prod_friend_request': { const u=await auth(c,a.p_token), other=String(a.p_other||''); if(other===u.id) throw fail('不能添加自己'); if(await isBlocked(c,u.id,other)) throw fail('无法添加这个人',403); if(await isFriend(c,u.id,other)) return {ok:true,status:'accepted'}; const rev=await c.query(`select id from native_prod_friend_requests where from_user=$1 and to_user=$2 and status='pending'`,[other,u.id]); if(rev.rows[0]){ const [x,y]=pair(u.id,other); await c.query(`update native_prod_friend_requests set status='accepted',updated_at=now() where id=$1`,[rev.rows[0].id]); await c.query(`insert into native_prod_friendships(id,user_a,user_b) values($1,$2,$3) on conflict(user_a,user_b) do nothing`,[uuid(),x,y]); return {ok:true,status:'accepted'}; } await c.query(`insert into native_prod_friend_requests(id,from_user,to_user,status) values($1,$2,$3,'pending') on conflict(from_user,to_user) do update set status='pending',updated_at=now()`,[uuid(),u.id,other]); return {ok:true,status:'pending'}; }
-    case 'kehua_prod_incoming_friend_requests': { const u=await auth(c,a.p_token); const items=(await c.query(`select id,from_user from native_prod_friend_requests where to_user=$1 and status='pending' order by created_at desc`,[u.id])).rows; return {ok:true,items}; }
+    case 'kehua_prod_lights_received': {
+      const u=await auth(c,a.p_token);
+      const q=await c.query(`select l.from_account_id as from_user_id,a.nickname,p.content as post_content,l.created_at
+        from native_prod_lights l
+        join native_prod_posts p on p.id=l.post_id
+        join native_prod_accounts a on a.id=l.from_account_id
+        where p.account_id=$1
+          and not exists(select 1 from native_prod_blocks b
+          where (b.blocker_id=$1 and b.blocked_id=l.from_account_id) or (b.blocker_id=l.from_account_id and b.blocked_id=$1))
+        order by l.created_at desc limit 50`,[u.id]);
+      return {ok:true,items:q.rows};
+    }
+    case 'kehua_prod_incoming_friend_requests': { const u=await auth(c,a.p_token); const items=(await c.query(`select r.id,r.from_user,a.nickname from native_prod_friend_requests r join native_prod_accounts a on a.id=r.from_user where r.to_user=$1 and r.status='pending' order by r.created_at desc`,[u.id])).rows; return {ok:true,items}; }
     case 'kehua_prod_respond_friend_request': { const u=await auth(c,a.p_token); const q=await c.query(`select * from native_prod_friend_requests where id=$1 and to_user=$2 and status='pending'`,[a.p_request,u.id]); const r=q.rows[0]; if(!r) throw fail('好友申请不存在',404); const status=Boolean(a.p_accept)?'accepted':'rejected'; await c.query('update native_prod_friend_requests set status=$1,updated_at=now() where id=$2',[status,r.id]); if(status==='accepted'){ const [x,y]=pair(r.from_user,r.to_user); await c.query(`insert into native_prod_friendships(id,user_a,user_b) values($1,$2,$3) on conflict(user_a,user_b) do nothing`,[uuid(),x,y]); } return {ok:true,status}; }
     case 'kehua_prod_friends': { const u=await auth(c,a.p_token); const rows=(await c.query(`select a.id,a.nickname,a.bio from native_prod_friendships f join native_prod_accounts a on a.id=case when f.user_a=$1 then f.user_b else f.user_a end where f.user_a=$1 or f.user_b=$1 order by f.created_at desc`,[u.id])).rows; const items=[]; for(const x of rows){ if(!(await isBlocked(c,u.id,x.id))) items.push(x); } return {ok:true,items}; }
     case 'kehua_prod_me': { const u=await auth(c,a.p_token); const pc=Number((await c.query('select count(*) c from native_prod_posts where account_id=$1',[u.id])).rows[0].c); const fc=Number((await c.query('select count(*) c from native_prod_friendships where user_a=$1 or user_b=$1',[u.id])).rows[0].c); return {ok:true,user:{id:u.id,nickname:u.nickname,bio:u.bio||'',post_count:pc,friend_count:fc}}; }
