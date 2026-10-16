@@ -1,4 +1,5 @@
 import http from 'node:http';
+import {readFile} from 'node:fs/promises';
 import crypto from 'node:crypto';
 import pg from 'pg';
 
@@ -162,6 +163,11 @@ async function rpc(name,a){ return tx(async c=>{
 function send(res,status,obj){ const data=Buffer.from(JSON.stringify(obj)); res.writeHead(status,{'content-type':'application/json; charset=utf-8','content-length':data.length,'cache-control':'no-store'}); res.end(data); }
 const server=http.createServer(async(req,res)=>{
   try{
+    if(req.method==='GET' && req.url==='/zhiyin-pilot'){
+      const file=await readFile(new URL('./preview/zhiyin.html',import.meta.url));
+      res.writeHead(200,{'content-type':'text/html; charset=utf-8','cache-control':'no-store','x-content-type-options':'nosniff','x-robots-tag':'noindex, nofollow','referrer-policy':'no-referrer','content-security-policy':"default-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; connect-src 'self'; img-src 'self' data: blob:; frame-ancestors 'none'"});
+      res.end(file);return;
+    }
     if(req.method==='GET' && req.url==='/health'){ const q=await pool.query('select 1'); return send(res,200,{ok:true,database:q.rowCount===1?'postgres':'unknown',service:'kehua_native_prod'}); }
     if(req.method==='POST' && req.url?.startsWith('/rpc/')){ const name=req.url.slice('/rpc/'.length).split('?')[0]; const args=await bodyJson(req); const out=await rpc(name,args); return send(res,200,out); }
     send(res,404,{message:'Not found'});
