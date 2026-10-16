@@ -14,6 +14,9 @@ STORE_URL = os.getenv('SUPABASE_URL', '').rstrip('/')
 STORE_KEY = os.getenv('SUPABASE_PUBLISHABLE_KEY', '')
 STORE_SECRET = os.getenv('AGENT_STORE_SECRET', '')
 WORKER_INTERVAL = float(os.getenv('WORKER_INTERVAL_SECONDS', '5'))
+STORE_QUOTA_RECHECK_SECONDS = max(900.0, float(os.getenv('STORE_QUOTA_RECHECK_SECONDS', '3600')))
+store_quota_until = 0.0
+
 MAX_ATTEMPTS = int(os.getenv('MAX_TASK_ATTEMPTS', '3'))
 RETRY_BASE_SECONDS = float(os.getenv('TASK_RETRY_BASE_SECONDS', '60'))
 RETRY_MAX_SECONDS = float(os.getenv('TASK_RETRY_MAX_SECONDS', '3600'))
@@ -72,11 +75,28 @@ def auth(authorization: str | None):
 def store_headers():
     return {'apikey': STORE_KEY, 'Authorization': f'Bearer {STORE_KEY}', 'Content-Type': 'application/json'}
 
+
+def enforce_store_quota_circuit():
+    """Avoid hammering a project that Supabase already restricted."""
+    remaining = store_quota_until - time.monotonic()
+    if remaining > 0:
+        raise RuntimeError('supabase_quota_circuit_open')
+
+
+def handle_store_quota_response(response):
+    global store_quota_until
+    if response.status_code in (402, 429):
+        store_quota_until = time.monotonic() + STORE_QUOTA_RECHECK_SECONDS
+        raise RuntimeError('supabase_quota_restricted')
+
+
 async def store_get():
     if not (STORE_URL and STORE_KEY and STORE_SECRET):
         raise RuntimeError('persistent_store_not_configured')
+    enforce_store_quota_circuit()
     async with httpx.AsyncClient(timeout=30) as c:
         r = await c.post(f'{STORE_URL}/rest/v1/rpc/agent_state_get', headers=store_headers(), json={'p_secret': STORE_SECRET, 'p_id': 'runtime'})
+        handle_store_quota_response(r)
         r.raise_for_status(); data = r.json()
         if not data: return json.loads(json.dumps(DEFAULT_STATE))
         for k,v in DEFAULT_STATE.items(): data.setdefault(k, json.loads(json.dumps(v)))
@@ -85,10 +105,12 @@ async def store_get():
 async def store_set(state):
     if not (STORE_URL and STORE_KEY and STORE_SECRET):
         raise RuntimeError('persistent_store_not_configured')
+    enforce_store_quota_circuit()
     async with httpx.AsyncClient(timeout=30) as c:
         r = await c.post(f'{STORE_URL}/rest/v1/rpc/agent_state_set', headers=store_headers(), json={'p_secret': STORE_SECRET, 'p_id': 'runtime', 'p_value': state})
         if r.status_code == 409:
             raise StateConflict('state_changed_reload_required')
+        handle_store_quota_response(r)
         r.raise_for_status()
         if '_store_revision' in state:
             state['_store_revision'] += 1
@@ -827,7 +849,9 @@ async def worker_loop():
             worker_status['last_error']=type(exc).__name__
             traceback.print_exc()
         worker_status['last_tick_at']=now()
-        try: await asyncio.wait_for(stop_event.wait(),timeout=WORKER_INTERVAL)
+        # A failed quota request must not wake a network retry five seconds later.
+        delay = max(WORKER_INTERVAL, store_quota_until - time.monotonic())
+        try: await asyncio.wait_for(stop_event.wait(), timeout=delay)
         except asyncio.TimeoutError: pass
 
 app=FastAPI(title='Always-On Owner Agent',version='0.6.0')
