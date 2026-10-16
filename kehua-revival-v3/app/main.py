@@ -225,3 +225,50 @@ def seed_demo_if_requested():
   db.commit()
  finally:db.close()
 seed_demo_if_requested()
+
+
+# Isolated integration smoke endpoint. Does not affect the existing Kehua API or DB.
+# Pilot users are stored in a separate, pre-existing Railway PostgreSQL database.
+from fastapi import Request as PilotRequest
+from fastapi.responses import Response as PilotResponse
+from urllib.request import Request as UpstreamRequest, urlopen as upstream_urlopen
+from urllib.error import HTTPError as UpstreamHttpError
+import asyncio
+import json
+
+_PILOT_UPSTREAM = "https://kehua-api-production.up.railway.app/rpc/"
+_PILOT_ALLOWED = frozenset(["kehua_prod_health","kehua_prod_register","kehua_prod_login","kehua_prod_recover","kehua_prod_logout","kehua_prod_rotate_recovery","kehua_prod_create_post","kehua_prod_home","kehua_prod_open_resonance","kehua_prod_dismiss_resonance","kehua_prod_light","kehua_prod_send_message","kehua_prod_chat","kehua_prod_threads","kehua_prod_friend_request","kehua_prod_incoming_friend_requests","kehua_prod_respond_friend_request","kehua_prod_friends","kehua_prod_me","kehua_prod_update_profile","kehua_prod_block","kehua_prod_report","kehua_prod_delete_account"])
+
+@app.get('/zhiyin-pilot')
+async def pilot_home():
+    return FileResponse(ROOT / 'zhiyin-pilot.html', media_type='text/html', headers={
+        'Cache-Control':'no-store',
+        'X-Robots-Tag':'noindex, nofollow',
+        'X-Content-Type-Options':'nosniff',
+        'Referrer-Policy':'no-referrer',
+        'Content-Security-Policy':"default-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; connect-src 'self'; img-src 'self' data: blob:; frame-ancestors 'none'; base-uri 'none'"
+    })
+
+@app.post('/zhiyin-pilot/rpc/{name}')
+async def pilot_rpc(name: str, request: PilotRequest):
+    if name not in _PILOT_ALLOWED:
+        return PilotResponse(content='{"message":"Not found"}', status_code=404, media_type='application/json')
+    if request.headers.get('content-type','').split(';',1)[0].strip().lower()!='application/json':
+        return PilotResponse(content='{"message":"Only JSON is supported"}', status_code=415, media_type='application/json')
+    body=await request.body()
+    if len(body)>65536:
+        return PilotResponse(content='{"message":"Request too large"}', status_code=413, media_type='application/json')
+    def forward():
+        req=UpstreamRequest(_PILOT_UPSTREAM+name, data=body, headers={'Content-Type':'application/json','Accept':'application/json'}, method='POST')
+        try:
+            with upstream_urlopen(req, timeout=23) as response:
+                return response.status,response.read(65537)
+        except UpstreamHttpError as err:
+            return err.code,err.read(65537)
+    try:
+        code,content=await asyncio.to_thread(forward)
+        if len(content)>65536:
+            return PilotResponse(content='{"message":"Response too large"}',status_code=502,media_type='application/json')
+        return PilotResponse(content=content,status_code=code,media_type='application/json',headers={'Cache-Control':'no-store','X-Content-Type-Options':'nosniff'})
+    except Exception:
+        return PilotResponse(content='{"message":"Upstream temporarily unavailable"}',status_code=502,media_type='application/json')
