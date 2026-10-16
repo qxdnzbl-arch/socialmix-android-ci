@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+<meta name="theme-color" content="#f8f8f7" />
+<title>同频 · GPT 与 Claude 的协作空间</title>
+<link rel="stylesheet" href="/styles.css" />
+<script src="/app.js" defer></script>
+</head>
+<body>
+<div class="page">
+  <header class="topbar">
+    <div class="brand"><span class="brand-mark" aria-hidden="true">✳</span><div><div class="brandname">同频</div><div class="tagline">把两个好脑袋，放进一段对话里</div></div></div>
+    <div class="right"><button id="historyBtn" class="icon-btn mobile-only" aria-label="历史聊天" title="历史聊天">☰</button><button id="mobileNewChat" class="icon-btn mobile-only" aria-label="新对话" title="新对话">＋</button><span class="status-dot" id="statusDot"></span><span id="statusText" aria-live="polite">检查连接中</span><button id="settingsBtn" class="icon-btn" aria-label="设置" title="设置">⚙</button></div>
+  </header>
+  <div class="layout"><div id="sidebarBackdrop" class="sidebar-backdrop hidden"></div>
+    <aside class="sidebar" id="sidebar">
+      <button id="newChat" class="new-chat">＋ 新对话</button>
+      <div class="side-label">最近的对话</div>
+      <div class="history-list" id="historyList" aria-label="历史对话"></div>
+      <div class="side-bottom">聊天记录只保存在这台设备</div>
+    </aside>
+    <main class="chat">
+      <div class="messages" id="messages" aria-live="polite">
+        <section class="empty-state" id="emptyState">
+          <div class="sunflower" aria-hidden="true">✳</div>
+          <h1>在这里，慢慢说。</h1>
+          <p>不必想好怎么提问。<br>简单的事直接回答，复杂的问题再让 GPT 和 Claude 一起想。</p>
+        </section>
+      </div>
+      <div id="alert" role="status" class="alert hidden"></div>
+      <div class="composer-wrap">
+        <div class="composer-options"><label for="mode">协作方式</label><select id="mode" aria-label="协作方式"><option value="auto">自动判断</option><option value="solo">GPT 单独回答</option><option value="duo">GPT + Claude 协作</option></select><span class="small-hint" id="modeHint">普通聊天更省钱</span></div>
+        <form class="composer" id="chatForm"><textarea id="messageInput" rows="1" maxlength="4000" placeholder="想说什么，就从这里开始……" aria-label="聊天输入框"></textarea><button type="submit" id="sendBtn" title="发送" aria-label="发送消息">↑</button></form>
+        <div class="footnote">只有接入真实 API 后才会请求模型；费用由 302.AI 按量结算</div>
+      </div>
+    </main>
+  </div>
+</div>
+<div class="scrim hidden" id="scrim"></div>
+<div class="settings hidden" id="settings" role="dialog" aria-modal="true" aria-labelledby="settingsTitle">
+  <div class="settings-head"><h2 id="settingsTitle">设置</h2><button id="closeSettings" class="icon-btn" aria-label="关闭设置">×</button></div>
+  <div class="settings-body">
+    <p class="body-copy">密钥只在部署的服务端配置。这里不接收 API 密钥，避免泄露。</p>
+    <label for="accessPassword">访问密码</label>
+    <input type="password" id="accessPassword" autocomplete="off" placeholder="请输入服务端设置的访问密码" />
+    <p class="field-note">只在当前浏览器会话保存；关闭标签页后需要重新输入。</p>
+    <label for="maxUsd">每次消息的费用预算（美元，估算）</label>
+    <input type="number" min="0.001" max="1" step="0.01" id="maxUsd" value="0.06" />
+    <p class="field-note">默认 $0.06。实际扣费以 302.AI 为准；务必给 API Key 同时设置总配额和每日配额。</p>
+    <button id="saveSettings" class="primary-btn">保存设置</button>
+    <div class="settings-divider"></div>
+    <button id="exportChat" class="secondary-btn">导出本地对话</button>
+    <p class="field-note">导出文件保存在你的设备，方便备份。不会自动上传到服务器。</p>
+  </div>
+</div>
+</body>
+</html>
