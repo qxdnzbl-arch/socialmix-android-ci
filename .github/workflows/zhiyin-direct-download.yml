@@ -1,0 +1,50 @@
+name: Zhiyin permanent direct APK CDN
+on:
+  workflow_dispatch:
+  push:
+    branches: [zhiyin-binary-direct]
+    paths:
+      - .github/workflows/zhiyin-direct-download.yml
+permissions:
+  contents: write
+jobs:
+  mirror:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+      - name: Fetch the already verified APK and check byte-level hash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: qxdnzbl-arch/socialmix-android-ci
+        run: |
+          set -euo pipefail
+          mkdir -p direct
+          gh release download zhiyin-android-v004-public --pattern app-release.apk --dir direct
+          mv direct/app-release.apk direct/zhiyin-v004.apk
+          echo 'd7c9636b1836ee296ac100304e0940ff2617db8a2641e22c324a75dc1ddf1ff4  direct/zhiyin-v004.apk' | sha256sum -c -
+      - name: Commit a single APK, without app source
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add direct/zhiyin-v004.apk
+          git commit -m 'Publish permanently downloadable Zhiyin v004 binary'
+          git push origin HEAD:zhiyin-binary-direct
+      - name: Confirm public direct CDN returns the APK, not an HTML document
+        run: |
+          set -euo pipefail
+          url=https://raw.githubusercontent.com/qxdnzbl-arch/socialmix-android-ci/zhiyin-binary-direct/direct/zhiyin-v004.apk
+          for try in 1 2 3 4 5; do
+            code=$(curl -sSLI --max-time 35 --write-out '%{http_code}' -o /tmp/headers "$url" || true)
+            type=$(grep -i '^content-type:' /tmp/headers | tail -1 || true)
+            echo "Attempt=$try HTTP=$code ContentType=$type"
+            if [ "$code" = 200 ] && ! echo "$type" | grep -qi text/html; then
+              echo "DOWNLOAD_LINK_VALID=true"
+              exit 0
+            fi
+            sleep 8
+          done
+          exit 1
