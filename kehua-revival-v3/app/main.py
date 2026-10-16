@@ -237,7 +237,7 @@ import asyncio
 import json
 
 _PILOT_UPSTREAM = "https://kehua-api-production.up.railway.app/rpc/"
-_PILOT_ALLOWED = frozenset(["kehua_prod_health","kehua_prod_register","kehua_prod_login","kehua_prod_recover","kehua_prod_logout","kehua_prod_rotate_recovery","kehua_prod_create_post","kehua_prod_home","kehua_prod_open_resonance","kehua_prod_dismiss_resonance","kehua_prod_light","kehua_prod_send_message","kehua_prod_chat","kehua_prod_threads","kehua_prod_friend_request","kehua_prod_incoming_friend_requests","kehua_prod_respond_friend_request","kehua_prod_friends","kehua_prod_me","kehua_prod_update_profile","kehua_prod_block","kehua_prod_report","kehua_prod_delete_account"])
+_PILOT_ALLOWED = frozenset(["kehua_prod_health","kehua_prod_register","kehua_prod_login","kehua_prod_recover","kehua_prod_logout","kehua_prod_rotate_recovery","kehua_prod_create_post","kehua_prod_delete_post","kehua_prod_home","kehua_prod_open_resonance","kehua_prod_dismiss_resonance","kehua_prod_light","kehua_prod_send_message","kehua_prod_chat","kehua_prod_threads","kehua_prod_lights_received","kehua_prod_friend_request","kehua_prod_incoming_friend_requests","kehua_prod_respond_friend_request","kehua_prod_friends","kehua_prod_me","kehua_prod_update_profile","kehua_prod_block","kehua_prod_report","kehua_prod_delete_account"])
 
 @app.get('/zhiyin-pilot')
 async def pilot_home():
