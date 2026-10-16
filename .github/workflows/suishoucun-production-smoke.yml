@@ -56,3 +56,12 @@ jobs:
           with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as f:
               f.write("Live cloud-sync POST returned JSON. China mainland reachability, two-device end-to-end delivery and APP备案 are **not yet verified**.\n")
           PY
+      - name: Verify complete synthetic cloud-sync round trip and cleanup
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --location --silent --show-error --retry 2 --max-time 30 'https://raw.githubusercontent.com/qxdnzbl-arch/socialmix-android-ci/main/.github/qa/suishoucun_live_e2e.py' -o /tmp/suishoucun_live_e2e.py
+          python3 -m py_compile /tmp/suishoucun_live_e2e.py
+          python3 /tmp/suishoucun_live_e2e.py
+          echo 'Synthetic upload/read/commit/delete workflow passed (not a mainland or two-device test).' >> "$GITHUB_STEP_SUMMARY"
+
