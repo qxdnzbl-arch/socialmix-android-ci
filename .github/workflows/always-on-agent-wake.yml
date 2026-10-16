@@ -1,0 +1,23 @@
+name: Wake existing agent
+
+on:
+  schedule:
+    - cron: '7,37 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  wake:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Wake Render agent without reading private data
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error \
+            --max-time 180 --retry 1 --retry-delay 10 \
+            -o /dev/null \
+            'https://always-on-agent-v0.onrender.com/dashboard'
