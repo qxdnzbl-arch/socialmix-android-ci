@@ -1,0 +1,24 @@
+name: Zhiyin Chat Attachment Export
+on:
+  push:
+    branches: [zhiyin-binary-direct]
+    paths: ['.github/workflows/zhiyin-deliver-chat.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  deliver:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check APK SHA-256
+        run: |
+          echo 'd7c9636b1836ee296ac100304e0940ff2617db8a2641e22c324a75dc1ddf1ff4  direct/zhiyin-v004.apk' | sha256sum -c -
+      - name: Upload APK into Actions artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: zhiyin-v004-android-apk
+          path: direct/zhiyin-v004.apk
+          if-no-files-found: error
+          retention-days: 1
