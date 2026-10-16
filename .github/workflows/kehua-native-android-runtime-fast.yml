@@ -1,0 +1,57 @@
+name: kehua-native-android-runtime-fast
+on:
+  workflow_dispatch:
+  push:
+    branches: [kehua-v1133-native-cleanroom]
+    paths:
+      - '.github/workflows/kehua-native-android-runtime-fast.yml'
+jobs:
+  runtime:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - run: bash kehua-native-bootstrap.sh
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+      - name: build
+        working-directory: kehua-native/android
+        run: gradle :app:assembleDebug :app:assembleRelease
+      - uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 21
+          arch: x86_64
+          profile: pixel_2
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none -camera-front none
+          script: |
+            adb install -r kehua-native/android/app/build/outputs/apk/release/app-release.apk
+            adb shell am start -W -n com.app.tideswing/com.kehua.revival.MainActivity > /tmp/am-start.txt
+            sleep 3
+            adb shell input tap 300 660
+            adb shell input text 15551234567
+            adb shell input tap 270 1030
+            sleep 3
+            adb shell input tap 790 1030
+            sleep 7
+            sleep 8
+            adb shell input tap 320 910 || true
+            sleep 3
+            adb shell pidof com.app.tideswing > /tmp/pid.txt
+            test -s /tmp/pid.txt
+            adb exec-out screencap -p > /tmp/kehua-runtime.png
+            test -s /tmp/kehua-runtime.png
+            ! adb logcat -d | grep -E 'FATAL EXCEPTION.*com.kehua.revival|Process: com.app.tideswing.qa.*FATAL'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: kehua-1.13.3-final-runtime
+          path: |
+            kehua-native/android/app/build/outputs/apk/release/app-release.apk
+            /tmp/kehua-runtime.png
+            /tmp/am-start.txt
+
+
+# trigger-real-release-login-20260922

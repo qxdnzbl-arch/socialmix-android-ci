@@ -1,0 +1,63 @@
+name: kehua-native-android-runtime
+on:
+  workflow_dispatch:
+  push:
+    branches: [kehua-v1133-native-cleanroom]
+    paths:
+      - '.github/workflows/kehua-native-android-runtime.yml'
+      - 'kehua_native_bundle_*.b64'
+      - 'kehua-native-bootstrap.sh'
+jobs:
+  runtime:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: unpack canonical native source
+        run: |
+          bash kehua-native-bootstrap.sh
+          grep -F 'JSONObject obj(Object... kv)' kehua-native/android/app/src/main/java/com/kehua/revival/MainActivity.java
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+      - name: build release directly from canonical source
+        working-directory: kehua-native/android
+        run: gradle :app:assembleRelease :app:assembleDebug --stacktrace
+      - name: verify production backend embedded
+        run: |
+          AAPT="$(find "$ANDROID_HOME/build-tools" -type f -name aapt | sort -V | tail -1)"
+          "$AAPT" dump badging kehua-native/android/app/build/outputs/apk/release/app-release.apk | grep "package: name='com.app.tideswing'"
+          unzip -p kehua-native/android/app/build/outputs/apk/release/app-release.apk classes.dex | strings | grep -F 'https://kehua-api-production.up.railway.app'
+          ! unzip -p kehua-native/android/app/build/outputs/apk/release/app-release.apk classes.dex | strings | grep -E 'onrender\.com|render\.com'
+      - uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 30
+          arch: x86_64
+          profile: pixel_2
+          disable-animations: false
+          script: |
+            adb install -r kehua-native/android/app/build/outputs/apk/debug/app-debug.apk
+            adb shell am start -W -n com.app.tideswing.qa/com.kehua.revival.MainActivity --ez qa_auto_login true | tee /tmp/am-start.txt
+            sleep 10
+            adb shell pidof com.app.tideswing.qa | tee /tmp/pid.txt
+            test -s /tmp/pid.txt
+            adb exec-out screencap -p > /tmp/kehua-runtime.png
+            test -s /tmp/kehua-runtime.png
+            ! adb logcat -d | grep -E 'FATAL EXCEPTION.*com.kehua.revival|Process: com.kehua.revival.*FATAL'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: kehua-1.13.3-runtime-accepted
+          path: |
+            kehua-native/android/app/build/outputs/apk/release/app-release.apk
+            /tmp/kehua-runtime.png
+            /tmp/am-start.txt
+
+
+
+
+
+
+
+# trigger-debug-visual-acceptance-20260922c
