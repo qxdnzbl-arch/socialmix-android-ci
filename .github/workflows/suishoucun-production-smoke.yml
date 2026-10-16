@@ -1,0 +1,58 @@
+name: Suishoucun Production Path Smoke Test
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/suishoucun-production-smoke.yml'
+permissions:
+  contents: read
+jobs:
+  verify-live-dependencies:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Validate the published APK is downloadable and intact
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --location --silent --show-error --retry 2 --max-time 50             'https://github.com/qxdnzbl-arch/socialmix-android-ci/releases/download/v102/Suishoucun.apk' -o /tmp/Suishoucun.apk
+          echo 'ff02ede2d8b1b1d7b73d3f91b8006a54a9e247b01b09d8b7a5197a4746be3400  /tmp/Suishoucun.apk' | sha256sum --check
+          unzip -tqq /tmp/Suishoucun.apk
+          unzip -p /tmp/Suishoucun.apk classes.dex | strings | grep -Fq 'suishoucun-sync.floot.app/_api/sync'
+          echo 'APK matches the known v102 bytes, ZIP integrity passes, and the actual sync dependency is confirmed.' >> "$GITHUB_STEP_SUMMARY"
+      - name: Test actual cloud sync request without writing user data
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import json, secrets, urllib.request, urllib.error, os
+          url = "https://suishoucun-sync.floot.app/_api/sync"
+          # This is a READ-only HEAD RPC using a randomly generated synthetic sync identity.
+          body = json.dumps({"action": "suishoucun_sync_head_v2"}).encode()
+          req = urllib.request.Request(url, data=body,
+              headers={"Content-Type": "application/json",
+                       "Accept": "application/json",
+                       "x-sync-auth": secrets.token_urlsafe(32),
+                       "User-Agent": "Suishoucun-Android"},
+              method="POST")
+          try:
+              with urllib.request.urlopen(req, timeout=30) as resp:
+                  data = resp.read(2048).decode("utf-8", errors="replace")
+                  status = resp.status
+          except urllib.error.HTTPError as exc:
+              status = exc.code
+              data = exc.read(2048).decode("utf-8", errors="replace")
+          except Exception as exc:
+              raise SystemExit("Live sync POST unreachable: " + repr(exc))
+          print("Live Floot RPC HTTP status:", status)
+          print("Response preview:", data[:600])
+          if status != 200:
+              raise SystemExit("FAIL: current shipped APK's actual sync service does not accept a read-only sync HEAD request")
+          try:
+              result = json.loads(data)
+          except json.JSONDecodeError:
+              raise SystemExit("FAIL: sync response is not JSON")
+          if not isinstance(result, dict):
+              raise SystemExit("FAIL: sync response is not an object")
+          with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as f:
+              f.write("Live cloud-sync POST returned JSON. China mainland reachability, two-device end-to-end delivery and APP备案 are **not yet verified**.\n")
+          PY
